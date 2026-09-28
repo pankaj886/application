@@ -80,7 +80,7 @@ class UpdateService {
 
     // 1. Try fetching latest.json directly from GitHub releases
     try {
-      const res = await fetch('https://github.com/pankaj886/application/releases/latest/download/latest.json', {
+      const res = await fetch('https://github.com/pankaj886/foreigners-studio-releases/releases/latest/download/latest.json', {
         cache: 'no-store'
       });
       if (res.ok) {
@@ -106,7 +106,7 @@ class UpdateService {
 
     // 2. Try fetching latest release from GitHub API
     try {
-      const apiRes = await fetch('https://api.github.com/repos/pankaj886/application/releases/latest', {
+      const apiRes = await fetch('https://api.github.com/repos/pankaj886/foreigners-studio-releases/releases/latest', {
         headers: { 'Accept': 'application/vnd.github.v3+json' },
         cache: 'no-store'
       });

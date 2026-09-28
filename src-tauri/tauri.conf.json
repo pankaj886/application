@@ -37,7 +37,7 @@
     "updater": {
       "pubkey": "dW50b3VjaGFibGUtcHVibGljLWtleS1wbGFjZWhvbGRlcg==",
       "endpoints": [
-        "https://github.com/pankaj886/application/releases/latest/download/latest.json"
+        "https://github.com/pankaj886/foreigners-studio-releases/releases/latest/download/latest.json"
       ]
     }
   },

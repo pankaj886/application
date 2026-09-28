@@ -463,10 +463,10 @@ jobs:
             "pub_date": "${PUB_DATE}",
             "platforms": {
               "windows-x86_64": {
-                "url": "https://github.com/pankaj886/application/releases/download/${TAG_NAME}/Foreigners_Studio_${VERSION}_x64-setup.exe"
+                "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/${TAG_NAME}/Foreigners_Studio_${VERSION}_x64-setup.exe"
               },
               "darwin-universal": {
-                "url": "https://github.com/pankaj886/application/releases/download/${TAG_NAME}/Foreigners_Studio_${VERSION}_universal.dmg"
+                "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/${TAG_NAME}/Foreigners_Studio_${VERSION}_universal.dmg"
               }
             }
           }
@@ -474,9 +474,13 @@ jobs:
           echo "Generated release-assets/latest.json:"
           cat release-assets/latest.json
 
-      - name: Publish Release Assets
+      - name: Publish Release Assets to Public Releases Repository
         uses: softprops/action-gh-release@v2
         with:
+          repository: pankaj886/foreigners-studio-releases
+          token: ${{ secrets.RELEASES_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          name: Foreigners Studio ${{ github.ref_name }}
           files: release-assets/*
           draft: false
           prerelease: false
