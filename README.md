@@ -4,33 +4,35 @@ Desktop client for consular appointment management, passport assistance, and wor
 
 ---
 
-## 📥 Downloads
+## 📥 Downloads (Release v1.0.1)
 
-Download the appropriate package for your operating system:
+All release assets are available on the [**📦 GitHub Releases Page (v1.0.1)**](https://github.com/pankaj886/application/releases/tag/v1.0.1).
 
-| Platform | Package | Format | Direct Download |
+Download the package for your platform below:
+
+| Platform | Package | Format | Direct Download Link |
 | :--- | :--- | :--- | :--- |
-| **Windows** (10 / 11, 64-bit) | Portable Executable | `.exe` | [Download foreigners_studio.exe](https://github.com/pankaj886/application/raw/main/dist-release/foreigners_studio.exe) |
-| **Windows** (10 / 11, 64-bit) | Setup Wizard | `.exe` | [Download Windows Installer](https://github.com/pankaj886/application/releases/latest/download/Foreigners_Studio_1.0.0_x64-setup.exe) |
-| **Windows** (10 / 11, 64-bit) | Enterprise Package | `.msi` | [Download Windows MSI](https://github.com/pankaj886/application/releases/latest/download/Foreigners_Studio_1.0.0_x64_en-US.msi) |
-| **macOS** (Apple Silicon & Intel) | Disk Image | `.dmg` | [Download macOS DMG](https://github.com/pankaj886/application/releases/latest/download/Foreigners_Studio_1.0.0_universal.dmg) |
-| **macOS** (Apple Silicon & Intel) | Application Archive | `.app.tar.gz` | [Download macOS App](https://github.com/pankaj886/application/releases/latest/download/Foreigners_Studio_1.0.0_universal.app.tar.gz) |
+| **Windows** (10 / 11, 64-bit) | **Setup Installer** | `.exe` | [⬇️ Download Windows Installer](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_1.0.0_x64-setup.exe) |
+| **Windows** (10 / 11, 64-bit) | **Portable Archive** | `.zip` | [⬇️ Download Windows Portable ZIP](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_Windows_x64.zip) |
+| **Windows** (10 / 11, 64-bit) | **Enterprise Package** | `.msi` | [⬇️ Download Windows MSI](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_1.0.0_x64_en-US.msi) |
+| **macOS** (Apple Silicon & Intel) | **Universal Disk Image** | `.dmg` | [⬇️ Download macOS DMG](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_1.0.0_universal.dmg) |
+| **macOS** (Apple Silicon & Intel) | **Application Archive** | `.app.tar.gz` | [⬇️ Download macOS App](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners.Studio_aarch64.app.tar.gz) |
 
-> **Note:** Access to releases and repository downloads requires signing in with an authorized GitHub account.
+> **Note:** Because this is a private repository, you must be logged into GitHub with an authorized account (`pankaj886` or collaborator) to access and download these files. Alternatively, browse all files on the [Releases Page](https://github.com/pankaj886/application/releases).
 
 ---
 
 ## 🚀 Installation
 
 ### Windows
-1. Download either the portable executable (`foreigners_studio.exe`) or the setup installer (`.exe`).
-2. Run the file to launch Foreigners Studio.
+1. Download [**Foreigners_Studio_1.0.0_x64-setup.exe**](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_1.0.0_x64-setup.exe) or the portable ZIP.
+2. Run the installer or extract the ZIP.
 3. If prompted by Windows Defender SmartScreen, select **More info** → **Run anyway**.
 
 ### macOS
-1. Download the macOS Disk Image (`.dmg`).
+1. Download [**Foreigners_Studio_1.0.0_universal.dmg**](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_1.0.0_universal.dmg).
 2. Open the downloaded `.dmg` file and drag **Foreigners Studio** into your **Applications** folder.
-3. Open Foreigners Studio from your Applications or Launchpad.
+3. Launch Foreigners Studio from your Applications folder or Launchpad.
 
 ---
 
@@ -45,4 +47,4 @@ Foreigners Studio checks for updates automatically. When an update has finished 
 ## 💻 System Requirements
 
 - **Windows**: Windows 10 or Windows 11 (64-bit)
-- **macOS**: macOS 11.0 (Big Sur) or newer (Universal binary for both Apple Silicon and Intel)
+- **macOS**: macOS 11.0 (Big Sur) or newer (Universal binary for Apple Silicon and Intel)
