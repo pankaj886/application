@@ -167,7 +167,10 @@ jobs:
         with:
           name: foreigners-studio-windows-bundle
           path: |
-            dist-release/
+            dist-release/*.exe
+            dist-release/*.msi
+            dist-release/*.zip
+            dist-release/*.dll
             certs/ForeignersStudio.cer
             Install-ForeignersStudio.bat
             install-windows.ps1
@@ -301,12 +304,20 @@ jobs:
           rm -rf "$MOUNT_DIR"
           echo "✓ macOS verification complete!"
 
+      - name: Clean dist-release of .app bundles (keep only .dmg and .app.tar.gz)
+        run: |
+          # Remove any raw .app folders from dist-release — they expose internal bundle files
+          find dist-release -maxdepth 1 -name "*.app" -type d -exec rm -rf {} + 2>/dev/null || true
+          echo "==> dist-release contents after cleanup:"
+          ls -lh dist-release/
+
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
         with:
           name: foreigners-studio-macos-universal
           path: |
-            dist-release/
+            dist-release/*.dmg
+            dist-release/*.app.tar.gz
             install-mac.sh
 
   publish-release:
