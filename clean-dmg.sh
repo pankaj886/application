@@ -34,6 +34,16 @@ fi
 SIGN_ID="${APPLE_SIGNING_IDENTITY:--}"
 echo "==> Using Code Signing Identity: $SIGN_ID"
 
+TIMESTAMP_FLAG=""
+if [ "$SIGN_ID" != "-" ]; then
+  TIMESTAMP_FLAG="--timestamp"
+fi
+
+ENTITLEMENTS_FLAG=""
+if [ -f "src-tauri/Entitlements.plist" ]; then
+  ENTITLEMENTS_FLAG="--entitlements src-tauri/Entitlements.plist"
+fi
+
 sign_app_bundle() {
   local target_app="$1"
   [ -d "$target_app" ] || return 0
@@ -47,11 +57,11 @@ sign_app_bundle() {
 
   # 3. Sign each .dylib / .so / framework inside the bundle first
   find "$target_app" -type f \( -name "*.dylib" -o -name "*.so" \) 2>/dev/null | while read -r lib; do
-    codesign --force --options runtime --sign "$SIGN_ID" "$lib" 2>/dev/null || true
+    codesign --force $TIMESTAMP_FLAG --options runtime --sign "$SIGN_ID" "$lib" 2>/dev/null || true
   done
 
   # 4. Deep sign the entire bundle with hardened runtime
-  codesign --force --deep --options runtime --sign "$SIGN_ID" "$target_app" 2>/dev/null || \
+  codesign --force --deep $TIMESTAMP_FLAG --options runtime $ENTITLEMENTS_FLAG --sign "$SIGN_ID" "$target_app" 2>/dev/null || \
     codesign --force --deep --sign "$SIGN_ID" "$target_app" 2>/dev/null || true
 
   # 5. Verify
@@ -160,7 +170,7 @@ EOF
   xattr -d com.apple.quarantine "$dmg" 2>/dev/null || true
 
   # Sign the DMG container
-  codesign --force --sign "$SIGN_ID" "$dmg" 2>/dev/null || true
+  codesign --force $TIMESTAMP_FLAG --sign "$SIGN_ID" "$dmg" 2>/dev/null || true
 
   echo "  ✓ Sanitized DMG: $dmg"
 done
