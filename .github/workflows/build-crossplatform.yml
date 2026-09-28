@@ -167,10 +167,8 @@ jobs:
         with:
           name: foreigners-studio-windows-bundle
           path: |
-            dist-release/*.exe
-            dist-release/*.msi
-            dist-release/*.zip
-            certs/*.cer
+            dist-release/
+            certs/ForeignersStudio.cer
             Install-ForeignersStudio.bat
             install-windows.ps1
 
@@ -308,8 +306,7 @@ jobs:
         with:
           name: foreigners-studio-macos-universal
           path: |
-            dist-release/*.dmg
-            dist-release/*.app.tar.gz
+            dist-release/
             install-mac.sh
 
   publish-release:
@@ -324,27 +321,34 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: foreigners-studio-windows-bundle
-          path: dist-release
+          path: win-artifacts
 
       - name: Download macOS Artifacts
         uses: actions/download-artifact@v4
         with:
           name: foreigners-studio-macos-universal
-          path: dist-release
+          path: mac-artifacts
+
+      - name: Flatten artifacts for release
+        run: |
+          mkdir -p release-assets
+          # Flatten windows artifacts (dist-release subdir + root files)
+          find win-artifacts -type f | while read f; do
+            fname=$(basename "$f")
+            cp "$f" "release-assets/$fname" 2>/dev/null || true
+          done
+          # Flatten macos artifacts
+          find mac-artifacts -type f | while read f; do
+            fname=$(basename "$f")
+            cp "$f" "release-assets/$fname" 2>/dev/null || true
+          done
+          echo "=== Release assets to publish ==="
+          ls -lh release-assets/
 
       - name: Publish Release Assets
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist-release/*.exe
-            dist-release/*.msi
-            dist-release/*.zip
-            dist-release/*.dmg
-            dist-release/*.app.tar.gz
-            dist-release/*.cer
-            dist-release/*.bat
-            dist-release/*.ps1
-            dist-release/install-mac.sh
+          files: release-assets/*
           draft: false
           prerelease: false
           generate_release_notes: true
