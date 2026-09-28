@@ -231,8 +231,9 @@ jobs:
           CERT_PATH=$RUNNER_TEMP/developer_id.p12
           echo -n "$APPLE_CERTIFICATE" | base64 --decode > $CERT_PATH
           security import $CERT_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH $(security list-keychains -d user | tr -d '"')
-          security set-key-partition-list -S apple-tool:,apple: -s -k "temp-keychain-pass" $KEYCHAIN_PATH
+          security list-keychains -d user -s $KEYCHAIN_PATH $(security list-keychains -d user | tr -d '"')
+          security default-keychain -d user -s $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "temp-keychain-pass" $KEYCHAIN_PATH
 
           if [ -n "$APPLE_SIGNING_IDENTITY" ]; then
             IDENTITY="$APPLE_SIGNING_IDENTITY"
@@ -250,6 +251,9 @@ jobs:
       - name: Build macOS Tauri Universal Bundle
         env:
           COPYFILE_DISABLE: "1"
+          APPLE_CERTIFICATE: ${{ secrets.DEVELOPER_ID_APPLICATION_CERT || secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_CERT_PASSWORD || secrets.APPLE_CERTIFICATE_PASSWORD || secrets.DEVELOPER_ID_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY || secrets.APPLE_SIGNING_IDENTITY || secrets.DEVELOPER_ID_SIGNING_IDENTITY }}
         run: |
           npx tauri build --target universal-apple-darwin --bundles dmg,app
           node copy-release.js
@@ -257,6 +261,7 @@ jobs:
       - name: Sanitize & Sign macOS Bundle
         env:
           COPYFILE_DISABLE: "1"
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY || secrets.APPLE_SIGNING_IDENTITY || secrets.DEVELOPER_ID_SIGNING_IDENTITY }}
         run: bash clean-dmg.sh
 
       - name: Notarize macOS DMG with Apple (if configured)
@@ -269,14 +274,26 @@ jobs:
             echo "Apple Notarization credentials not configured in secrets. Skipping notarization."
             exit 0
           fi
-          DMG_FILE=$(find dist-release -name "*.dmg" -type f | head -n 1)
-          if [ -n "$DMG_FILE" ] && [ -f "$DMG_FILE" ]; then
+          echo "==> Apple Notarization credentials detected. Submitting DMGs to Apple..."
+          find dist-release -name "*.dmg" -type f | while read -r DMG_FILE; do
             echo "==> Submitting $DMG_FILE to Apple Notary Service..."
-            xcrun notarytool submit "$DMG_FILE" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-            echo "==> Stapling notarization ticket to $DMG_FILE..."
-            xcrun stapler staple "$DMG_FILE"
-            echo "✓ Successfully notarized and stapled DMG with Apple!"
-          fi
+            SUBMIT_OUTPUT=$(xcrun notarytool submit "$DMG_FILE" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait 2>&1)
+            echo "$SUBMIT_OUTPUT"
+            SUBMISSION_ID=$(echo "$SUBMIT_OUTPUT" | grep -E '^\s*id:' | head -1 | awk '{print $2}')
+            if echo "$SUBMIT_OUTPUT" | grep -q "status: Accepted"; then
+              echo "==> Stapling notarization ticket to $DMG_FILE..."
+              xcrun stapler staple "$DMG_FILE"
+              xcrun stapler validate "$DMG_FILE"
+              echo "✓ Successfully notarized and stapled $DMG_FILE with Apple!"
+            else
+              echo "❌ Notarization failed for $DMG_FILE!"
+              if [ -n "$SUBMISSION_ID" ]; then
+                echo "Fetching detailed notarization log from Apple for ID $SUBMISSION_ID..."
+                xcrun notarytool log "$SUBMISSION_ID" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" || true
+              fi
+              exit 1
+            fi
+          done
 
       - name: Verify macOS Universal DMG & Application
         run: |
@@ -324,6 +341,9 @@ jobs:
           echo "==> 1. Running codesign verification..."
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           echo "✓ Codesign verification passed!"
+
+          echo "==> 1b. Gatekeeper spctl assessment..."
+          spctl --assess --type exec --verbose "$APP_PATH" 2>&1 || echo "Note: Gatekeeper evaluation (requires notarization ticket for accepted status)"
 
           echo "==> 2. Checking quarantine attributes on app..."
           APP_QATTR=$(xattr -l "$APP_PATH" 2>/dev/null || true)

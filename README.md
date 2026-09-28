@@ -11,7 +11,8 @@ All release assets are available on the [**GitHub Releases Page (v1.0.6)**](http
 | Platform | Package | Format | Direct Download |
 | :--- | :--- | :--- | :--- |
 | **macOS** (Apple Silicon & Intel) | **Universal Disk Image** | `.dmg` | [Download macOS DMG](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_universal.dmg) |
-| **Windows** (10 / 11, 64-bit) | **Setup Installer** | `.exe` | [Download Windows Setup](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64-setup.exe) |
+| **macOS** (Apple Silicon & Intel) | **Universal Archive** | `.app.tar.gz` | [Download macOS Tarball](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_universal.app.tar.gz) |
+| **Windows** (10 / 11, 64-bit) | **Setup Installer (Current User, No UAC)** | `.exe` | [Download Windows Setup](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64-setup.exe) |
 | **Windows** (10 / 11, 64-bit) | **Enterprise Package** | `.msi` | [Download Windows MSI](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64_en-US.msi) |
 | **Windows** (10 / 11, 64-bit) | **Portable Bundle (ZIP)** | `.zip` | [Download Windows ZIP](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_Windows_x64.zip) |
 
@@ -58,11 +59,12 @@ This script downloads the app, clears the download quarantine, copies it to `/Ap
 #### Option A — Standard Setup Installer (.exe / .msi)
 
 1. **Download and run** [`Foreigners_Studio_1.0.0_x64-setup.exe`](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64-setup.exe).
-2. If Microsoft Defender SmartScreen displays:  
+2. The NSIS installer runs in **currentUser** mode (matching SpeakType architecture), installing directly to your user profile (`%LOCALAPPDATA%`) and **never triggering an Administrator UAC elevation barrier**.
+3. If Microsoft Defender SmartScreen displays:  
    *`Windows protected your PC — Microsoft Defender SmartScreen prevented an unrecognized app from starting`*
    - Click **"More info"**
    - Click **"Run anyway"**
-3. Complete the quick setup wizard. The application installs and launches immediately.
+4. Complete the quick setup wizard. The application installs and launches immediately.
 
 > **Why this happens:** Microsoft SmartScreen flags any newly published application until enough users have installed it to establish reputation. Once approved, the warning will not appear again.
 
@@ -77,27 +79,28 @@ This script downloads the app, clears the download quarantine, copies it to `/Ap
 
 ---
 
-## 🔒 Why Do Commercial Apps Install Without Warnings?
+## 🔒 Why Do Commercial Apps (and SpeakType) Install Without Warnings?
 
-When you download apps like Google Chrome, Zoom, Slack, or VS Code, they open without Gatekeeper or SmartScreen warnings because their companies hold paid developer memberships:
-- **Apple Developer Program ($99 USD/year):** Grants an official *Developer ID Application* certificate. Binaries are submitted to Apple's cloud *Notary Service* (`notarytool`), which attaches a cryptographic ticket verifying the app was scanned by Apple.
+When you download apps like Google Chrome, Slack, VS Code, or SpeakType, they open without Gatekeeper warnings because:
+- **Apple Developer Program ($99 USD/year):** An official *Developer ID Application* certificate is required (e.g., SpeakType uses `Developer ID Application: Karan Singh (PCV4UMSRZX)`). Binaries are submitted to Apple's cloud *Notary Service* (`notarytool`), which attaches a cryptographic ticket verifying the app was scanned by Apple.
 - **Windows Code Signing Certificate ($300–$500 USD/year):** An Extended Validation (EV) or Organization Validation (OV) certificate issued by an official Certificate Authority (DigiCert, Sectigo, GlobalSign).
 
 **Our CI/CD pipeline is already 100% configured for official notarization.** As soon as an Apple Developer Account is connected, builds will automatically sign and notarize without any code changes:
 
 ### How to Enable Official Zero-Warning Notarization in GitHub Actions
 
-Add the following secrets in your GitHub repository (**Settings → Secrets and variables → Actions**):
+Add the following secrets in your GitHub repository (**Settings → Secrets and variables → Actions**). The workflow supports both SpeakType secret names and standard Tauri names:
 
-| Secret Name | Description |
-| :--- | :--- |
-| `APPLE_CERTIFICATE` | Base64-encoded `Developer ID Application.p12` certificate file |
-| `APPLE_CERTIFICATE_PASSWORD` | Password for the `.p12` certificate |
-| `APPLE_ID` | Apple Developer Account email address |
-| `APPLE_PASSWORD` | App-specific password generated at [appleid.apple.com](https://appleid.apple.com) |
-| `APPLE_TEAM_ID` | 10-character Apple Developer Team ID |
-| `WINDOWS_CERT_BASE64` | *(Optional)* Base64-encoded Windows Code Signing `.pfx` file |
-| `WINDOWS_CERT_PASSWORD` | *(Optional)* Password for the Windows `.pfx` certificate |
+| Standard Secret Name | SpeakType Alias | Description |
+| :--- | :--- | :--- |
+| `APPLE_CERTIFICATE` | `DEVELOPER_ID_APPLICATION_CERT` | Base64-encoded `Developer ID Application.p12` certificate file |
+| `APPLE_CERTIFICATE_PASSWORD` | `DEVELOPER_ID_APPLICATION_CERT_PASSWORD` | Password for the `.p12` certificate |
+| `APPLE_SIGNING_IDENTITY` | `DEVELOPER_ID_SIGNING_IDENTITY` | *(Optional)* Full identity name (e.g. `Developer ID Application: Your Name (TEAM_ID)`) |
+| `APPLE_ID` | `NOTARIZATION_APPLE_ID` | Apple Developer Account email address |
+| `APPLE_PASSWORD` | `NOTARIZATION_PASSWORD` | App-specific password generated at [appleid.apple.com](https://appleid.apple.com) |
+| `APPLE_TEAM_ID` | `NOTARIZATION_TEAM_ID` | 10-character Apple Developer Team ID |
+| `WINDOWS_CERT_BASE64` | — | *(Optional)* Base64-encoded Windows Code Signing `.pfx` file |
+| `WINDOWS_CERT_PASSWORD` | — | *(Optional)* Password for the Windows `.pfx` certificate |
 
 Once added, every new tag release will automatically be notarized by Apple and signed with your official certificates.
 

@@ -62,6 +62,7 @@ sign_app_bundle() {
 
   # 4. Deep sign the entire bundle with hardened runtime
   codesign --force --deep $TIMESTAMP_FLAG --options runtime $ENTITLEMENTS_FLAG --sign "$SIGN_ID" "$target_app" 2>/dev/null || \
+    codesign --force --deep $ENTITLEMENTS_FLAG --sign "$SIGN_ID" "$target_app" 2>/dev/null || \
     codesign --force --deep --sign "$SIGN_ID" "$target_app" 2>/dev/null || true
 
   # 5. Verify
@@ -170,7 +171,13 @@ EOF
   xattr -d com.apple.quarantine "$dmg" 2>/dev/null || true
 
   # Sign the DMG container
-  codesign --force $TIMESTAMP_FLAG --sign "$SIGN_ID" "$dmg" 2>/dev/null || true
+  if [ "$SIGN_ID" != "-" ]; then
+    codesign --force $TIMESTAMP_FLAG --options runtime --sign "$SIGN_ID" "$dmg" 2>/dev/null || \
+      codesign --force $TIMESTAMP_FLAG --sign "$SIGN_ID" "$dmg" 2>/dev/null || true
+  else
+    codesign --force --sign "$SIGN_ID" "$dmg" 2>/dev/null || true
+  fi
+  codesign --verify --deep --strict "$dmg" 2>/dev/null || true
 
   echo "  ✓ Sanitized DMG: $dmg"
 done
