@@ -221,8 +221,9 @@ jobs:
 
       - name: Import Apple Developer ID Certificate (if configured)
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.DEVELOPER_ID_APPLICATION_CERT || secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_CERT_PASSWORD || secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           if [ -z "$APPLE_CERTIFICATE" ]; then
             echo "No Apple Developer Certificate provided in secrets. Using ad-hoc signature."
@@ -240,7 +241,12 @@ jobs:
           security list-keychain -d user -s $KEYCHAIN_PATH $(security list-keychains -d user | tr -d '"')
           security set-key-partition-list -S apple-tool:,apple: -s -k "temp-keychain-pass" $KEYCHAIN_PATH
 
-          IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep "Developer ID Application" | head -n 1 | sed 's/.*"\(.*\)".*/\1/' || true)
+          if [ -n "$APPLE_SIGNING_IDENTITY" ]; then
+            IDENTITY="$APPLE_SIGNING_IDENTITY"
+          else
+            IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep "Developer ID Application" | head -n 1 | sed 's/.*"\(.*\)".*/\1/' || true)
+          fi
+
           if [ -n "$IDENTITY" ]; then
             echo "Found Apple Developer ID Identity: $IDENTITY"
             echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> $GITHUB_ENV
@@ -255,8 +261,8 @@ jobs:
 
       - name: Notarize macOS DMG with Apple (if configured)
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_ID: ${{ secrets.NOTARIZATION_APPLE_ID || secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.NOTARIZATION_PASSWORD || secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           if [ -z "$APPLE_ID" ] || [ -z "$APPLE_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
