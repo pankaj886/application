@@ -62,7 +62,7 @@
       "minimumSystemVersion": "10.15",
       "entitlements": "Entitlements.plist",
       "exceptionDomain": "",
-      "signingIdentity": null,
+      "signingIdentity": "-",
       "providerShortName": null,
       "dmg": {
         "windowSize": {

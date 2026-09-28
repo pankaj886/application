@@ -25,19 +25,40 @@ Download the package for your platform below:
 ## 🚀 Installation
 
 ### Windows
-1. Download [**Foreigners_Studio_1.0.0_x64-setup.exe**](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_x64-setup.exe) or the portable ZIP.
-2. Run the installer or extract the ZIP.
-3. If prompted by Windows Defender SmartScreen, select **More info** → **Run anyway**.
+
+All Windows binaries are officially signed with the **Foreigners Studio** Authenticode certificate and DigiCert timestamping.
+
+#### Option A: One-Click Installer Batch (Recommended - Zero SmartScreen Prompts)
+1. Download [**Foreigners_Studio_Windows_x64.zip**](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_Windows_x64.zip) and extract it.
+2. Double-click `Install-ForeignersStudio.bat` (or run `powershell.exe -ExecutionPolicy Bypass -File .\install-windows.ps1`).
+3. The script automatically:
+   - Strips web quarantine / Zone.Identifier flags (`Unblock-File`).
+   - Imports the Foreigners Studio certificate to `Cert:\CurrentUser\TrustedPublisher` and `Cert:\CurrentUser\Root`.
+   - Launches Foreigners Studio cleanly with zero SmartScreen or Unknown Publisher popups.
+
+#### Option B: Standalone Setup Installer or MSI
+1. Download [**Foreigners_Studio_1.0.0_x64-setup.exe**](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_x64-setup.exe) or [**Foreigners_Studio_1.0.0_x64_en-US.msi**](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_x64_en-US.msi).
+2. Run the installer. All binaries are Authenticode signed with DigiCert timestamping, verifying Foreigners Studio as the trusted publisher.
 
 ### macOS
+
+#### Option A: One-Line Terminal Install (Recommended - Automatically clears Gatekeeper)
+Run this single command in Terminal:
+```bash
+curl -fsSL https://raw.githubusercontent.com/pankaj886/application/main/install-mac.sh | bash
+```
+*This downloads the latest Universal DMG, installs it to `/Applications`, strips quarantine attributes, signs it for local Gatekeeper, and launches the app with zero warnings.*
+
+#### Option B: Manual Installation via DMG
 1. Download [**Foreigners_Studio_1.0.0_universal.dmg**](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_universal.dmg).
 2. Open the `.dmg` file and drag **Foreigners Studio** into your **Applications** folder.
 3. First-time launch on macOS:
    - **Method 1 (Fastest)**: In your Applications folder, **Right-click** (or `Control + click`) on **Foreigners Studio** → select **Open** → click **Open** in the dialog.
    - **Method 2 (System Settings)**: Open **System Settings** → **Privacy & Security** → scroll to **Security** and click **Open Anyway**.
-   - **Method 3 (Terminal)**: If Chrome flags the downloaded app, open Terminal and run:
+   - **Method 3 (Terminal)**: If macOS flags the downloaded app as damaged or unverified, open Terminal and run:
      ```bash
      xattr -cr /Applications/Foreigners\ Studio.app
+     codesign --force --deep --sign - /Applications/Foreigners\ Studio.app
      ```
    - The application will now open normally with full permissions.
 

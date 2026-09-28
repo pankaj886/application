@@ -26,9 +26,12 @@ if %ERRORLEVEL% neq 0 (
   popd
 )
 
-echo [4/4] Copying release artifacts to Application\Windows...
+echo [4/5] Copying release artifacts to Application\dist-release...
 call node copy-release.js
 
+echo [5/5] Signing release artifacts with Authenticode...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0sign-release.ps1"
+
 echo ==========================================================
-echo   BUILD COMPLETE: foreigners_studio.exe is in Windows\
+echo   BUILD COMPLETE: Signed artifacts ready in dist-release\
 echo ==========================================================

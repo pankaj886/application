@@ -36,6 +36,24 @@ jobs:
           npx tauri build --bundles nsis,msi
           node copy-release.js
 
+      - name: Sign Windows Binaries (Authenticode)
+        shell: powershell
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\sign-release.ps1
+
+      - name: Verify Authenticode Signatures
+        shell: powershell
+        run: |
+          $targets = Get-Item dist-release/*.exe, dist-release/*.msi
+          foreach ($file in $targets) {
+            $sig = Get-AuthenticodeSignature $file.FullName
+            Write-Host "$($file.Name): $($sig.Status) ($($sig.StatusMessage))"
+            if (-not $sig.SignerCertificate) {
+              Write-Error "Missing signature on $($file.Name)"
+              exit 1
+            }
+          }
+
       - name: Upload Windows Installers
         uses: actions/upload-artifact@v4
         with:
@@ -44,6 +62,9 @@ jobs:
             dist-release/*.exe
             dist-release/*.msi
             dist-release/*.zip
+            dist-release/*.cer
+            dist-release/*.bat
+            dist-release/*.ps1
 
   build-macos:
     name: Build macOS App (.dmg & .app)
@@ -67,11 +88,87 @@ jobs:
       - name: Install NPM Dependencies
         run: npm ci
 
-      - name: Build macOS Tauri Bundle
+      - name: Build macOS Tauri Universal Bundle
         run: |
-          npx tauri build --bundles dmg,app
+          npx tauri build --target universal-apple-darwin --bundles dmg,app
           bash clean-dmg.sh
           node copy-release.js
+          bash clean-dmg.sh
+
+      - name: Verify macOS Universal DMG & Application
+        run: |
+          echo "=========================================================="
+          echo "  Verifying macOS Universal DMG & Code Signature          "
+          echo "=========================================================="
+
+          DMG_FILE=$(find dist-release -name "*.dmg" -type f | head -n 1)
+          if [ -z "$DMG_FILE" ] || [ ! -f "$DMG_FILE" ]; then
+            echo "❌ Error: No DMG found in dist-release!"
+            ls -la dist-release || true
+            exit 1
+          fi
+          echo "Found DMG installer: $DMG_FILE"
+
+          echo "==> Mounting DMG for verification..."
+          MOUNT_DIR="/tmp/verify_mount_$$"
+          mkdir -p "$MOUNT_DIR"
+          hdiutil attach "$DMG_FILE" -mountpoint "$MOUNT_DIR" -nobrowse -noautoopen -quiet
+
+          echo "==> Locating .app bundle inside mounted DMG..."
+          APP_PATH=$(find "$MOUNT_DIR" -maxdepth 2 -name "*.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "❌ Error: No .app bundle found inside mounted DMG!"
+            ls -la "$MOUNT_DIR"
+            hdiutil detach "$MOUNT_DIR" -force -quiet || true
+            exit 1
+          fi
+          echo "Found App bundle: $APP_PATH"
+
+          echo "==> 1. Running codesign verification (--verify --deep --strict)..."
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          echo "✓ Codesign verification passed strictly!"
+
+          echo "==> 2. Inspecting architectures with lipo -info..."
+          EXEC_NAME=$(defaults read "$APP_PATH/Contents/Info.plist" CFBundleExecutable 2>/dev/null || echo "Foreigners Studio")
+          APP_BIN="$APP_PATH/Contents/MacOS/$EXEC_NAME"
+          if [ ! -f "$APP_BIN" ]; then
+            APP_BIN=$(find "$APP_PATH/Contents/MacOS" -type f -perm +111 | head -n 1)
+          fi
+          echo "Inspecting binary: $APP_BIN"
+          lipo -info "$APP_BIN"
+
+          LIPO_INFO=$(lipo -info "$APP_BIN")
+          if echo "$LIPO_INFO" | grep -q "x86_64" && echo "$LIPO_INFO" | grep -q "arm64"; then
+            echo "✓ Verified: Binary is Universal (contains both x86_64 and arm64 architectures)"
+          else
+            echo "❌ Error: Binary is missing required architectures! lipo output: $LIPO_INFO"
+            hdiutil detach "$MOUNT_DIR" -force -quiet || true
+            exit 1
+          fi
+
+          echo "==> 3. Test-launching application smoke test..."
+          "$APP_BIN" &
+          APP_PID=$!
+          echo "Process spawned with PID $APP_PID. Waiting 5 seconds to verify runtime stability..."
+          sleep 5
+
+          if kill -0 "$APP_PID" 2>/dev/null; then
+            echo "✓ Test launch SUCCESS: Process $APP_PID is running cleanly without crash or Gatekeeper termination."
+            kill -TERM "$APP_PID" 2>/dev/null || true
+            sleep 1
+            kill -9 "$APP_PID" 2>/dev/null || true
+          else
+            wait "$APP_PID"
+            EXIT_CODE=$?
+            echo "❌ Test launch FAILED: App crashed or exited unexpectedly with status code: $EXIT_CODE"
+            hdiutil detach "$MOUNT_DIR" -force -quiet || true
+            exit 1
+          fi
+
+          echo "==> Unmounting verification DMG volume..."
+          hdiutil detach "$MOUNT_DIR" -force -quiet || true
+          rm -rf "$MOUNT_DIR"
+          echo "✓ Virtual macOS verification successfully completed!"
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
@@ -110,6 +207,9 @@ jobs:
             dist-release/*.zip
             dist-release/*.dmg
             dist-release/*.app.tar.gz
+            dist-release/*.cer
+            dist-release/*.bat
+            dist-release/*.ps1
           draft: false
           prerelease: false
           generate_release_notes: true
