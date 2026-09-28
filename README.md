@@ -4,16 +4,16 @@ Enterprise desktop application for consular appointment management, passport ass
 
 ---
 
-## 📥 Downloads (Release v1.0.7)
+## 📥 Downloads (Release v1.0.6)
 
-All release assets are available on the [**GitHub Releases Page (v1.0.7)**](https://github.com/pankaj886/application/releases/tag/v1.0.7).
+All release assets are available on the [**GitHub Releases Page (v1.0.6)**](https://github.com/pankaj886/application/releases/tag/v1.0.6).
 
 | Platform | Package | Format | Direct Download |
 | :--- | :--- | :--- | :--- |
-| **macOS** (Apple Silicon & Intel) | **Universal Disk Image** | `.dmg` | [Download macOS DMG](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_1.0.0_universal.dmg) |
-| **Windows** (10 / 11, 64-bit) | **Setup Installer** | `.exe` | [Download Windows Setup](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_1.0.0_x64-setup.exe) |
-| **Windows** (10 / 11, 64-bit) | **Enterprise Package** | `.msi` | [Download Windows MSI](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_1.0.0_x64_en-US.msi) |
-| **Windows** (10 / 11, 64-bit) | **Portable Bundle (ZIP)** | `.zip` | [Download Windows ZIP](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_Windows_x64.zip) |
+| **macOS** (Apple Silicon & Intel) | **Universal Disk Image** | `.dmg` | [Download macOS DMG](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_universal.dmg) |
+| **Windows** (10 / 11, 64-bit) | **Setup Installer** | `.exe` | [Download Windows Setup](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64-setup.exe) |
+| **Windows** (10 / 11, 64-bit) | **Enterprise Package** | `.msi` | [Download Windows MSI](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64_en-US.msi) |
+| **Windows** (10 / 11, 64-bit) | **Portable Bundle (ZIP)** | `.zip` | [Download Windows ZIP](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_Windows_x64.zip) |
 
 > **Note:** This is a private repository. You must be logged into your authorized GitHub account to download release files.
 
