@@ -39,36 +39,28 @@ Write-Host "  Thumbprint: $($cert.Thumbprint)"
 Write-Host "  Subject:    $($cert.Subject)"
 Write-Host "  Issuer:     $($cert.Issuer)"
 
-$targets = @(
-    "foreigners_studio.exe",
-    "Foreigners_Studio_1.0.0_x64-setup.exe",
-    "Foreigners_Studio_1.0.0_x64_en-US.msi"
-)
+$targets = Get-ChildItem -Path $DistDir -File | Where-Object { $_.Extension -in @(".exe", ".msi") }
 
-foreach ($target in $targets) {
-    $filePath = Join-Path $DistDir $target
-    if (Test-Path $filePath) {
-        Write-Host "`nSigning: $filePath"
-        try {
-            $sig = Set-AuthenticodeSignature -FilePath $filePath -Certificate $cert -HashAlgorithm SHA256 -TimestampServer $TimestampServer
-            $color = "Yellow"
-            if ($sig.Status -eq "Valid") { $color = "Green" }
-            Write-Host "  Status:        $($sig.Status)" -ForegroundColor $color
-            Write-Host "  StatusMessage: $($sig.StatusMessage)"
-            if ($sig.TimeStamperCertificate) {
-                Write-Host "  TimeStamper:   $($sig.TimeStamperCertificate.Subject)"
-            }
-        } catch {
-            Write-Warning "Failed to sign with timestamp server '$TimestampServer': $_"
-            Write-Host "Attempting fallback signing without timestamp..."
-            $sig = Set-AuthenticodeSignature -FilePath $filePath -Certificate $cert -HashAlgorithm SHA256
-            $color = "Yellow"
-            if ($sig.Status -eq "Valid") { $color = "Green" }
-            Write-Host "  Status:        $($sig.Status)" -ForegroundColor $color
-            Write-Host "  StatusMessage: $($sig.StatusMessage)"
+foreach ($fileItem in $targets) {
+    $filePath = $fileItem.FullName
+    Write-Host "`nSigning: $filePath"
+    try {
+        $sig = Set-AuthenticodeSignature -FilePath $filePath -Certificate $cert -HashAlgorithm SHA256 -TimestampServer $TimestampServer
+        $color = "Yellow"
+        if ($sig.Status -eq "Valid") { $color = "Green" }
+        Write-Host "  Status:        $($sig.Status)" -ForegroundColor $color
+        Write-Host "  StatusMessage: $($sig.StatusMessage)"
+        if ($sig.TimeStamperCertificate) {
+            Write-Host "  TimeStamper:   $($sig.TimeStamperCertificate.Subject)"
         }
-    } else {
-        Write-Warning "File not found: $filePath"
+    } catch {
+        Write-Warning "Failed to sign with timestamp server '$TimestampServer': $_"
+        Write-Host "Attempting fallback signing without timestamp..."
+        $sig = Set-AuthenticodeSignature -FilePath $filePath -Certificate $cert -HashAlgorithm SHA256
+        $color = "Yellow"
+        if ($sig.Status -eq "Valid") { $color = "Green" }
+        Write-Host "  Status:        $($sig.Status)" -ForegroundColor $color
+        Write-Host "  StatusMessage: $($sig.StatusMessage)"
     }
 }
 

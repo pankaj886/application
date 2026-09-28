@@ -53,7 +53,6 @@ for (const bDir of winBundleDirs) {
       try {
         const norm = file.replace(/ /g, '_');
         fs.copyFileSync(path.join(nsisDir, file), path.join(releaseOutDir, norm));
-        if (norm !== file) fs.copyFileSync(path.join(nsisDir, file), path.join(releaseOutDir, file));
         console.log('✓ Copied Windows NSIS installer ->', norm);
       } catch (err) {}
     }
@@ -66,7 +65,6 @@ for (const bDir of winBundleDirs) {
       try {
         const norm = file.replace(/ /g, '_');
         fs.copyFileSync(path.join(msiDir, file), path.join(releaseOutDir, norm));
-        if (norm !== file) fs.copyFileSync(path.join(msiDir, file), path.join(releaseOutDir, file));
         console.log('✓ Copied Windows MSI installer ->', norm);
       } catch (err) {}
     }
@@ -91,7 +89,6 @@ for (const bDir of macBundleDirs) {
       try {
         const norm = file.replace(/ /g, '_');
         fs.copyFileSync(path.join(dmgDir, file), path.join(releaseOutDir, norm));
-        if (norm !== file) fs.copyFileSync(path.join(dmgDir, file), path.join(releaseOutDir, file));
         console.log('✓ Copied macOS DMG bundle ->', norm);
       } catch (err) {}
     }

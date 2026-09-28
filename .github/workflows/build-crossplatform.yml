@@ -44,7 +44,7 @@ jobs:
       - name: Verify Authenticode Signatures
         shell: powershell
         run: |
-          $targets = Get-Item dist-release/*.exe, dist-release/*.msi
+          $targets = Get-ChildItem -Path dist-release -File | Where-Object { $_.Extension -in @(".exe", ".msi") }
           foreach ($file in $targets) {
             $sig = Get-AuthenticodeSignature $file.FullName
             Write-Host "$($file.Name): $($sig.Status) ($($sig.StatusMessage))"
