@@ -90,23 +90,37 @@ fi
 if [ -z "$DMG_FILE" ]; then
   echo -e "${BLUE}==> [1/5] Resolving latest Universal DMG release from GitHub (${GITHUB_REPO})...${RESET}"
   
+  # Check for token in env or git credentials
+  GITHUB_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+  if [ -z "$GITHUB_TOKEN" ]; then
+    GIT_PASS=$(printf "protocol=https\nhost=github.com\n" | git credential fill 2>/dev/null | grep "^password=" | cut -d= -f2- || true)
+    if [ -n "$GIT_PASS" ]; then
+      GITHUB_TOKEN="$GIT_PASS"
+    fi
+  fi
+
   CURL_AUTH=()
-  if [ -n "${GITHUB_TOKEN:-}" ]; then
+  if [ -n "$GITHUB_TOKEN" ]; then
     CURL_AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
-  elif [ -n "${GH_TOKEN:-}" ]; then
-    CURL_AUTH=(-H "Authorization: Bearer $GH_TOKEN")
   fi
 
   DOWNLOAD_URL=""
+  EXTRA_HEADER=()
   
   # Try GitHub API first
   API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
   API_JSON=$(curl -fsSL "${CURL_AUTH[@]}" "$API_URL" 2>/dev/null || true)
   
   if [ -n "$API_JSON" ]; then
-    DOWNLOAD_URL=$(echo "$API_JSON" | grep -o 'https://[^"]*universal[^"]*\.dmg' | head -n 1 || true)
-    if [ -z "$DOWNLOAD_URL" ]; then
-      DOWNLOAD_URL=$(echo "$API_JSON" | grep -o 'https://[^"]*\.dmg' | head -n 1 || true)
+    # Look for asset id/url for private repositories
+    ASSET_API_URL=$(echo "$API_JSON" | grep -B 2 -A 5 'Foreigners_Studio.*\.dmg' | grep -o 'https://api.github.com/repos/[^"]*/releases/assets/[0-9]*' | head -n 1 || true)
+    BROWSER_URL=$(echo "$API_JSON" | grep -o 'https://[^"]*universal[^"]*\.dmg' | head -n 1 || true)
+    
+    if [ -n "$ASSET_API_URL" ] && [ -n "$GITHUB_TOKEN" ]; then
+      DOWNLOAD_URL="$ASSET_API_URL"
+      EXTRA_HEADER=(-H "Accept: application/octet-stream")
+    elif [ -n "$BROWSER_URL" ]; then
+      DOWNLOAD_URL="$BROWSER_URL"
     fi
   fi
 
@@ -119,7 +133,7 @@ if [ -z "$DMG_FILE" ]; then
   echo -e "${BLUE}==> [2/5] Downloading macOS Universal DMG...${RESET}"
   echo -e "    Source: ${DOWNLOAD_URL}"
 
-  if ! curl -fSL --progress-bar "${CURL_AUTH[@]}" "$DOWNLOAD_URL" -o "$TEMP_DMG"; then
+  if ! curl -fSL --progress-bar "${CURL_AUTH[@]}" "${EXTRA_HEADER[@]}" "$DOWNLOAD_URL" -o "$TEMP_DMG"; then
     # Try latest generic redirect if version tag failed
     ALT_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/${FALLBACK_DMG_NAME}"
     echo -e "${YELLOW}Retrying via latest release pointer...${RESET}"
@@ -127,7 +141,7 @@ if [ -z "$DMG_FILE" ]; then
       echo -e "${RED}❌ Download failed!${RESET}" >&2
       echo "If ${GITHUB_REPO} is a private repository, please pass your GitHub Token:" >&2
       echo "  GITHUB_TOKEN=your_token bash install-mac.sh" >&2
-      echo "Or download the DMG manually and run:" >&2
+      echo "Or download the DMG manually from https://github.com/${GITHUB_REPO}/releases and run:" >&2
       echo "  bash install-mac.sh /path/to/${FALLBACK_DMG_NAME}" >&2
       exit 1
     fi
