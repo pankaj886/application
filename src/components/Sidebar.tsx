@@ -12,7 +12,7 @@ interface SidebarProps {
   onTabChange: (tab: NavigationTab) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  serviceCount: number;
+  serviceCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -20,20 +20,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onTabChange,
   collapsed,
   onToggleCollapse,
-  serviceCount
 }) => {
   return (
     <aside className={`sidebar-wrapper ${collapsed ? 'collapsed' : 'expanded'}`}>
       <div className="sidebar-top">
-        {!collapsed ? (
-          <div className="sidebar-brand-badge">
-            <img src="/fs_logo.svg" alt="Foreigners Studio" className="sidebar-brand-logo" />
-            <span className="sidebar-title">Menu</span>
-          </div>
-        ) : (
-          <div className="sidebar-brand-badge-collapsed" title="Foreigners Studio">
-            <img src="/fs_logo.svg" alt="Foreigners Studio" className="sidebar-brand-logo" />
-          </div>
+        {!collapsed && (
+          <span className="sidebar-title">Menu</span>
         )}
         <button
           type="button"
@@ -64,7 +56,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!collapsed && (
             <div className="nav-tab-body">
               <span className="nav-tab-label">Services</span>
-              <span className="nav-tab-badge">{serviceCount}</span>
             </div>
           )}
 

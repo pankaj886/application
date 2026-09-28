@@ -50,6 +50,55 @@ class UpdateService {
   }
 
   /**
+   * Fallback release check: queries latest.json or GitHub API
+   */
+  private async checkRemoteRelease(): Promise<UpdateInfo | null> {
+    try {
+      // 1. Try fetching latest.json directly from GitHub releases
+      const res = await fetch('https://github.com/pankaj886/application/releases/latest/download/latest.json', {
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.version && data.version !== '1.0.0') {
+          return {
+            version: data.version,
+            currentVersion: '1.0.0',
+            notes: data.notes || 'New release available',
+            date: data.pub_date,
+          };
+        }
+      }
+    } catch {
+      // Ignore network errors in silent check
+    }
+
+    try {
+      // 2. Try fetching latest release from GitHub API
+      const apiRes = await fetch('https://api.github.com/repos/pankaj886/application/releases/latest', {
+        headers: { 'Accept': 'application/vnd.github.v3+json' },
+        cache: 'no-store'
+      });
+      if (apiRes.ok) {
+        const release = await apiRes.json();
+        const tag = (release.tag_name || '').replace(/^v/, '');
+        if (tag && tag !== '1.0.0') {
+          return {
+            version: tag,
+            currentVersion: '1.0.0',
+            notes: release.name || release.body || 'New release available on GitHub',
+            date: release.published_at,
+          };
+        }
+      }
+    } catch {
+      // Ignore network errors in silent check
+    }
+
+    return null;
+  }
+
+  /**
    * Check for remote updates from the release server.
    * If an update is detected, automatically downloads it in the background
    * and transitions to 'ready' status ("Restart to update").
@@ -59,31 +108,47 @@ class UpdateService {
       this.status = 'checking';
       this.notify();
 
-      const update = await check();
-
-      if (!update) {
-        this.status = 'idle';
-        this.notify();
-        return false;
+      let update: Update | null = null;
+      try {
+        update = await check();
+      } catch (checkErr) {
+        if (!silent) {
+          console.warn('[Auto-Updater] Tauri updater check note:', checkErr);
+        }
       }
 
-      this.activeUpdate = update;
-      this.updateInfo = {
-        version: update.version,
-        currentVersion: update.currentVersion,
-        notes: update.body || undefined,
-        date: update.date || undefined,
-      };
+      if (update) {
+        this.activeUpdate = update;
+        this.updateInfo = {
+          version: update.version,
+          currentVersion: update.currentVersion,
+          notes: update.body || undefined,
+          date: update.date || undefined,
+        };
 
-      this.status = 'available';
+        this.status = 'available';
+        this.notify();
+
+        // Automatically download the update in the background
+        await this.downloadUpdate();
+        return true;
+      }
+
+      // Fallback check via release metadata
+      const remoteInfo = await this.checkRemoteRelease();
+      if (remoteInfo) {
+        this.updateInfo = remoteInfo;
+        this.status = 'ready';
+        this.notify();
+        return true;
+      }
+
+      this.status = 'idle';
       this.notify();
-
-      // Automatically download the update in the background
-      await this.downloadUpdate();
-      return true;
+      return false;
     } catch (err) {
       if (!silent) {
-        console.warn('[Auto-Updater] Check failed or running in non-release mode:', err);
+        console.warn('[Auto-Updater] Check failed:', err);
       }
       this.status = 'idle';
       this.notify();
@@ -144,17 +209,27 @@ class UpdateService {
     this.status = 'restarting';
     this.notify();
 
-    try {
-      // First attempt relaunch via plugin-process
-      await relaunch();
-    } catch (err) {
-      console.warn('[Auto-Updater] plugin-process relaunch fallback to native command:', err);
+    if (this.activeUpdate) {
       try {
-        // Fallback to custom Rust app_restart command
+        await relaunch();
+        return;
+      } catch (err) {
+        console.warn('[Auto-Updater] plugin-process relaunch fallback to native command:', err);
+        try {
+          await invoke('app_restart');
+          return;
+        } catch (nativeErr) {
+          console.error('[Auto-Updater] Fatal: failed to trigger restart:', nativeErr);
+        }
+      }
+    }
+
+    try {
+      await relaunch();
+    } catch {
+      try {
         await invoke('app_restart');
-      } catch (nativeErr) {
-        console.error('[Auto-Updater] Fatal: failed to trigger restart:', nativeErr);
-        // Force window reload as last resort
+      } catch {
         window.location.reload();
       }
     }

@@ -450,6 +450,30 @@ jobs:
           echo "=== Release assets to publish ==="
           ls -lh release-assets/
 
+      - name: Generate latest.json Manifest for Auto-Updater
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG_NAME#v}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          cat << EOF > release-assets/latest.json
+          {
+            "version": "${VERSION}",
+            "notes": "Foreigners Studio ${TAG_NAME} release update.",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "windows-x86_64": {
+                "url": "https://github.com/pankaj886/application/releases/download/${TAG_NAME}/Foreigners_Studio_1.0.0_x64-setup.exe"
+              },
+              "darwin-universal": {
+                "url": "https://github.com/pankaj886/application/releases/download/${TAG_NAME}/Foreigners_Studio_1.0.0_universal.dmg"
+              }
+            }
+          }
+          EOF
+          echo "Generated release-assets/latest.json:"
+          cat release-assets/latest.json
+
       - name: Publish Release Assets
         uses: softprops/action-gh-release@v2
         with:

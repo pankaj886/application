@@ -97,7 +97,6 @@ export function App() {
           onTabChange={(tab) => setActiveTab(tab)}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(prev => !prev)}
-          serviceCount={1}
         />
 
         <main className="content-viewport">
