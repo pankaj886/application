@@ -31,15 +31,17 @@ jobs:
         run: npm ci
 
       - name: Build Windows Tauri Bundle
-        run: npx tauri build --bundles nsis,msi
+        run: |
+          npx tauri build --bundles nsis,msi
+          node copy-release.js
 
       - name: Upload Windows Installers
         uses: actions/upload-artifact@v4
         with:
           name: foreigners-studio-windows-bundle
           path: |
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/msi/*.msi
+            dist-release/*.exe
+            dist-release/*.msi
 
   build-macos:
     name: Build macOS App (.dmg & .app)
@@ -64,10 +66,12 @@ jobs:
         run: npm ci
 
       - name: Build macOS Tauri Bundle
-        run: npx tauri build --bundles dmg,app
+        run: |
+          npx tauri build --bundles dmg,app
+          node copy-release.js
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
         with:
           name: foreigners-studio-macos-universal
-          path: src-tauri/target/release/bundle/dmg/*.dmg
+          path: dist-release/*.dmg

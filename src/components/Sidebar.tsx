@@ -25,9 +25,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside className={`sidebar-wrapper ${collapsed ? 'collapsed' : 'expanded'}`}>
       <div className="sidebar-top">
-        {!collapsed && (
-          <div className="sidebar-heading">
+        {!collapsed ? (
+          <div className="sidebar-brand-badge">
+            <img src="/fs_logo.svg" alt="Foreigners Studio" className="sidebar-brand-logo" />
             <span className="sidebar-title">Menu</span>
+          </div>
+        ) : (
+          <div className="sidebar-brand-badge-collapsed" title="Foreigners Studio">
+            <img src="/fs_logo.svg" alt="Foreigners Studio" className="sidebar-brand-logo" />
           </div>
         )}
         <button

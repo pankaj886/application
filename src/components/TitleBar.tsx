@@ -137,7 +137,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
     >
       <div className={`titlebar-brand ${isMac ? 'ml-18' : ''}`} data-tauri-drag-region>
         <div className="brand-crest">
-          <span className="brand-crest-letter">FS</span>
+          <img src="/fs_logo.svg" alt="Foreigners Studio Logo" className="brand-logo-img" />
         </div>
         <div className="brand-meta" data-tauri-drag-region>
           <span className="brand-name">Foreigners Studio</span>

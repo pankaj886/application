@@ -31,8 +31,15 @@ Download the package for your platform below:
 
 ### macOS
 1. Download [**Foreigners_Studio_1.0.0_universal.dmg**](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_1.0.0_universal.dmg).
-2. Open the downloaded `.dmg` file and drag **Foreigners Studio** into your **Applications** folder.
-3. Launch Foreigners Studio from your Applications folder or Launchpad.
+2. Open the `.dmg` file and drag **Foreigners Studio** across the arrow into your **Applications** folder.
+3. First-time launch on macOS:
+   - **Method 1 (Fastest)**: In your Applications folder, **Right-click** (or `Control + click`) on **Foreigners Studio** → select **Open** → click **Open** in the dialog.
+   - **Method 2 (System Settings)**: Open **System Settings** → **Privacy & Security** → scroll to **Security** and click **Open Anyway**.
+   - **Method 3 (Terminal)**: If Chrome flags the downloaded app, open Terminal and run:
+     ```bash
+     xattr -cr /Applications/Foreigners\ Studio.app
+     ```
+   - The application will now open normally with full permissions.
 
 ---
 
