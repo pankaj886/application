@@ -223,11 +223,14 @@ jobs:
           node copy-release.js
 
       - name: Import Apple Developer ID Certificate (if configured)
-        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "No Apple Developer Certificate provided in secrets. Using ad-hoc signature."
+            exit 0
+          fi
           echo "Setting up temporary keychain for Apple Developer ID certificate..."
           KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
           security create-keychain -p "temp-keychain-pass" $KEYCHAIN_PATH
@@ -254,12 +257,15 @@ jobs:
         run: bash clean-dmg.sh
 
       - name: Notarize macOS DMG with Apple (if configured)
-        if: ${{ secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          if [ -z "$APPLE_ID" ] || [ -z "$APPLE_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "Apple Notarization credentials not configured in secrets. Skipping notarization."
+            exit 0
+          fi
           DMG_FILE=$(find dist-release -name "*.dmg" -type f | head -n 1)
           if [ -n "$DMG_FILE" ] && [ -f "$DMG_FILE" ]; then
             echo "==> Submitting $DMG_FILE to Apple Notary Service..."
