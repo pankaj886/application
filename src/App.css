@@ -132,15 +132,15 @@ body {
   width: calc(var(--icon-md) + 8px);
   height: calc(var(--icon-md) + 8px);
   border-radius: var(--radius-sm);
-  background-color: #ffffff;
-  border: 1px solid var(--border-subtle);
+  background-color: transparent;
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   overflow: hidden;
-  padding: 2px;
-  box-shadow: var(--shadow-sm);
+  padding: 0;
+  box-shadow: none;
 }
 
 .brand-logo-img {

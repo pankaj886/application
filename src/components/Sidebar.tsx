@@ -12,7 +12,6 @@ interface SidebarProps {
   onTabChange: (tab: NavigationTab) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  serviceCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
