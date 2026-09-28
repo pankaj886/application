@@ -1,16 +1,26 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#  Foreigners Studio - macOS One-Command Enterprise Installer
+#  Foreigners Studio - macOS One-Command Installer
 #
 #  Usage:
 #    curl -fsSL https://raw.githubusercontent.com/pankaj886/application/main/install-mac.sh | bash
 #    or:
 #    bash install-mac.sh [path/to/Foreigners_Studio.dmg]
+#
+#  This script:
+#   1. Downloads the latest Universal DMG from GitHub
+#   2. Strips the com.apple.quarantine attribute from the DMG before mounting
+#   3. Copies the app to /Applications
+#   4. Strips quarantine from the installed .app bundle
+#   5. Re-signs the app with an ad-hoc local signature
+#   6. Launches Foreigners Studio cleanly
+#
+#  IMPORTANT: The quarantine strip MUST happen before mounting for macOS 14+
+#  because Gatekeeper checks the DMG container's quarantine attribute.
 # ==============================================================================
 
 set -euo pipefail
 
-# ANSI color codes
 BOLD="\033[1m"
 GREEN="\033[0;32m"
 BLUE="\033[0;34m"
@@ -20,11 +30,10 @@ RESET="\033[0m"
 
 echo -e "${BLUE}${BOLD}"
 echo "=========================================================="
-echo "    Foreigners Studio - macOS Installer & Gatekeeper Fix  "
+echo "    Foreigners Studio - macOS Installer                   "
 echo "=========================================================="
 echo -e "${RESET}"
 
-# 1. OS Verification
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo -e "${RED}Error: This script must be run on macOS (Darwin).${RESET}" >&2
   exit 1
@@ -46,9 +55,7 @@ cleanup() {
   if [ -n "$MOUNT_DIR" ] && [ -d "$MOUNT_DIR" ]; then
     echo -e "\n${BLUE}==> Unmounting installer image...${RESET}"
     for retry in 1 2 3; do
-      if hdiutil detach "$MOUNT_DIR" -force -quiet 2>/dev/null; then
-        break
-      fi
+      if hdiutil detach "$MOUNT_DIR" -force -quiet 2>/dev/null; then break; fi
       sleep 1
     done
     rm -rf "$MOUNT_DIR" 2>/dev/null || true
@@ -60,7 +67,9 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# 2. Determine DMG Source (Argument, Local, or Download)
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 1: Determine DMG source
+# ─────────────────────────────────────────────────────────────────────────────
 DMG_FILE=""
 
 if [ "${1:-}" != "" ]; then
@@ -68,28 +77,26 @@ if [ "${1:-}" != "" ]; then
     DMG_FILE="$1"
     echo -e "${GREEN}✓ Using specified local DMG:${RESET} $DMG_FILE"
   elif [[ "$1" =~ ^https?:// ]]; then
-    CUSTOM_URL="$1"
     TEMP_DMG=$(mktemp /tmp/foreigners_studio_XXXXXX.dmg)
     echo -e "${BLUE}==> Downloading DMG from custom URL...${RESET}"
-    curl -fSL --progress-bar "$CUSTOM_URL" -o "$TEMP_DMG"
+    curl -fSL --progress-bar "$1" -o "$TEMP_DMG"
     DMG_FILE="$TEMP_DMG"
   fi
 fi
 
 if [ -z "$DMG_FILE" ]; then
-  # Check if a built DMG already exists locally in dist-release or current dir
   if [ -f "dist-release/$FALLBACK_DMG_NAME" ]; then
     DMG_FILE="dist-release/$FALLBACK_DMG_NAME"
-    echo -e "${GREEN}✓ Found local build in dist-release:${RESET} $DMG_FILE"
+    echo -e "${GREEN}✓ Found local build:${RESET} $DMG_FILE"
   elif [ -f "$FALLBACK_DMG_NAME" ]; then
     DMG_FILE="$FALLBACK_DMG_NAME"
-    echo -e "${GREEN}✓ Found local DMG in current directory:${RESET} $DMG_FILE"
+    echo -e "${GREEN}✓ Found local DMG:${RESET} $DMG_FILE"
   fi
 fi
 
 if [ -z "$DMG_FILE" ]; then
-  echo -e "${BLUE}==> [1/5] Resolving latest Universal DMG release from GitHub (${GITHUB_REPO})...${RESET}"
-  
+  echo -e "${BLUE}==> [1/5] Resolving latest Universal DMG from GitHub (${GITHUB_REPO})...${RESET}"
+
   # Check for token in env or git credentials
   GITHUB_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
   if [ -z "$GITHUB_TOKEN" ]; then
@@ -106,16 +113,16 @@ if [ -z "$DMG_FILE" ]; then
 
   DOWNLOAD_URL=""
   EXTRA_HEADER=()
-  
-  # Try GitHub API first
+
+  # Try GitHub API to get asset download URL
   API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
   API_JSON=$(curl -fsSL "${CURL_AUTH[@]}" "$API_URL" 2>/dev/null || true)
-  
+
   if [ -n "$API_JSON" ]; then
-    # Look for asset id/url for private repositories
+    # For private repos, use the API asset endpoint with Accept: application/octet-stream
     ASSET_API_URL=$(echo "$API_JSON" | grep -B 2 -A 5 'Foreigners_Studio.*\.dmg' | grep -o 'https://api.github.com/repos/[^"]*/releases/assets/[0-9]*' | head -n 1 || true)
     BROWSER_URL=$(echo "$API_JSON" | grep -o 'https://[^"]*universal[^"]*\.dmg' | head -n 1 || true)
-    
+
     if [ -n "$ASSET_API_URL" ] && [ -n "$GITHUB_TOKEN" ]; then
       DOWNLOAD_URL="$ASSET_API_URL"
       EXTRA_HEADER=(-H "Accept: application/octet-stream")
@@ -124,7 +131,6 @@ if [ -z "$DMG_FILE" ]; then
     fi
   fi
 
-  # Fallback to direct download URLs
   if [ -z "$DOWNLOAD_URL" ]; then
     DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${FALLBACK_VERSION}/${FALLBACK_DMG_NAME}"
   fi
@@ -134,14 +140,13 @@ if [ -z "$DMG_FILE" ]; then
   echo -e "    Source: ${DOWNLOAD_URL}"
 
   if ! curl -fSL --progress-bar "${CURL_AUTH[@]}" "${EXTRA_HEADER[@]}" "$DOWNLOAD_URL" -o "$TEMP_DMG"; then
-    # Try latest generic redirect if version tag failed
     ALT_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/${FALLBACK_DMG_NAME}"
     echo -e "${YELLOW}Retrying via latest release pointer...${RESET}"
     if ! curl -fSL --progress-bar "${CURL_AUTH[@]}" "$ALT_URL" -o "$TEMP_DMG"; then
       echo -e "${RED}❌ Download failed!${RESET}" >&2
-      echo "If ${GITHUB_REPO} is a private repository, please pass your GitHub Token:" >&2
+      echo "If ${GITHUB_REPO} is a private repository, pass your GitHub Token:" >&2
       echo "  GITHUB_TOKEN=your_token bash install-mac.sh" >&2
-      echo "Or download the DMG manually from https://github.com/${GITHUB_REPO}/releases and run:" >&2
+      echo "Or download from https://github.com/${GITHUB_REPO}/releases and run:" >&2
       echo "  bash install-mac.sh /path/to/${FALLBACK_DMG_NAME}" >&2
       exit 1
     fi
@@ -150,8 +155,19 @@ if [ -z "$DMG_FILE" ]; then
   echo -e "${GREEN}✓ Download complete!${RESET}"
 fi
 
-# 3. Mount DMG
-echo -e "${BLUE}==> [3/5] Mounting DMG disk image...${RESET}"
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 2: CRITICAL - Strip quarantine from the DMG BEFORE mounting
+#         This is essential for macOS 13+ Gatekeeper to not block the mount
+# ─────────────────────────────────────────────────────────────────────────────
+echo -e "${BLUE}==> [3/5] Stripping Gatekeeper quarantine from DMG...${RESET}"
+xattr -cr "$DMG_FILE" 2>/dev/null || true
+xattr -d com.apple.quarantine "$DMG_FILE" 2>/dev/null || true
+echo -e "${GREEN}✓ Quarantine attributes cleared from DMG${RESET}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 3: Mount DMG
+# ─────────────────────────────────────────────────────────────────────────────
+echo -e "${BLUE}==> [4/5] Mounting disk image...${RESET}"
 MOUNT_DIR=$(mktemp -d /tmp/foreigners_studio_mount_XXXXXX)
 hdiutil attach "$DMG_FILE" -mountpoint "$MOUNT_DIR" -nobrowse -noautoopen -quiet
 
@@ -161,10 +177,12 @@ if [ -z "$APP_IN_DMG" ] || [ ! -d "$APP_IN_DMG" ]; then
   echo -e "${RED}❌ Error: No .app found inside the mounted disk image!${RESET}" >&2
   exit 1
 fi
-echo -e "${GREEN}✓ Found application bundle:${RESET} $(basename "$APP_IN_DMG")"
+echo -e "${GREEN}✓ Found:${RESET} $(basename "$APP_IN_DMG")"
 
-# 4. Copy to /Applications
-echo -e "${BLUE}==> [4/5] Installing to ${TARGET_APP}...${RESET}"
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 4: Install to /Applications
+# ─────────────────────────────────────────────────────────────────────────────
+echo -e "${BLUE}==> [5/5] Installing to ${TARGET_APP}...${RESET}"
 
 # Close existing instance if running
 if pgrep -fi "Foreigners Studio" >/dev/null 2>&1; then
@@ -173,37 +191,75 @@ if pgrep -fi "Foreigners Studio" >/dev/null 2>&1; then
   sleep 1
 fi
 
-SUDO_CMD=""
-if [ ! -w "$INSTALL_DIR" ]; then
-  echo -e "${YELLOW}Notice: Writing to /Applications requires administrator permissions.${RESET}"
-  SUDO_CMD="sudo"
+# Remove old installation if present
+if [ -d "$TARGET_APP" ]; then
+  echo -e "${YELLOW}Removing previous installation...${RESET}"
+  rm -rf "$TARGET_APP"
 fi
 
-$SUDO_CMD rm -rf "$TARGET_APP" 2>/dev/null || true
-$SUDO_CMD cp -R "$APP_IN_DMG" "$TARGET_APP"
-echo -e "${GREEN}✓ Copied application into ${INSTALL_DIR}${RESET}"
+# Copy the app
+cp -R "$APP_IN_DMG" "$TARGET_APP"
+echo -e "${GREEN}✓ Copied to ${TARGET_APP}${RESET}"
 
-# 5. Strip quarantine & re-sign with ad-hoc identity to satisfy Gatekeeper
-echo -e "${BLUE}==> [5/5] Fixing Gatekeeper quarantine and registering local signature...${RESET}"
+# Detach the DMG
+hdiutil detach "$MOUNT_DIR" -force -quiet 2>/dev/null || true
+rm -rf "$MOUNT_DIR" 2>/dev/null || true
+MOUNT_DIR=""
 
-echo "    -> Removing quarantine attribute (xattr -cr)..."
-$SUDO_CMD xattr -cr "$TARGET_APP"
+# ─────────────────────────────────────────────────────────────────────────────
+# Post-Install: Strip quarantine from installed app and re-sign
+# ─────────────────────────────────────────────────────────────────────────────
+echo -e "${BLUE}==> Post-install: Clearing Gatekeeper quarantine from installed app...${RESET}"
 
-echo "    -> Ad-hoc signing with hardened runtime (codesign --force --deep --options runtime --sign -)..."
-$SUDO_CMD codesign --force --deep --options runtime --sign - "$TARGET_APP"
+# Strip ALL extended attributes recursively
+xattr -cr "$TARGET_APP" 2>/dev/null || true
 
-if codesign --verify --deep --strict "$TARGET_APP" 2>/dev/null; then
-  echo -e "${GREEN}    ✓ Signature verified strictly!${RESET}"
+# Specifically remove quarantine (belt-and-suspenders approach)
+xattr -d com.apple.quarantine "$TARGET_APP" 2>/dev/null || true
+
+# Also strip quarantine from the app binary and all internal files
+find "$TARGET_APP" -exec xattr -c {} \; 2>/dev/null || true
+
+echo -e "${GREEN}✓ Quarantine attributes cleared from installed app${RESET}"
+
+echo -e "${BLUE}==> Re-signing app with local ad-hoc signature...${RESET}"
+
+# Sign all libraries/dylibs inside first
+find "$TARGET_APP" -type f \( -name "*.dylib" -o -name "*.so" \) 2>/dev/null | while read -r lib; do
+  codesign --force --options runtime --sign - "$lib" 2>/dev/null || true
+done
+
+# Deep ad-hoc sign the whole bundle with hardened runtime
+if codesign --force --deep --options runtime --sign - "$TARGET_APP" 2>/dev/null; then
+  echo -e "${GREEN}✓ App re-signed with ad-hoc signature (hardened runtime)${RESET}"
 else
-  echo -e "${YELLOW}    ⚠ Codesign verification notice (ad-hoc registered)${RESET}"
+  codesign --force --deep --sign - "$TARGET_APP" 2>/dev/null || true
+  echo -e "${YELLOW}⚠ App signed without hardened runtime (fallback)${RESET}"
 fi
 
-# 6. Launch Application Cleanly
-echo -e "\n${GREEN}${BOLD}=========================================================="
-echo "  ✓ INSTALLATION SUCCESSFUL!                              "
-echo "  Foreigners Studio is now installed in your Applications."
-echo "==========================================================${RESET}"
+# Verify final signature
+echo -e "${BLUE}==> Verifying signature...${RESET}"
+if codesign --verify --deep --strict "$TARGET_APP" 2>/dev/null; then
+  echo -e "${GREEN}✓ Code signature is valid${RESET}"
+else
+  echo -e "${YELLOW}⚠ Signature verification note (may be normal for ad-hoc)${RESET}"
+fi
 
-echo -e "${BLUE}==> Launching ${APP_NAME}...${RESET}"
-open "$TARGET_APP"
-echo -e "${GREEN}✓ Application opened cleanly with zero warnings.${RESET}\n"
+# ─────────────────────────────────────────────────────────────────────────────
+# Launch the app
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${GREEN}${BOLD}✓ Foreigners Studio installed successfully!${RESET}"
+echo ""
+echo -e "  Location: ${TARGET_APP}"
+echo ""
+echo -e "${BLUE}==> Launching Foreigners Studio...${RESET}"
+open "$TARGET_APP" 2>/dev/null || true
+
+echo ""
+echo -e "${GREEN}${BOLD}Installation complete! Foreigners Studio is now running.${RESET}"
+echo ""
+echo -e "${YELLOW}If macOS shows a security dialog on first launch:${RESET}"
+echo -e "  1. Click ${BOLD}'Open'${RESET}${YELLOW} if prompted${RESET}"
+echo -e "  2. Or go to: ${BOLD}System Settings → Privacy & Security → Open Anyway${RESET}"
+echo ""

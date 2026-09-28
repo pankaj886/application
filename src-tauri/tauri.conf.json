@@ -55,11 +55,11 @@
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": ""
+      "timestampUrl": "http://timestamp.digicert.com"
     },
     "macOS": {
       "frameworks": [],
-      "minimumSystemVersion": "10.15",
+      "minimumSystemVersion": "11.0",
       "entitlements": "Entitlements.plist",
       "exceptionDomain": "",
       "signingIdentity": "-",

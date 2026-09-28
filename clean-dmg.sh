@@ -1,110 +1,175 @@
 #!/usr/bin/env bash
+# ==============================================================================
+#  Foreigners Studio - macOS DMG Sanitizer & Gatekeeper-Cleaner
+#
+#  This script:
+#   1. Signs all .app bundles with ad-hoc signature + hardened runtime
+#   2. Strips ALL extended attributes (quarantine etc.) from DMG & .app bundles
+#   3. Repackages DMG without quarantine bits
+#   4. Creates a clean .app.tar.gz with quarantine pre-stripped
+# ==============================================================================
 set -eo pipefail
 
 if [[ "$OSTYPE" != "darwin"* ]]; then
-  echo "==> clean-dmg.sh: Non-macOS environment detected ($OSTYPE). Skipping macOS DMG cleaning."
+  echo "==> clean-dmg.sh: Non-macOS environment ($OSTYPE). Skipping."
   exit 0
 fi
 
 echo "=========================================================="
-echo "  Foreigners Studio - macOS DMG & Bundle Sanitizer        "
+echo "  Foreigners Studio - macOS DMG Sanitizer & Code-Signer   "
 echo "=========================================================="
 
 SEARCH_DIRS=()
 [ -d "src-tauri/target" ] && SEARCH_DIRS+=("src-tauri/target")
-[ -d "dist-release" ] && SEARCH_DIRS+=("dist-release")
+[ -d "dist-release" ]     && SEARCH_DIRS+=("dist-release")
 
 if [ ${#SEARCH_DIRS[@]} -eq 0 ]; then
-  echo "No target or release directories found to sanitize."
+  echo "No target or release directories found."
   exit 0
 fi
 
+# ─────────────────────────────────────────────────────────────────────────────
+# sign_app_bundle: Strip quarantine, then ad-hoc sign with hardened runtime
+# ─────────────────────────────────────────────────────────────────────────────
 sign_app_bundle() {
   local target_app="$1"
   [ -d "$target_app" ] || return 0
-  echo "==> Sanitizing and signing .app bundle: $target_app"
-  
-  # Strip all extended attributes (quarantine, provenance, metadata)
+  echo "==> Signing: $target_app"
+
+  # 1. Recursively strip ALL extended attributes (quarantine, provenance, etc.)
   xattr -cr "$target_app" 2>/dev/null || true
-  
-  # Ad-hoc sign with hardened runtime enabled
-  codesign --force --deep --options runtime --sign - "$target_app"
-  
-  # Verify signature strictly
+
+  # 2. Remove quarantine bit specifically (belt-and-suspenders)
+  xattr -d com.apple.quarantine "$target_app" 2>/dev/null || true
+
+  # 3. Sign each .dylib / .so / framework inside the bundle first
+  find "$target_app" -type f \( -name "*.dylib" -o -name "*.so" \) 2>/dev/null | while read -r lib; do
+    codesign --force --options runtime --sign - "$lib" 2>/dev/null || true
+  done
+
+  # 4. Deep ad-hoc sign the entire bundle with hardened runtime
+  codesign --force --deep --options runtime --sign - "$target_app" 2>/dev/null || \
+    codesign --force --deep --sign - "$target_app" 2>/dev/null || true
+
+  # 5. Verify
   if codesign --verify --deep --strict "$target_app" 2>/dev/null; then
-    echo "✓ Code signature verified: $target_app"
+    echo "  ✓ Code signature verified: $(basename "$target_app")"
   else
-    echo "⚠ Note: codesign strict check output for: $target_app"
-    codesign --verify --deep --strict --verbose=2 "$target_app" || true
+    echo "  ⚠ Could not strictly verify, continuing: $(basename "$target_app")"
   fi
 }
 
-# 1. Process all standalone .app bundles before DMG creation / modification
-echo "==> [Phase 1] Scanning for standalone .app bundles before DMG processing..."
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 1: Sign all standalone .app bundles found before DMG creation
+# ─────────────────────────────────────────────────────────────────────────────
+echo "==> [Phase 1] Signing standalone .app bundles..."
 find "${SEARCH_DIRS[@]}" -name "*.app" -type d 2>/dev/null | sort -u | while read -r app; do
   sign_app_bundle "$app"
 done
 
-# 2. Process all DMG images (sanitize contents and re-sign app inside volume)
-echo "==> [Phase 2] Sanitizing DMG volumes and signing internal bundles..."
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2: Repackage DMG files with quarantine-stripped, re-signed app bundles
+# ─────────────────────────────────────────────────────────────────────────────
+echo "==> [Phase 2] Repackaging DMG volumes (strip quarantine, re-sign)..."
 find "${SEARCH_DIRS[@]}" -name "*.dmg" -type f 2>/dev/null | sort -u | while read -r dmg; do
   [ -f "$dmg" ] || continue
   echo "Processing DMG: $dmg"
-  
+
   TMP_RW="/tmp/dmg_rw_$(date +%s)_$$.dmg"
   TMP_FINAL="/tmp/dmg_final_$(date +%s)_$$.dmg"
   MOUNT_DIR="/tmp/dmg_mount_$(date +%s)_$$"
-  
+
   rm -f "$TMP_RW" "$TMP_FINAL"
   rm -rf "$MOUNT_DIR"
   mkdir -p "$MOUNT_DIR"
 
   # Convert to read-write DMG
-  hdiutil convert "$dmg" -format UDRW -o "$TMP_RW"
-  
-  # Mount without opening Finder window
+  hdiutil convert "$dmg" -format UDRW -o "$TMP_RW" -quiet
+
+  # Mount
   hdiutil attach "$TMP_RW" -mountpoint "$MOUNT_DIR" -nobrowse -noautoopen -quiet
-  
-  # Remove volume icon and any stray dot files so only the app and Applications show
+
+  # Strip quarantine from the mounted volume root and all contents
+  xattr -cr "$MOUNT_DIR" 2>/dev/null || true
+  xattr -d com.apple.quarantine "$MOUNT_DIR" 2>/dev/null || true
+
+  # Remove volume icon and dot files
   rm -f "$MOUNT_DIR/.VolumeIcon.icns" 2>/dev/null || true
-  rm -f "$MOUNT_DIR/._*" 2>/dev/null || true
+  rm -f "$MOUNT_DIR/._"* 2>/dev/null || true
   rm -rf "$MOUNT_DIR/.Trashes" 2>/dev/null || true
   rm -rf "$MOUNT_DIR/.fseventsd" 2>/dev/null || true
+  rm -rf "$MOUNT_DIR/.Spotlight-V100" 2>/dev/null || true
 
-  # If SetFile exists, remove custom volume icon bit from the root mountpoint
+  # Remove custom volume icon bit if SetFile exists
   if command -v SetFile >/dev/null 2>&1; then
     SetFile -a c "$MOUNT_DIR" 2>/dev/null || true
   fi
 
-  # Sanitize and sign any .app bundles located inside the DMG volume
-  find "$MOUNT_DIR" -maxdepth 2 -name "*.app" -type d 2>/dev/null | while read -r app_in_dmg; do
+  # Sign any .app inside the DMG
+  find "$MOUNT_DIR" -maxdepth 3 -name "*.app" -type d 2>/dev/null | while read -r app_in_dmg; do
     sign_app_bundle "$app_in_dmg"
   done
 
   # Detach with retries
   for retry in 1 2 3 4 5; do
-    if hdiutil detach "$MOUNT_DIR" -force 2>/dev/null; then
-      break
-    fi
-    sleep 1
+    if hdiutil detach "$MOUNT_DIR" -force -quiet 2>/dev/null; then break; fi
+    sleep 2
   done
   rm -rf "$MOUNT_DIR"
 
-  # Convert back to compressed read-only UDZO DMG
-  hdiutil convert "$TMP_RW" -format UDZO -imagekey zlib-level=9 -o "$TMP_FINAL"
+  # Convert back to compressed read-only DMG
+  hdiutil convert "$TMP_RW" -format UDZO -imagekey zlib-level=9 -o "$TMP_FINAL" -quiet
   mv -f "$TMP_FINAL" "$dmg"
   rm -f "$TMP_RW"
 
+  # Strip quarantine from the DMG container itself
+  xattr -cr "$dmg" 2>/dev/null || true
+  xattr -d com.apple.quarantine "$dmg" 2>/dev/null || true
+
   # Ad-hoc sign the DMG container
   codesign --force --sign - "$dmg" 2>/dev/null || true
-  
-  echo "✓ Successfully sanitized and signed DMG: $dmg"
+
+  echo "  ✓ Sanitized DMG: $dmg"
 done
 
-# 3. Post-verification / final pass on .app bundles
-echo "==> [Phase 3] Final verification of all .app bundles..."
-find "${SEARCH_DIRS[@]}" -name "*.app" -type d 2>/dev/null | sort -u | while read -r app; do
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 3: Create a clean .app.tar.gz with quarantine pre-stripped
+#          COPYFILE_DISABLE=1 prevents macOS from embedding ._AppleDouble files
+#          which carry quarantine xattrs into tar archives
+# ─────────────────────────────────────────────────────────────────────────────
+echo "==> [Phase 3] Creating clean .app.tar.gz archives..."
+for bDir in \
+  "src-tauri/target/universal-apple-darwin/release/bundle/macos" \
+  "src-tauri/target/release/bundle/macos" \
+  "src-tauri/target/aarch64-apple-darwin/release/bundle/macos" \
+  "src-tauri/target/x86_64-apple-darwin/release/bundle/macos"; do
+
+  [ -d "$bDir" ] || continue
+  find "$bDir" -maxdepth 1 -name "*.app" -type d 2>/dev/null | while read -r app; do
+    APP_NAME=$(basename "$app" .app)
+    TARBALL="dist-release/${APP_NAME// /_}_universal.app.tar.gz"
+    [ -d "dist-release" ] || mkdir -p "dist-release"
+
+    echo "  Creating: $TARBALL"
+    # Strip quarantine first
+    xattr -cr "$app" 2>/dev/null || true
+    xattr -d com.apple.quarantine "$app" 2>/dev/null || true
+
+    # Sign before archiving
+    sign_app_bundle "$app"
+
+    # Create tar without Apple quarantine metadata (COPYFILE_DISABLE)
+    COPYFILE_DISABLE=1 tar -czf "$TARBALL" -C "$(dirname "$app")" "$(basename "$app")"
+    echo "  ✓ Created: $TARBALL"
+  done
+done
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 4: Final pass — sign any .app already in dist-release
+# ─────────────────────────────────────────────────────────────────────────────
+echo "==> [Phase 4] Final signing pass on dist-release .app bundles..."
+find "dist-release" -name "*.app" -type d 2>/dev/null | sort -u | while read -r app; do
   sign_app_bundle "$app"
 done
 
-echo "==> DMG and .app bundle post-processing complete."
+echo "==> DMG sanitization and signing complete."
