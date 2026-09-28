@@ -1,6 +1,7 @@
 import { check, Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'restarting' | 'error';
 
@@ -15,12 +16,27 @@ export interface UpdateProgressCallback {
   (downloaded: number, total: number, percent: number): void;
 }
 
+/**
+ * Compare two semver strings (e.g. "1.0.7" vs "1.0.0").
+ * Returns true if remote is strictly newer than current.
+ */
+function isNewerVersion(remote: string, current: string): boolean {
+  const parse = (v: string) => v.replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+  const [rMaj = 0, rMin = 0, rPat = 0] = parse(remote);
+  const [cMaj = 0, cMin = 0, cPat = 0] = parse(current);
+  if (rMaj !== cMaj) return rMaj > cMaj;
+  if (rMin !== cMin) return rMin > cMin;
+  return rPat > cPat;
+}
+
 class UpdateService {
   private activeUpdate: Update | null = null;
   private status: UpdateStatus = 'idle';
   private listeners: Set<(status: UpdateStatus, info?: UpdateInfo, progress?: number) => void> = new Set();
   private updateInfo: UpdateInfo | null = null;
   private progressPercent: number = 0;
+  private fallbackDownloadUrl: string | null = null;
+  private installerPath: string | null = null;
 
   public subscribe(cb: (status: UpdateStatus, info?: UpdateInfo, progress?: number) => void) {
     this.listeners.add(cb);
@@ -53,18 +69,33 @@ class UpdateService {
    * Fallback release check: queries latest.json or GitHub API
    */
   private async checkRemoteRelease(): Promise<UpdateInfo | null> {
+    let currentVersion = '1.0.0';
     try {
-      // 1. Try fetching latest.json directly from GitHub releases
+      currentVersion = await getVersion();
+    } catch {
+      currentVersion = '1.0.7';
+    }
+
+    const isWindows = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows');
+
+    // 1. Try fetching latest.json directly from GitHub releases
+    try {
       const res = await fetch('https://github.com/pankaj886/application/releases/latest/download/latest.json', {
         cache: 'no-store'
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.version && data.version !== '1.0.0') {
+        if (data.version && isNewerVersion(data.version, currentVersion)) {
+          if (isWindows && data.platforms?.['windows-x86_64']?.url) {
+            this.fallbackDownloadUrl = data.platforms['windows-x86_64'].url;
+          } else if (!isWindows && data.platforms?.['darwin-universal']?.url) {
+            this.fallbackDownloadUrl = data.platforms['darwin-universal'].url;
+          }
+
           return {
             version: data.version,
-            currentVersion: '1.0.0',
-            notes: data.notes || 'New release available',
+            currentVersion,
+            notes: data.notes || 'New release update available.',
             date: data.pub_date,
           };
         }
@@ -73,8 +104,8 @@ class UpdateService {
       // Ignore network errors in silent check
     }
 
+    // 2. Try fetching latest release from GitHub API
     try {
-      // 2. Try fetching latest release from GitHub API
       const apiRes = await fetch('https://api.github.com/repos/pankaj886/application/releases/latest', {
         headers: { 'Accept': 'application/vnd.github.v3+json' },
         cache: 'no-store'
@@ -82,11 +113,28 @@ class UpdateService {
       if (apiRes.ok) {
         const release = await apiRes.json();
         const tag = (release.tag_name || '').replace(/^v/, '');
-        if (tag && tag !== '1.0.0') {
+        if (tag && isNewerVersion(tag, currentVersion)) {
+          // Find matching installer asset
+          if (Array.isArray(release.assets)) {
+            if (isWindows) {
+              const exeAsset = release.assets.find((a: any) =>
+                typeof a.name === 'string' &&
+                a.name.endsWith('.exe') &&
+                !a.name.toLowerCase().includes('uninstall')
+              );
+              if (exeAsset) this.fallbackDownloadUrl = exeAsset.browser_download_url;
+            } else {
+              const dmgAsset = release.assets.find((a: any) =>
+                typeof a.name === 'string' && a.name.endsWith('.dmg')
+              );
+              if (dmgAsset) this.fallbackDownloadUrl = dmgAsset.browser_download_url;
+            }
+          }
+
           return {
             version: tag,
-            currentVersion: '1.0.0',
-            notes: release.name || release.body || 'New release available on GitHub',
+            currentVersion,
+            notes: release.name || release.body || 'New release update available.',
             date: release.published_at,
           };
         }
@@ -138,8 +186,11 @@ class UpdateService {
       const remoteInfo = await this.checkRemoteRelease();
       if (remoteInfo) {
         this.updateInfo = remoteInfo;
-        this.status = 'ready';
+        this.status = 'available';
         this.notify();
+
+        // Automatically download the update in the background
+        await this.downloadUpdate();
         return true;
       }
 
@@ -160,37 +211,53 @@ class UpdateService {
    * Download the update chunk-by-chunk with progress updates.
    */
   public async downloadUpdate(): Promise<void> {
-    if (!this.activeUpdate) return;
-
     try {
       this.status = 'downloading';
       this.progressPercent = 0;
       this.notify();
 
-      let downloadedBytes = 0;
-      let totalBytes = 0;
+      if (this.activeUpdate) {
+        let downloadedBytes = 0;
+        let totalBytes = 0;
 
-      await this.activeUpdate.downloadAndInstall((event) => {
-        switch (event.event) {
-          case 'Started':
-            totalBytes = event.data.contentLength || 0;
-            this.progressPercent = 0;
-            this.notify();
-            break;
-          case 'Progress':
-            downloadedBytes += event.data.chunkLength;
-            if (totalBytes > 0) {
-              this.progressPercent = Math.min(100, Math.round((downloadedBytes / totalBytes) * 100));
-            }
-            this.notify();
-            break;
-          case 'Finished':
-            this.progressPercent = 100;
-            this.status = 'ready';
-            this.notify();
-            break;
-        }
-      });
+        await this.activeUpdate.downloadAndInstall((event) => {
+          switch (event.event) {
+            case 'Started':
+              totalBytes = event.data.contentLength || 0;
+              this.progressPercent = 0;
+              this.notify();
+              break;
+            case 'Progress':
+              downloadedBytes += event.data.chunkLength;
+              if (totalBytes > 0) {
+                this.progressPercent = Math.min(100, Math.round((downloadedBytes / totalBytes) * 100));
+              }
+              this.notify();
+              break;
+            case 'Finished':
+              this.progressPercent = 100;
+              this.status = 'ready';
+              this.notify();
+              break;
+          }
+        });
+
+        this.status = 'ready';
+        this.notify();
+        return;
+      }
+
+      if (this.fallbackDownloadUrl) {
+        this.progressPercent = 30;
+        this.notify();
+
+        const savedPath = await invoke<string>('download_installer', { url: this.fallbackDownloadUrl });
+        this.installerPath = savedPath;
+        this.progressPercent = 100;
+        this.status = 'ready';
+        this.notify();
+        return;
+      }
 
       this.status = 'ready';
       this.notify();
@@ -208,6 +275,15 @@ class UpdateService {
   public async restartAndApplyUpdate(): Promise<void> {
     this.status = 'restarting';
     this.notify();
+
+    if (this.installerPath) {
+      try {
+        await invoke('apply_update_and_restart', { installerPath: this.installerPath });
+        return;
+      } catch (err) {
+        console.warn('[Auto-Updater] apply_update_and_restart error:', err);
+      }
+    }
 
     if (this.activeUpdate) {
       try {
@@ -238,10 +314,10 @@ class UpdateService {
   /**
    * Demo/Simulation mode for testing UI in development.
    */
-  public simulateUpdateReady(mockVersion: string = '1.0.1'): void {
+  public simulateUpdateReady(mockVersion: string = '1.0.8'): void {
     this.updateInfo = {
       version: mockVersion,
-      currentVersion: '1.0.0',
+      currentVersion: '1.0.7',
       notes: 'Consular speed optimizations and security patch.',
       date: new Date().toISOString(),
     };

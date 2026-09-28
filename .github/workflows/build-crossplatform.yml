@@ -463,10 +463,10 @@ jobs:
             "pub_date": "${PUB_DATE}",
             "platforms": {
               "windows-x86_64": {
-                "url": "https://github.com/pankaj886/application/releases/download/${TAG_NAME}/Foreigners_Studio_1.0.0_x64-setup.exe"
+                "url": "https://github.com/pankaj886/application/releases/download/${TAG_NAME}/Foreigners_Studio_${VERSION}_x64-setup.exe"
               },
               "darwin-universal": {
-                "url": "https://github.com/pankaj886/application/releases/download/${TAG_NAME}/Foreigners_Studio_1.0.0_universal.dmg"
+                "url": "https://github.com/pankaj886/application/releases/download/${TAG_NAME}/Foreigners_Studio_${VERSION}_universal.dmg"
               }
             }
           }
