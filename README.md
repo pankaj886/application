@@ -4,17 +4,17 @@ Enterprise desktop application for consular appointment management, passport ass
 
 ---
 
-## 📥 Downloads (Release v1.0.6)
+## 📥 Downloads (Release v1.0.7)
 
-All release assets are available on the [**GitHub Releases Page (v1.0.6)**](https://github.com/pankaj886/application/releases/tag/v1.0.6).
+All release assets are available on the [**GitHub Releases Page (v1.0.7)**](https://github.com/pankaj886/application/releases/tag/v1.0.7).
 
 | Platform | Package | Format | Direct Download |
 | :--- | :--- | :--- | :--- |
-| **macOS** (Apple Silicon & Intel) | **Universal Disk Image** | `.dmg` | [Download macOS DMG](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_universal.dmg) |
-| **macOS** (Apple Silicon & Intel) | **Universal Archive** | `.app.tar.gz` | [Download macOS Tarball](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_universal.app.tar.gz) |
-| **Windows** (10 / 11, 64-bit) | **Setup Installer (Current User, No UAC)** | `.exe` | [Download Windows Setup](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64-setup.exe) |
-| **Windows** (10 / 11, 64-bit) | **Enterprise Package** | `.msi` | [Download Windows MSI](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64_en-US.msi) |
-| **Windows** (10 / 11, 64-bit) | **Portable Bundle (ZIP)** | `.zip` | [Download Windows ZIP](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_Windows_x64.zip) |
+| **macOS** (Apple Silicon & Intel) | **Universal Disk Image** | `.dmg` | [Download macOS DMG](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_1.0.0_universal.dmg) |
+| **macOS** (Apple Silicon & Intel) | **Universal Archive** | `.app.tar.gz` | [Download macOS Tarball](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_universal.app.tar.gz) |
+| **Windows** (10 / 11, 64-bit) | **Setup Installer (Current User, No UAC)** | `.exe` | [Download Windows Setup](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_1.0.0_x64-setup.exe) |
+| **Windows** (10 / 11, 64-bit) | **Enterprise Package** | `.msi` | [Download Windows MSI](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_1.0.0_x64_en-US.msi) |
+| **Windows** (10 / 11, 64-bit) | **Portable Bundle (ZIP)** | `.zip` | [Download Windows ZIP](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_Windows_x64.zip) |
 
 > **Note:** This is a private repository. You must be logged into your authorized GitHub account to download release files.
 
@@ -26,7 +26,7 @@ All release assets are available on the [**GitHub Releases Page (v1.0.6)**](http
 
 #### Standard Installation (3 Clicks in macOS System Settings)
 
-1. **Download and double-click** [`Foreigners_Studio_1.0.0_universal.dmg`](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_universal.dmg).
+1. **Download and double-click** [`Foreigners_Studio_1.0.0_universal.dmg`](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_1.0.0_universal.dmg).
 2. If macOS displays:  
    *`"Foreigners_Studio_1.0.0_universal.dmg" Not Opened — Apple could not verify it is free of malware`*  
    **Click "Done"** (or "Cancel") on the prompt.
@@ -44,7 +44,7 @@ All release assets are available on the [**GitHub Releases Page (v1.0.6)**](http
 
 #### Method B — Universal Archive (.app.tar.gz)
 If you prefer extracting directly without mounting a virtual disk:
-1. **Download** [`Foreigners_Studio_universal.app.tar.gz`](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_universal.app.tar.gz).
+1. **Download** [`Foreigners_Studio_universal.app.tar.gz`](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_universal.app.tar.gz).
 2. Double-click the file to extract it with macOS Archive Utility.
 3. Drag the extracted **Foreigners Studio.app** into your **Applications** folder.
 4. Launch Foreigners Studio from Applications. (If prompted by Gatekeeper on the first launch, click *Open Anyway* under *System Settings > Privacy & Security*).
@@ -67,7 +67,7 @@ This script downloads the app, clears the download quarantine, copies it to `/Ap
 
 #### Option A — Standard Setup Installer (.exe / .msi)
 
-1. **Download and run** [`Foreigners_Studio_1.0.0_x64-setup.exe`](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64-setup.exe).
+1. **Download and run** [`Foreigners_Studio_1.0.0_x64-setup.exe`](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_1.0.0_x64-setup.exe).
 2. The NSIS installer runs in **currentUser** mode (matching SpeakType architecture), installing directly to your user profile (`%LOCALAPPDATA%`) and **never triggering an Administrator UAC elevation barrier**.
 3. If Microsoft Defender SmartScreen displays:  
    *`Windows protected your PC — Microsoft Defender SmartScreen prevented an unrecognized app from starting`*
@@ -81,7 +81,7 @@ This script downloads the app, clears the download quarantine, copies it to `/Ap
 
 #### Option B — Portable ZIP Bundle (With Auto-Unblocker)
 
-1. **Download** [`Foreigners_Studio_Windows_x64.zip`](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_Windows_x64.zip).
+1. **Download** [`Foreigners_Studio_Windows_x64.zip`](https://github.com/pankaj886/application/releases/download/v1.0.7/Foreigners_Studio_Windows_x64.zip).
 2. Right-click the `.zip` file → select **Extract All**.
 3. Inside the extracted folder, double-click **`Install-ForeignersStudio.bat`**.
 4. The batch script removes web quarantine flags, registers the certificate, and opens Foreigners Studio directly.
