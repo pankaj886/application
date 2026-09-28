@@ -4,19 +4,19 @@ Desktop client for consular appointment management, passport assistance, and wor
 
 ---
 
-## 📥 Downloads (Release v1.0.3)
+## 📥 Downloads (Release v1.0.4)
 
-All release assets are available on the [**📦 GitHub Releases Page (v1.0.3)**](https://github.com/pankaj886/application/releases/tag/v1.0.3).
+All release assets are available on the [**📦 GitHub Releases Page (v1.0.4)**](https://github.com/pankaj886/application/releases/tag/v1.0.4).
 
 Download the package for your platform below:
 
 | Platform | Package | Format | Direct Download Link |
 | :--- | :--- | :--- | :--- |
-| **Windows** (10 / 11, 64-bit) | **Setup Installer** | `.exe` | [⬇️ Download Windows Installer](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_x64-setup.exe) |
-| **Windows** (10 / 11, 64-bit) | **Portable Archive** | `.zip` | [⬇️ Download Windows Portable ZIP](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_Windows_x64.zip) |
-| **Windows** (10 / 11, 64-bit) | **Enterprise Package** | `.msi` | [⬇️ Download Windows MSI](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_x64_en-US.msi) |
-| **macOS** (Apple Silicon & Intel) | **Universal Disk Image** | `.dmg` | [⬇️ Download macOS DMG](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_universal.dmg) |
-| **macOS** (Apple Silicon & Intel) | **Application Archive** | `.app.tar.gz` | [⬇️ Download macOS App](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners.Studio_aarch64.app.tar.gz) |
+| **Windows** (10 / 11, 64-bit) | **One-Click Package (ZIP)** | `.zip` | [⬇️ Download Windows Portable ZIP](https://github.com/pankaj886/application/releases/download/v1.0.4/Foreigners_Studio_Windows_x64.zip) |
+| **Windows** (10 / 11, 64-bit) | **Setup Installer** | `.exe` | [⬇️ Download Windows Installer](https://github.com/pankaj886/application/releases/download/v1.0.4/Foreigners_Studio_1.0.0_x64-setup.exe) |
+| **Windows** (10 / 11, 64-bit) | **Enterprise Package** | `.msi` | [⬇️ Download Windows MSI](https://github.com/pankaj886/application/releases/download/v1.0.4/Foreigners_Studio_1.0.0_x64_en-US.msi) |
+| **Windows** (10 / 11, 64-bit) | **Standalone Executable** | `.exe` | [⬇️ Download Standalone Binary](https://github.com/pankaj886/application/releases/download/v1.0.4/foreigners_studio.exe) |
+| **macOS** (Apple Silicon & Intel) | **Universal Disk Image** | `.dmg` | [⬇️ Download macOS Universal DMG](https://github.com/pankaj886/application/releases/download/v1.0.4/Foreigners_Studio_1.0.0_universal.dmg) |
 
 > **Note:** Because this is a private repository, you must be logged into GitHub with an authorized account (`pankaj886` or collaborator) to access and download these files. Alternatively, browse all files on the [Releases Page](https://github.com/pankaj886/application/releases).
 
@@ -29,7 +29,7 @@ Download the package for your platform below:
 All Windows binaries are officially signed with the **Foreigners Studio** Authenticode certificate and DigiCert timestamping.
 
 #### Option A: One-Click Installer Batch (Recommended - Zero SmartScreen Prompts)
-1. Download [**Foreigners_Studio_Windows_x64.zip**](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_Windows_x64.zip) and extract it.
+1. Download [**Foreigners_Studio_Windows_x64.zip**](https://github.com/pankaj886/application/releases/download/v1.0.4/Foreigners_Studio_Windows_x64.zip) and extract it.
 2. Double-click `Install-ForeignersStudio.bat` (or run `powershell.exe -ExecutionPolicy Bypass -File .\install-windows.ps1`).
 3. The script automatically:
    - Strips web quarantine / Zone.Identifier flags (`Unblock-File`).
@@ -37,7 +37,7 @@ All Windows binaries are officially signed with the **Foreigners Studio** Authen
    - Launches Foreigners Studio cleanly with zero SmartScreen or Unknown Publisher popups.
 
 #### Option B: Standalone Setup Installer or MSI
-1. Download [**Foreigners_Studio_1.0.0_x64-setup.exe**](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_x64-setup.exe) or [**Foreigners_Studio_1.0.0_x64_en-US.msi**](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_x64_en-US.msi).
+1. Download [**Foreigners_Studio_1.0.0_x64-setup.exe**](https://github.com/pankaj886/application/releases/download/v1.0.4/Foreigners_Studio_1.0.0_x64-setup.exe) or [**Foreigners_Studio_1.0.0_x64_en-US.msi**](https://github.com/pankaj886/application/releases/download/v1.0.4/Foreigners_Studio_1.0.0_x64_en-US.msi).
 2. Run the installer. All binaries are Authenticode signed with DigiCert timestamping, verifying Foreigners Studio as the trusted publisher.
 
 ### macOS
@@ -50,7 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/pankaj886/application/main/install-
 *This downloads the latest Universal DMG, installs it to `/Applications`, strips quarantine attributes, signs it for local Gatekeeper, and launches the app with zero warnings.*
 
 #### Option B: Manual Installation via DMG
-1. Download [**Foreigners_Studio_1.0.0_universal.dmg**](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_universal.dmg).
+1. Download [**Foreigners_Studio_1.0.0_universal.dmg**](https://github.com/pankaj886/application/releases/download/v1.0.4/Foreigners_Studio_1.0.0_universal.dmg).
 2. Open the `.dmg` file and drag **Foreigners Studio** into your **Applications** folder.
 3. First-time launch on macOS:
    - **Method 1 (Fastest)**: In your Applications folder, **Right-click** (or `Control + click`) on **Foreigners Studio** → select **Open** → click **Open** in the dialog.

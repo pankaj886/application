@@ -35,7 +35,7 @@ APP_BUNDLE_NAME="Foreigners Studio.app"
 INSTALL_DIR="/Applications"
 TARGET_APP="$INSTALL_DIR/$APP_BUNDLE_NAME"
 GITHUB_REPO="${GITHUB_REPO:-pankaj886/application}"
-FALLBACK_VERSION="v1.0.3"
+FALLBACK_VERSION="v1.0.4"
 FALLBACK_DMG_NAME="Foreigners_Studio_1.0.0_universal.dmg"
 
 MOUNT_DIR=""
