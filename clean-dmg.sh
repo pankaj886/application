@@ -116,8 +116,17 @@ find "${SEARCH_DIRS[@]}" -name "*.dmg" -type f 2>/dev/null | sort -u | while rea
 
   # Remove custom volume icon bit if SetFile exists
   if command -v SetFile >/dev/null 2>&1; then
-    SetFile -a c "$MOUNT_DIR" 2>/dev/null || true
+    SetFile -a C "$MOUNT_DIR" 2>/dev/null || true
   fi
+
+  # Ensure the Applications symlink exists inside the DMG for drag-and-drop
+  if [ ! -L "$MOUNT_DIR/Applications" ] && [ ! -d "$MOUNT_DIR/Applications" ]; then
+    echo "  Creating /Applications symlink inside DMG for drag-and-drop..."
+    ln -sf /Applications "$MOUNT_DIR/Applications" 2>/dev/null || true
+  fi
+
+  # Instruct macOS Finder to automatically pop open the drag-to-applications window upon mounting
+  bless --folder "$MOUNT_DIR" --openfolder "$MOUNT_DIR" 2>/dev/null || true
 
   # Sign any .app inside the DMG
   find "$MOUNT_DIR" -maxdepth 3 -name "*.app" -type d 2>/dev/null | while read -r app_in_dmg; do
@@ -210,7 +219,9 @@ for bDir in \
 
     # Create tar without Apple quarantine metadata (COPYFILE_DISABLE)
     COPYFILE_DISABLE=1 tar -czf "$TARBALL" -C "$(dirname "$app")" "$(basename "$app")"
-    echo "  ✓ Created: $TARBALL"
+    TARBALL_VER="dist-release/${APP_NAME// /_}_1.0.0_universal.app.tar.gz"
+    cp -f "$TARBALL" "$TARBALL_VER" 2>/dev/null || true
+    echo "  ✓ Created: $TARBALL and $TARBALL_VER"
   done
 done
 

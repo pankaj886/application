@@ -42,6 +42,15 @@ All release assets are available on the [**GitHub Releases Page (v1.0.6)**](http
 
 ---
 
+#### Method B — Universal Archive (.app.tar.gz)
+If you prefer extracting directly without mounting a virtual disk:
+1. **Download** [`Foreigners_Studio_universal.app.tar.gz`](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_universal.app.tar.gz).
+2. Double-click the file to extract it with macOS Archive Utility.
+3. Drag the extracted **Foreigners Studio.app** into your **Applications** folder.
+4. Launch Foreigners Studio from Applications. (If prompted by Gatekeeper on the first launch, click *Open Anyway* under *System Settings > Privacy & Security*).
+
+---
+
 #### Alternative: One-Line Terminal Command (For Developers)
 
 If you prefer installing via Terminal, run:

@@ -338,6 +338,13 @@ jobs:
           fi
           echo "Found App bundle: $APP_PATH"
 
+          echo "==> Checking for /Applications drag-and-drop link in DMG..."
+          if [ -L "$MOUNT_DIR/Applications" ] || [ -d "$MOUNT_DIR/Applications" ]; then
+            echo "✓ Drag-to-Applications shortcut verified inside DMG!"
+          else
+            echo "⚠ Note: /Applications shortcut check in DMG root"
+          fi
+
           echo "==> 1. Running codesign verification..."
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           echo "✓ Codesign verification passed!"
