@@ -1,0 +1,13 @@
+{
+  "version": "1.0.9",
+  "notes": "Foreigners Studio v1.0.9: Centered services icon inside active indicator in collapsed mode with smooth sidebar animation.",
+  "pub_date": "2026-09-28T15:25:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.9/Foreigners_Studio_1.0.9_x64-setup.exe"
+    },
+    "darwin-universal": {
+      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.9/Foreigners_Studio_1.0.9_universal.dmg"
+    }
+  }
+}

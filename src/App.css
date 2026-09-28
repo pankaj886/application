@@ -391,6 +391,12 @@ svg.sidebar-toggle-icon,
   flex-direction: column;
   gap: var(--gap-xs);
   overflow-y: auto;
+  transition: padding 220ms var(--ease-smooth);
+}
+
+.sidebar-wrapper.collapsed .sidebar-nav {
+  align-items: center;
+  padding: var(--gap-md) 0;
 }
 
 .nav-tab-item {
@@ -403,8 +409,18 @@ svg.sidebar-toggle-icon,
   background: transparent;
   cursor: pointer;
   text-align: left;
-  transition: all 140ms ease;
+  transition: width 220ms var(--ease-smooth), height 220ms var(--ease-smooth), padding 220ms var(--ease-smooth), margin 220ms var(--ease-smooth), background-color 140ms ease, border-color 140ms ease;
   width: 100%;
+  box-sizing: border-box;
+}
+
+.sidebar-wrapper.collapsed .nav-tab-item {
+  width: calc(var(--icon-md) + 20px);
+  height: calc(var(--icon-md) + 20px);
+  padding: 0;
+  margin: 0 auto;
+  justify-content: center;
+  align-items: center;
 }
 
 .nav-tab-item:hover {
@@ -425,6 +441,13 @@ svg.sidebar-toggle-icon,
   border-radius: var(--radius-sm);
   background: transparent;
   flex-shrink: 0;
+  transition: width 220ms var(--ease-smooth), height 220ms var(--ease-smooth), margin 220ms var(--ease-smooth);
+}
+
+.sidebar-wrapper.collapsed .nav-tab-icon-wrapper {
+  width: 100%;
+  height: 100%;
+  margin: 0 auto;
 }
 
 svg.nav-icon,
@@ -434,6 +457,10 @@ svg.nav-icon,
   color: var(--text-muted);
   transition: color 120ms ease;
   flex-shrink: 0;
+}
+
+.sidebar-wrapper.collapsed .nav-icon {
+  margin: 0 auto;
 }
 
 .nav-tab-item.active .nav-icon {
