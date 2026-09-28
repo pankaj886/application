@@ -29,12 +29,15 @@ if [ ${#SEARCH_DIRS[@]} -eq 0 ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# sign_app_bundle: Strip quarantine, then ad-hoc sign with hardened runtime
+# sign_app_bundle: Strip quarantine, then sign with Developer ID or ad-hoc
 # ─────────────────────────────────────────────────────────────────────────────
+SIGN_ID="${APPLE_SIGNING_IDENTITY:--}"
+echo "==> Using Code Signing Identity: $SIGN_ID"
+
 sign_app_bundle() {
   local target_app="$1"
   [ -d "$target_app" ] || return 0
-  echo "==> Signing: $target_app"
+  echo "==> Signing: $target_app (Identity: $SIGN_ID)"
 
   # 1. Recursively strip ALL extended attributes (quarantine, provenance, etc.)
   xattr -cr "$target_app" 2>/dev/null || true
@@ -44,12 +47,12 @@ sign_app_bundle() {
 
   # 3. Sign each .dylib / .so / framework inside the bundle first
   find "$target_app" -type f \( -name "*.dylib" -o -name "*.so" \) 2>/dev/null | while read -r lib; do
-    codesign --force --options runtime --sign - "$lib" 2>/dev/null || true
+    codesign --force --options runtime --sign "$SIGN_ID" "$lib" 2>/dev/null || true
   done
 
-  # 4. Deep ad-hoc sign the entire bundle with hardened runtime
-  codesign --force --deep --options runtime --sign - "$target_app" 2>/dev/null || \
-    codesign --force --deep --sign - "$target_app" 2>/dev/null || true
+  # 4. Deep sign the entire bundle with hardened runtime
+  codesign --force --deep --options runtime --sign "$SIGN_ID" "$target_app" 2>/dev/null || \
+    codesign --force --deep --sign "$SIGN_ID" "$target_app" 2>/dev/null || true
 
   # 5. Verify
   if codesign --verify --deep --strict "$target_app" 2>/dev/null; then
@@ -110,6 +113,36 @@ find "${SEARCH_DIRS[@]}" -name "*.dmg" -type f 2>/dev/null | sort -u | while rea
     sign_app_bundle "$app_in_dmg"
   done
 
+  # Add user-friendly, no-terminal instructions right inside the DMG root
+  cat << 'EOF' > "$MOUNT_DIR/HOW_TO_OPEN.txt"
+==============================================================
+  Foreigners Studio — macOS Installation Guide
+==============================================================
+
+1. Drag the "Foreigners Studio" icon into "Applications".
+
+2. Open your Applications folder and launch "Foreigners Studio".
+
+3. If macOS displays:
+   "Apple could not verify Foreigners Studio is free of malware"
+
+   This is Apple's standard prompt for apps downloaded from the web.
+   NO TERMINAL IS NEEDED. Follow these simple steps:
+
+   a. Click "Done" (or "Cancel") on the prompt dialog.
+   b. Open your Mac's "System Settings" (Apple  menu at top-left).
+   c. Select "Privacy & Security" in the sidebar.
+   d. Scroll down to the "Security" section. You will see:
+      "Foreigners Studio was blocked to protect your Mac"
+   e. Click the "Open Anyway" button.
+   f. Enter your Mac password / Touch ID and click "Open".
+
+   You only need to do this ONCE. After the first time,
+   Foreigners Studio will launch directly every time!
+==============================================================
+EOF
+
+
   # Detach with retries
   for retry in 1 2 3 4 5; do
     if hdiutil detach "$MOUNT_DIR" -force -quiet 2>/dev/null; then break; fi
@@ -126,8 +159,8 @@ find "${SEARCH_DIRS[@]}" -name "*.dmg" -type f 2>/dev/null | sort -u | while rea
   xattr -cr "$dmg" 2>/dev/null || true
   xattr -d com.apple.quarantine "$dmg" 2>/dev/null || true
 
-  # Ad-hoc sign the DMG container
-  codesign --force --sign - "$dmg" 2>/dev/null || true
+  # Sign the DMG container
+  codesign --force --sign "$SIGN_ID" "$dmg" 2>/dev/null || true
 
   echo "  ✓ Sanitized DMG: $dmg"
 done

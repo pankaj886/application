@@ -1,99 +1,118 @@
-﻿# Foreigners Studio
+# Foreigners Studio
 
-Desktop client for consular appointment management, passport assistance, and workflow processing.
+Enterprise desktop application for consular appointment management, passport assistance, and workflow processing.
 
 ---
 
-## ðŸ“¥ Downloads (Release v1.0.6)
+## 📥 Downloads (Release v1.0.6)
 
-All release assets are available on the [**ðŸ“¦ GitHub Releases Page (v1.0.6)**](https://github.com/pankaj886/application/releases/tag/v1.0.6).
-
-Download the package for your platform:
+All release assets are available on the [**GitHub Releases Page (v1.0.6)**](https://github.com/pankaj886/application/releases/tag/v1.0.6).
 
 | Platform | Package | Format | Direct Download |
 | :--- | :--- | :--- | :--- |
-| **macOS** (Apple Silicon & Intel) | **Universal Disk Image** | `.dmg` | [â¬‡ï¸ Download macOS DMG](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_universal.dmg) |
-| **Windows** (10 / 11, 64-bit) | **One-Click Package (ZIP)** | `.zip` | [â¬‡ï¸ Download Windows ZIP](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_Windows_x64.zip) |
-| **Windows** (10 / 11, 64-bit) | **Setup Installer** | `.exe` | [â¬‡ï¸ Download Windows Setup](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64-setup.exe) |
-| **Windows** (10 / 11, 64-bit) | **Enterprise Package** | `.msi` | [â¬‡ï¸ Download Windows MSI](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64_en-US.msi) |
+| **macOS** (Apple Silicon & Intel) | **Universal Disk Image** | `.dmg` | [Download macOS DMG](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_universal.dmg) |
+| **Windows** (10 / 11, 64-bit) | **Setup Installer** | `.exe` | [Download Windows Setup](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64-setup.exe) |
+| **Windows** (10 / 11, 64-bit) | **Enterprise Package** | `.msi` | [Download Windows MSI](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64_en-US.msi) |
+| **Windows** (10 / 11, 64-bit) | **Portable Bundle (ZIP)** | `.zip` | [Download Windows ZIP](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_Windows_x64.zip) |
 
-> **Note:** This is a private repository. You must be logged into GitHub with an authorized account to download files.
+> **Note:** This is a private repository. You must be logged into your authorized GitHub account to download release files.
 
 ---
 
-## ðŸš€ Installation
+## 🚀 Installation Guide
 
-### ðŸŽ macOS
+### 🍏 macOS (No Terminal Required)
 
-#### Option A â€” One-Line Terminal Install (Recommended)
+#### Standard Installation (3 Clicks in macOS System Settings)
 
-Open **Terminal** and run:
+1. **Download and double-click** [`Foreigners_Studio_1.0.0_universal.dmg`](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_universal.dmg).
+2. If macOS displays:  
+   *`"Foreigners_Studio_1.0.0_universal.dmg" Not Opened — Apple could not verify it is free of malware`*  
+   **Click "Done"** (or "Cancel") on the prompt.
+3. Open your Mac's **System Settings** (Apple  menu at the top-left corner).
+4. Click **Privacy & Security** in the left sidebar, and scroll down to the **Security** section.
+5. You will see:  
+   *`"Foreigners_Studio_1.0.0_universal.dmg" was blocked to protect your Mac.`*  
+   Click the **[Open Anyway]** button next to it.
+6. Enter your Mac login password or Touch ID, then click **Open**.
+7. The disk image opens: **drag "Foreigners Studio" into "Applications"**.
+
+> **Note:** You only have to perform this step once. After this initial approval, Foreigners Studio will launch directly with zero prompts forever.
+
+---
+
+#### Alternative: One-Line Terminal Command (For Developers)
+
+If you prefer installing via Terminal, run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pankaj886/application/main/install-mac.sh | bash
 ```
 
-This command automatically downloads the app, strips Gatekeeper quarantine, and installs it to `/Applications`. No manual steps needed.
+This script downloads the app, clears the download quarantine, copies it to `/Applications`, and launches it immediately.
 
 ---
 
-#### Option B â€” Manual DMG Install
+### 🪟 Windows
 
-1. Download [**Foreigners_Studio_1.0.0_universal.dmg**](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_universal.dmg)
+#### Option A — Standard Setup Installer (.exe / .msi)
 
-2. **Before opening the DMG**, open Terminal and run:
-   ```bash
-   xattr -cr ~/Downloads/Foreigners_Studio_1.0.0_universal.dmg
-   ```
-   *(Replace `~/Downloads/` with the folder where the file was saved)*
-
-3. Now double-click the DMG â†’ drag **Foreigners Studio** to **Applications**
-
-4. **First launch** â€” do ONE of these:
-   - **Right-click** the app in `/Applications` â†’ click **Open** â†’ click **Open** again
-   - Or open **System Settings â†’ Privacy & Security** â†’ scroll down â†’ click **Open Anyway**
-
-> **Why this happens:** Apple requires a paid \$99/year Developer certificate for apps distributed outside the Mac App Store. The quarantine stripping in Step 2 removes the flag that triggers this warning.
-
----
-
-### ðŸªŸ Windows
-
-#### Option A â€” One-Click Installer (Recommended, Zero Manual Steps)
-
-1. Download [**Foreigners_Studio_Windows_x64.zip**](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_Windows_x64.zip)
-2. **Right-click** the ZIP â†’ **Extract All**
-3. Inside the extracted folder, **double-click `Install-ForeignersStudio.bat`**
-4. Click **Run** if Windows asks for confirmation â†’ done!
-
-The installer automatically removes web quarantine flags, installs the signing certificate, and launches Foreigners Studio.
-
----
-
-#### Option B â€” Setup Installer / MSI
-
-1. Download [**Foreigners_Studio_1.0.0_x64-setup.exe**](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64-setup.exe)
-
-2. **If you see "Windows protected your PC"** â€” this is normal for newly published software:
+1. **Download and run** [`Foreigners_Studio_1.0.0_x64-setup.exe`](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_1.0.0_x64-setup.exe).
+2. If Microsoft Defender SmartScreen displays:  
+   *`Windows protected your PC — Microsoft Defender SmartScreen prevented an unrecognized app from starting`*
    - Click **"More info"**
    - Click **"Run anyway"**
-   - The warning disappears permanently as more users install the app
+3. Complete the quick setup wizard. The application installs and launches immediately.
 
-> **Why this happens:** Microsoft SmartScreen shows this for newly released software until enough users have installed it to build "reputation." This is temporary and not a sign of any problem with the app.
-
----
-
-## ðŸ”„ Auto-Updates
-
-Foreigners Studio checks for updates automatically in the background. When an update is ready:
-- A **"Restart to update"** button appears in the top bar (next to the window controls)
-- Click it to apply the update instantly
+> **Why this happens:** Microsoft SmartScreen flags any newly published application until enough users have installed it to establish reputation. Once approved, the warning will not appear again.
 
 ---
 
-## ðŸ’» System Requirements
+#### Option B — Portable ZIP Bundle (With Auto-Unblocker)
 
-| | Requirement |
-|---|---|
-| **macOS** | macOS 11.0 Big Sur or newer (Universal: Apple Silicon + Intel) |
-| **Windows** | Windows 10 or Windows 11 (64-bit) |
+1. **Download** [`Foreigners_Studio_Windows_x64.zip`](https://github.com/pankaj886/application/releases/download/v1.0.6/Foreigners_Studio_Windows_x64.zip).
+2. Right-click the `.zip` file → select **Extract All**.
+3. Inside the extracted folder, double-click **`Install-ForeignersStudio.bat`**.
+4. The batch script removes web quarantine flags, registers the certificate, and opens Foreigners Studio directly.
+
+---
+
+## 🔒 Why Do Commercial Apps Install Without Warnings?
+
+When you download apps like Google Chrome, Zoom, Slack, or VS Code, they open without Gatekeeper or SmartScreen warnings because their companies hold paid developer memberships:
+- **Apple Developer Program ($99 USD/year):** Grants an official *Developer ID Application* certificate. Binaries are submitted to Apple's cloud *Notary Service* (`notarytool`), which attaches a cryptographic ticket verifying the app was scanned by Apple.
+- **Windows Code Signing Certificate ($300–$500 USD/year):** An Extended Validation (EV) or Organization Validation (OV) certificate issued by an official Certificate Authority (DigiCert, Sectigo, GlobalSign).
+
+**Our CI/CD pipeline is already 100% configured for official notarization.** As soon as an Apple Developer Account is connected, builds will automatically sign and notarize without any code changes:
+
+### How to Enable Official Zero-Warning Notarization in GitHub Actions
+
+Add the following secrets in your GitHub repository (**Settings → Secrets and variables → Actions**):
+
+| Secret Name | Description |
+| :--- | :--- |
+| `APPLE_CERTIFICATE` | Base64-encoded `Developer ID Application.p12` certificate file |
+| `APPLE_CERTIFICATE_PASSWORD` | Password for the `.p12` certificate |
+| `APPLE_ID` | Apple Developer Account email address |
+| `APPLE_PASSWORD` | App-specific password generated at [appleid.apple.com](https://appleid.apple.com) |
+| `APPLE_TEAM_ID` | 10-character Apple Developer Team ID |
+| `WINDOWS_CERT_BASE64` | *(Optional)* Base64-encoded Windows Code Signing `.pfx` file |
+| `WINDOWS_CERT_PASSWORD` | *(Optional)* Password for the Windows `.pfx` certificate |
+
+Once added, every new tag release will automatically be notarized by Apple and signed with your official certificates.
+
+---
+
+## 🔄 Background Updates
+
+Foreigners Studio features an integrated background update engine:
+- The app checks for new releases on startup and periodically in the background.
+- When an update is detected and downloaded, a **"Restart to update"** button appears in the top header.
+- Clicking the button automatically restarts the app with the latest version applied.
+
+---
+
+## 💻 System Compatibility
+
+- **macOS:** macOS 11.0 (Big Sur) or newer. Universal binary natively supporting both **Apple Silicon (M1/M2/M3/M4)** and **Intel** Macs.
+- **Windows:** Windows 10 (64-bit) or Windows 11 (64-bit). Includes Microsoft WebView2 runtime support.

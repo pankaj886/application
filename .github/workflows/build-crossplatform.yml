@@ -36,36 +36,52 @@ jobs:
           npx tauri build --bundles nsis,msi
           node copy-release.js
 
-      - name: Generate Self-Signed Code Signing Certificate
+      - name: Setup Windows Code Signing Certificate
         shell: powershell
+        env:
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
-          # Generate a proper code signing certificate
-          $cert = New-SelfSignedCertificate `
-            -Type CodeSigning `
-            -Subject "CN=Foreigners Studio, O=Foreigners Studio, C=US" `
-            -FriendlyName "Foreigners Studio Code Signing" `
-            -CertStoreLocation Cert:\CurrentUser\My `
-            -KeySpec Signature `
-            -KeyLength 4096 `
-            -HashAlgorithm SHA256 `
-            -NotAfter (Get-Date).AddYears(10) `
-            -KeyUsage DigitalSignature `
-            -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
+          if ($env:WINDOWS_CERT_BASE64) {
+            Write-Host "Importing official Windows Code Signing Certificate from GitHub Secrets..."
+            $pfxBytes = [System.Convert]::FromBase64String($env:WINDOWS_CERT_BASE64)
+            $pfxPath = "certs\ForeignersStudio.pfx"
+            New-Item -ItemType Directory -Force -Path "certs" | Out-Null
+            [System.IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+            $certPassword = if ($env:WINDOWS_CERT_PASSWORD) { $env:WINDOWS_CERT_PASSWORD } else { "" }
+            $secPassword = ConvertTo-SecureString -String $certPassword -Force -AsPlainText
+            $cert = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $secPassword
+            $thumbprint = $cert.Thumbprint
+            Write-Host "Using official certificate with thumbprint: $thumbprint"
+          } else {
+            Write-Host "No commercial certificate in secrets — generating code signing certificate..."
+            $cert = New-SelfSignedCertificate `
+              -Type CodeSigning `
+              -Subject "CN=Foreigners Studio, O=Foreigners Studio, C=US" `
+              -FriendlyName "Foreigners Studio Code Signing" `
+              -CertStoreLocation Cert:\CurrentUser\My `
+              -KeySpec Signature `
+              -KeyLength 4096 `
+              -HashAlgorithm SHA256 `
+              -NotAfter (Get-Date).AddYears(10) `
+              -KeyUsage DigitalSignature `
+              -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
 
-          $thumbprint = $cert.Thumbprint
-          Write-Host "Generated certificate thumbprint: $thumbprint"
+            $thumbprint = $cert.Thumbprint
+            Write-Host "Generated certificate thumbprint: $thumbprint"
 
-          # Export .cer (public key only) for distribution
-          $cerPath = "certs\ForeignersStudio.cer"
-          New-Item -ItemType Directory -Force -Path "certs" | Out-Null
-          Export-Certificate -Cert $cert -FilePath $cerPath -Type CERT | Out-Null
-          Write-Host "Exported public cert to: $cerPath"
+            # Export .cer (public key only) for distribution
+            $cerPath = "certs\ForeignersStudio.cer"
+            New-Item -ItemType Directory -Force -Path "certs" | Out-Null
+            Export-Certificate -Cert $cert -FilePath $cerPath -Type CERT | Out-Null
+            Write-Host "Exported public cert to: $cerPath"
 
-          # Export .pfx (with private key) for CI signing
-          $pfxPassword = ConvertTo-SecureString -String "ForeignersStudio2024!" -Force -AsPlainText
-          $pfxPath = "certs\ForeignersStudio.pfx"
-          Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $pfxPassword | Out-Null
-          Write-Host "Exported PFX to: $pfxPath"
+            # Export .pfx (with private key) for CI signing
+            $pfxPassword = ConvertTo-SecureString -String "ForeignersStudio2024!" -Force -AsPlainText
+            $pfxPath = "certs\ForeignersStudio.pfx"
+            Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $pfxPassword | Out-Null
+            Write-Host "Exported PFX to: $pfxPath"
+          }
 
           # Import to TrustedPublisher & Root so SignTool recognizes it
           $tpStore = New-Object System.Security.Cryptography.X509Certificates.X509Store("TrustedPublisher","LocalMachine")
@@ -206,10 +222,52 @@ jobs:
           npx tauri build --target universal-apple-darwin --bundles dmg,app
           node copy-release.js
 
+      - name: Import Apple Developer ID Certificate (if configured)
+        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "Setting up temporary keychain for Apple Developer ID certificate..."
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
+          security create-keychain -p "temp-keychain-pass" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "temp-keychain-pass" $KEYCHAIN_PATH
+
+          CERT_PATH=$RUNNER_TEMP/developer_id.p12
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode > $CERT_PATH
+          security import $CERT_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH $(security list-keychains -d user | tr -d '"')
+          security set-key-partition-list -S apple-tool:,apple: -s -k "temp-keychain-pass" $KEYCHAIN_PATH
+
+          IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep "Developer ID Application" | head -n 1 | sed 's/.*"\(.*\)".*/\1/' || true)
+          if [ -n "$IDENTITY" ]; then
+            echo "Found Apple Developer ID Identity: $IDENTITY"
+            echo "APPLE_SIGNING_IDENTITY=$IDENTITY" >> $GITHUB_ENV
+          else
+            echo "No Developer ID Application identity found in keychain, using ad-hoc"
+          fi
+
       - name: Sanitize & Sign macOS Bundle
         env:
           COPYFILE_DISABLE: "1"
         run: bash clean-dmg.sh
+
+      - name: Notarize macOS DMG with Apple (if configured)
+        if: ${{ secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMG_FILE=$(find dist-release -name "*.dmg" -type f | head -n 1)
+          if [ -n "$DMG_FILE" ] && [ -f "$DMG_FILE" ]; then
+            echo "==> Submitting $DMG_FILE to Apple Notary Service..."
+            xcrun notarytool submit "$DMG_FILE" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+            echo "==> Stapling notarization ticket to $DMG_FILE..."
+            xcrun stapler staple "$DMG_FILE"
+            echo "✓ Successfully notarized and stapled DMG with Apple!"
+          fi
 
       - name: Verify macOS Universal DMG & Application
         run: |
