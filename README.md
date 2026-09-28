@@ -4,19 +4,19 @@ Desktop client for consular appointment management, passport assistance, and wor
 
 ---
 
-## 📥 Downloads (Release v1.0.1)
+## 📥 Downloads (Release v1.0.3)
 
-All release assets are available on the [**📦 GitHub Releases Page (v1.0.1)**](https://github.com/pankaj886/application/releases/tag/v1.0.1).
+All release assets are available on the [**📦 GitHub Releases Page (v1.0.3)**](https://github.com/pankaj886/application/releases/tag/v1.0.3).
 
 Download the package for your platform below:
 
 | Platform | Package | Format | Direct Download Link |
 | :--- | :--- | :--- | :--- |
-| **Windows** (10 / 11, 64-bit) | **Setup Installer** | `.exe` | [⬇️ Download Windows Installer](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_1.0.0_x64-setup.exe) |
-| **Windows** (10 / 11, 64-bit) | **Portable Archive** | `.zip` | [⬇️ Download Windows Portable ZIP](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_Windows_x64.zip) |
-| **Windows** (10 / 11, 64-bit) | **Enterprise Package** | `.msi` | [⬇️ Download Windows MSI](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_1.0.0_x64_en-US.msi) |
-| **macOS** (Apple Silicon & Intel) | **Universal Disk Image** | `.dmg` | [⬇️ Download macOS DMG](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_1.0.0_universal.dmg) |
-| **macOS** (Apple Silicon & Intel) | **Application Archive** | `.app.tar.gz` | [⬇️ Download macOS App](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners.Studio_aarch64.app.tar.gz) |
+| **Windows** (10 / 11, 64-bit) | **Setup Installer** | `.exe` | [⬇️ Download Windows Installer](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_x64-setup.exe) |
+| **Windows** (10 / 11, 64-bit) | **Portable Archive** | `.zip` | [⬇️ Download Windows Portable ZIP](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_Windows_x64.zip) |
+| **Windows** (10 / 11, 64-bit) | **Enterprise Package** | `.msi` | [⬇️ Download Windows MSI](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_x64_en-US.msi) |
+| **macOS** (Apple Silicon & Intel) | **Universal Disk Image** | `.dmg` | [⬇️ Download macOS DMG](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_universal.dmg) |
+| **macOS** (Apple Silicon & Intel) | **Application Archive** | `.app.tar.gz` | [⬇️ Download macOS App](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners.Studio_aarch64.app.tar.gz) |
 
 > **Note:** Because this is a private repository, you must be logged into GitHub with an authorized account (`pankaj886` or collaborator) to access and download these files. Alternatively, browse all files on the [Releases Page](https://github.com/pankaj886/application/releases).
 
@@ -25,13 +25,13 @@ Download the package for your platform below:
 ## 🚀 Installation
 
 ### Windows
-1. Download [**Foreigners_Studio_1.0.0_x64-setup.exe**](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_1.0.0_x64-setup.exe) or the portable ZIP.
+1. Download [**Foreigners_Studio_1.0.0_x64-setup.exe**](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_x64-setup.exe) or the portable ZIP.
 2. Run the installer or extract the ZIP.
 3. If prompted by Windows Defender SmartScreen, select **More info** → **Run anyway**.
 
 ### macOS
-1. Download [**Foreigners_Studio_1.0.0_universal.dmg**](https://github.com/pankaj886/application/releases/download/v1.0.1/Foreigners_Studio_1.0.0_universal.dmg).
-2. Open the `.dmg` file and drag **Foreigners Studio** across the arrow into your **Applications** folder.
+1. Download [**Foreigners_Studio_1.0.0_universal.dmg**](https://github.com/pankaj886/application/releases/download/v1.0.3/Foreigners_Studio_1.0.0_universal.dmg).
+2. Open the `.dmg` file and drag **Foreigners Studio** into your **Applications** folder.
 3. First-time launch on macOS:
    - **Method 1 (Fastest)**: In your Applications folder, **Right-click** (or `Control + click`) on **Foreigners Studio** → select **Open** → click **Open** in the dialog.
    - **Method 2 (System Settings)**: Open **System Settings** → **Privacy & Security** → scroll to **Security** and click **Open Anyway**.

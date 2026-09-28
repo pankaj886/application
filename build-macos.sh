@@ -21,8 +21,9 @@ rustup target add aarch64-apple-darwin x86_64-apple-darwin || true
 
 echo "[4/5] Building hardened macOS universal application & DMG installer..."
 npm run tauri build -- --bundles dmg,app
+bash clean-dmg.sh
 
-echo "[5/5] Copying release bundle (.dmg & .app) into Application/Macos/..."
+echo "[5/5] Copying release bundle (.dmg & .app) into dist-release/..."
 node copy-release.js
 
 echo "=========================================================="

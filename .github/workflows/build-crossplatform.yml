@@ -3,6 +3,7 @@ name: Build Foreigners Studio (Windows & macOS)
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
   pull_request:
     branches: [main, master]
   workflow_dispatch:
@@ -42,6 +43,7 @@ jobs:
           path: |
             dist-release/*.exe
             dist-release/*.msi
+            dist-release/*.zip
 
   build-macos:
     name: Build macOS App (.dmg & .app)
@@ -68,10 +70,46 @@ jobs:
       - name: Build macOS Tauri Bundle
         run: |
           npx tauri build --bundles dmg,app
+          bash clean-dmg.sh
           node copy-release.js
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
         with:
           name: foreigners-studio-macos-universal
-          path: dist-release/*.dmg
+          path: |
+            dist-release/*.dmg
+            dist-release/*.app.tar.gz
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: foreigners-studio-windows-bundle
+          path: dist-release
+
+      - name: Download macOS Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: foreigners-studio-macos-universal
+          path: dist-release
+
+      - name: Publish Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-release/*.exe
+            dist-release/*.msi
+            dist-release/*.zip
+            dist-release/*.dmg
+            dist-release/*.app.tar.gz
+          draft: false
+          prerelease: false
+          generate_release_notes: true
