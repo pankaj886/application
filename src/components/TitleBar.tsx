@@ -42,10 +42,10 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
       updateService.checkForUpdates(true);
     }, 3000);
 
-    // Periodic check every 20 minutes
+    // Periodic check every 1 minute (rapid update detection)
     const interval = setInterval(() => {
       updateService.checkForUpdates(true);
-    }, 20 * 60 * 1000);
+    }, 1 * 60 * 1000);
 
     return () => {
       clearTimeout(timer);

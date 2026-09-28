@@ -104,14 +104,29 @@ Add the following secrets in your GitHub repository (**Settings → Secrets and 
 
 Once added, every new tag release will automatically be notarized by Apple and signed with your official certificates.
 
----
-
-## 🔄 Background Updates
+## 🔄 Real-Time Background Updates (1-Minute Frequency)
 
 Foreigners Studio features an integrated background update engine:
-- The app checks for new releases on startup and periodically in the background.
-- When an update is detected and downloaded, a **"Restart to update"** button appears in the top header.
-- Clicking the button automatically restarts the app with the latest version applied.
+- **Rapid Update Detection:** The app checks for new GitHub releases on startup (3-second delay) and continuously every **1 minute** in the background.
+- **Zero Impact on Performance:** Each check is an ultra-lightweight, non-blocking asynchronous metadata query (<1 KB) that does not disrupt active user tasks.
+- **Seamless In-Place Upgrades:** When an update is detected and downloaded, a glowing **"Restart to update"** button appears in the top title bar. Clicking it atomically swaps the binaries and re-launches the application with all user cache and sessions preserved.
+
+---
+
+## 🛡️ Security Architecture: Permanent Installers vs. Portable Executables
+
+Foreigners Studio defaults to **Permanent Installation Packages** for both macOS and Windows because permanent installation provides superior security and reliability:
+
+1. **Elimination of macOS Gatekeeper App Translocation:**
+   - When a portable macOS application is executed from `~/Downloads`, macOS Gatekeeper isolates it inside a randomized read-only sandbox (`/private/var/folders/...`). This breaks local database persistence and prevents background self-updating.
+   - Dragging the app to `/Applications` (via the DMG installer) establishes a permanent install, removes translocation, and grants permanent persistence for tokens and cache in `~/Library/Application Support/Foreigners Studio`.
+
+2. **Windows Defender & Antivirus Reputation:**
+   - Standalone portable `.exe` files executing out of `Downloads` or `Temp` are subjected to aggressive heuristic scans and quarantine by Microsoft Defender and enterprise EDRs.
+   - The NSIS installer (`Foreigners_Studio_1.0.0_x64-setup.exe`) installs permanently to `%LOCALAPPDATA%\Programs\Foreigners Studio` in `currentUser` mode, completely avoiding the scary Administrator UAC prompt while establishing a trusted user directory.
+
+3. **Persistent Cache & Data Integrity:**
+   - Permanent installations reliably persist local SQLite/IndexedDB caches, session tokens, and configurations across system restarts, disk cleanups, and atomic in-place updates.
 
 ---
 
