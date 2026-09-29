@@ -15,10 +15,7 @@ import {
   Download, 
   Clock, 
   ShieldCheck,
-  FileCheck,
-  Globe,
-  Settings2,
-  X
+  FileCheck
 } from 'lucide-react';
 import { 
   automationApi, 
@@ -52,12 +49,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // Connection & Tunnel State
-  const [connType, setConnType] = useState<'local' | 'tunnel' | 'offline'>(automationApi.getConnectionType());
-  const [activeBaseUrl, setActiveBaseUrl] = useState<string>(automationApi.getBaseUrl());
-  const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
-  const [customUrlInput, setCustomUrlInput] = useState<string>('');
-
   // Status & Polling
   const [applications, setApplications] = useState<ApplicationItem[]>([]);
   const [previews, setPreviews] = useState<PreviewItem[]>([]);
@@ -82,15 +73,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Listen to connection status changes
-  useEffect(() => {
-    const unsub = automationApi.subscribe((_connected, url) => {
-      setConnType(automationApi.getConnectionType());
-      setActiveBaseUrl(url);
-    });
-    return unsub;
-  }, []);
 
   // Fetch status, previews, and completed items
   const refreshAllData = async (targetEmailOverride?: string) => {
@@ -224,14 +206,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     });
   };
 
-  const handleSaveCustomUrl = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (customUrlInput.trim()) {
-      automationApi.setBaseUrl(customUrlInput.trim());
-      setShowConfigModal(false);
-      refreshAllData();
-    }
-  };
 
   // Check if any application has wrong credentials error
   const wrongCredsApp = applications.find(
@@ -291,23 +265,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         </div>
 
         <div className="nav-right-tools">
-          {/* Connection status pill */}
-          <button
-            type="button"
-            className={`gateway-status-pill ${connType}`}
-            onClick={() => {
-              setCustomUrlInput(activeBaseUrl);
-              setShowConfigModal(true);
-            }}
-            title={`Connected to ${activeBaseUrl}. Click to change gateway endpoint.`}
-          >
-            <span className={`status-dot ${connType === 'offline' ? 'dot-offline' : (connType === 'local' ? 'dot-local' : 'dot-tunnel')}`} />
-            <span className="gateway-text">
-              {connType === 'local' ? 'Local Gateway' : connType === 'tunnel' ? 'Cloudflare Online' : 'Gateway Offline'}
-            </span>
-            <Settings2 className="settings-icon" />
-          </button>
-
           <button
             type="button"
             onClick={() => refreshAllData()}
@@ -759,58 +716,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         pdfUrl={viewerModal.pdfUrl}
         onClose={() => setViewerModal(prev => ({ ...prev, isOpen: false }))}
       />
-
-      {/* Gateway Configuration Modal */}
-      {showConfigModal && (
-        <div className="pdf-modal-backdrop" onClick={() => setShowConfigModal(false)}>
-          <div className="config-modal-box" onClick={(e) => e.stopPropagation()}>
-            <div className="config-modal-header">
-              <div className="config-header-left">
-                <Globe className="config-globe-icon" />
-                <h3 className="config-title">Automation Gateway Endpoint</h3>
-              </div>
-              <button
-                type="button"
-                className="pdf-modal-close-btn"
-                onClick={() => setShowConfigModal(false)}
-              >
-                <X className="close-icon" />
-              </button>
-            </div>
-            <form onSubmit={handleSaveCustomUrl} className="config-modal-form">
-              <p className="config-modal-desc">
-                Currently connected to: <code>{activeBaseUrl}</code> ({connType.toUpperCase()})
-              </p>
-              <div className="input-group">
-                <label className="input-label">Server / Cloudflare Tunnel URL</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={customUrlInput}
-                  onChange={(e) => setCustomUrlInput(e.target.value)}
-                  placeholder="https://...trycloudflare.com or http://127.0.0.1:8001"
-                />
-              </div>
-              <div className="config-modal-actions">
-                <button
-                  type="button"
-                  onClick={() => {
-                    automationApi.setBaseUrl('http://127.0.0.1:8001');
-                    setShowConfigModal(false);
-                    refreshAllData();
-                  }}
-                  className="config-btn-secondary"
-                >
-                  Reset to Local
-                </button>
-                <button type="submit" className="config-btn-primary">
-                  Save & Connect
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

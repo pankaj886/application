@@ -1,13 +1,11 @@
 /**
- * automationApi.ts - High-Speed Client for Foreigners Studio Automation Gateway
- * Connects autonomously to local server or Cloudflare tunnel.
+ * automationApi.ts - Autonomous High-Speed Gateway Client
+ * Seamlessly and silently discovers the active Cloudflare tunnel or local automation server in the background.
+ * Requires 0 user configuration or manual URL management.
  */
 
-import tunnelConfig from '../tunnel_config.json';
-
-let bundledTunnelUrl = (tunnelConfig as any)?.public_url || '';
-
-const LOCAL_URL = 'http://127.0.0.1:8001';
+const CLOUD_GATEWAY_URL = 'https://raw.githubusercontent.com/pankaj886/foreigners-studio-releases/main/gateway_config.json';
+const LOCAL_FALLBACK_URL = 'http://127.0.0.1:8001';
 
 export interface ApplicationItem {
   folder_name: string;
@@ -43,90 +41,116 @@ export interface CompletedItem {
 }
 
 class AutomationApiService {
-  private activeBaseUrl: string = LOCAL_URL;
-  private isConnected: boolean = false;
-  private listeners: Set<(connected: boolean, url: string) => void> = new Set();
+  private activeBaseUrl: string = '';
+  private isResolving: Promise<string> | null = null;
 
   constructor() {
-    const saved = localStorage.getItem('fs_automation_api_url');
-    if (saved) {
-      this.activeBaseUrl = saved;
+    const cached = localStorage.getItem('fs_automation_api_url');
+    if (cached) {
+      this.activeBaseUrl = cached;
     }
-    this.checkConnection();
-  }
-
-  public subscribe(cb: (connected: boolean, url: string) => void) {
-    this.listeners.add(cb);
-    cb(this.isConnected, this.activeBaseUrl);
-    return () => {
-      this.listeners.delete(cb);
-    };
-  }
-
-  private notify() {
-    for (const cb of this.listeners) {
-      cb(this.isConnected, this.activeBaseUrl);
-    }
-  }
-
-  public setBaseUrl(url: string) {
-    this.activeBaseUrl = url.replace(/\/+$/, '');
-    localStorage.setItem('fs_automation_api_url', this.activeBaseUrl);
-    this.checkConnection();
+    // Eagerly resolve gateway in background
+    this.resolveGateway().catch(() => {});
   }
 
   public getBaseUrl(): string {
-    return this.activeBaseUrl;
+    return this.activeBaseUrl || LOCAL_FALLBACK_URL;
   }
 
-  public getConnectionType(): 'local' | 'tunnel' | 'offline' {
-    if (!this.isConnected) return 'offline';
-    if (this.activeBaseUrl.includes('127.0.0.1') || this.activeBaseUrl.includes('localhost')) {
-      return 'local';
+  /**
+   * Autonomously discovers and verifies the live Cloudflare Tunnel or local server.
+   * Completely transparent to the user.
+   */
+  public async resolveGateway(forceRefresh = false): Promise<string> {
+    if (this.isResolving) {
+      return this.isResolving;
     }
-    return 'tunnel';
-  }
 
-  public async checkConnection(): Promise<boolean> {
-    // 1. Try to fetch dynamic runtime config from /tunnel_config.json (works in dev and prod without rebuild)
-    try {
-      const configRes = await fetch(`/tunnel_config.json?_t=${Date.now()}`);
-      if (configRes.ok) {
-        const dynamicConfig = await configRes.json();
-        if (dynamicConfig?.public_url) {
-          bundledTunnelUrl = dynamicConfig.public_url;
+    this.isResolving = (async () => {
+      // 1. If we have an active URL and not forcing refresh, check if it's healthy
+      if (this.activeBaseUrl && !forceRefresh) {
+        if (await this.pingHealth(this.activeBaseUrl)) {
+          return this.activeBaseUrl;
         }
       }
-    } catch (_) {}
 
-    const candidateUrls = [
-      this.activeBaseUrl,
-      LOCAL_URL,
-      bundledTunnelUrl,
-    ].filter(Boolean);
-
-    for (const url of candidateUrls) {
+      // 2. Fetch live Cloud Gateway endpoint from public release registry
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 1500);
-        const res = await fetch(`${url}/api/health`, { signal: controller.signal });
-        clearTimeout(timeout);
-        if (res.ok) {
-          const data = await res.json();
-          this.activeBaseUrl = url;
-          this.isConnected = true;
-          if (data?.tunnel?.public_url) {
-            bundledTunnelUrl = data.tunnel.public_url;
+        const cloudRes = await fetch(`${CLOUD_GATEWAY_URL}?_t=${Date.now()}`, { cache: 'no-store' });
+        if (cloudRes.ok) {
+          const cloudData = await cloudRes.json();
+          const publicUrl = (cloudData?.public_url || '').replace(/\/+$/, '');
+          if (publicUrl && await this.pingHealth(publicUrl)) {
+            this.activeBaseUrl = publicUrl;
+            localStorage.setItem('fs_automation_api_url', publicUrl);
+            return publicUrl;
           }
-          this.notify();
-          return true;
         }
       } catch (_) {}
-    }
 
-    this.isConnected = false;
-    this.notify();
-    return false;
+      // 3. Check bundled or local runtime config
+      try {
+        const localCfgRes = await fetch(`/tunnel_config.json?_t=${Date.now()}`, { cache: 'no-store' });
+        if (localCfgRes.ok) {
+          const localCfg = await localCfgRes.json();
+          const publicUrl = (localCfg?.public_url || '').replace(/\/+$/, '');
+          if (publicUrl && await this.pingHealth(publicUrl)) {
+            this.activeBaseUrl = publicUrl;
+            localStorage.setItem('fs_automation_api_url', publicUrl);
+            return publicUrl;
+          }
+        }
+      } catch (_) {}
+
+      // 4. Fallback to localhost if running on developer workstation
+      if (await this.pingHealth(LOCAL_FALLBACK_URL)) {
+        this.activeBaseUrl = LOCAL_FALLBACK_URL;
+        localStorage.setItem('fs_automation_api_url', LOCAL_FALLBACK_URL);
+        return LOCAL_FALLBACK_URL;
+      }
+
+      return this.activeBaseUrl || LOCAL_FALLBACK_URL;
+    })().finally(() => {
+      this.isResolving = null;
+    });
+
+    return this.isResolving;
+  }
+
+  private async pingHealth(url: string): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(`${url}/api/health`, { signal: controller.signal });
+      clearTimeout(timeout);
+      return res.ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * Executes fetch with automatic gateway resolution and single auto-retry.
+   */
+  private async fetchWithAutoRetry(
+    path: string,
+    options: RequestInit = {}
+  ): Promise<Response> {
+    let baseUrl = await this.resolveGateway();
+    let url = `${baseUrl}${path}`;
+
+    try {
+      const res = await fetch(url, options);
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        throw new Error('Gateway unavailable');
+      }
+      return res;
+    } catch (err) {
+      // Re-resolve active gateway and retry once
+      baseUrl = await this.resolveGateway(true);
+      url = `${baseUrl}${path}`;
+      return await fetch(url, options);
+    }
   }
 
   public async uploadApplication(
@@ -143,7 +167,7 @@ class AutomationApiService {
       formData.append('files', file);
     }
 
-    const res = await fetch(`${this.activeBaseUrl}/api/upload`, {
+    const res = await this.fetchWithAutoRetry('/api/upload', {
       method: 'POST',
       body: formData,
     });
@@ -157,33 +181,29 @@ class AutomationApiService {
   }
 
   public async getClientStatus(clientEmail: string): Promise<ApplicationItem[]> {
-    const res = await fetch(`${this.activeBaseUrl}/api/clients/${encodeURIComponent(clientEmail)}/status`);
+    const res = await this.fetchWithAutoRetry(`/api/clients/${encodeURIComponent(clientEmail)}/status`);
     if (!res.ok) throw new Error('Failed to retrieve applications status');
     const data = await res.json();
     return data.applications || [];
   }
 
   public async getPendingPreviews(clientEmail: string): Promise<PreviewItem[]> {
-    const res = await fetch(`${this.activeBaseUrl}/api/clients/${encodeURIComponent(clientEmail)}/previews`);
+    const res = await this.fetchWithAutoRetry(`/api/clients/${encodeURIComponent(clientEmail)}/previews`);
     if (!res.ok) throw new Error('Failed to retrieve preview applications');
     const data = await res.json();
     return data.previews || [];
   }
 
   public async getCompletedApplications(clientEmail: string): Promise<CompletedItem[]> {
-    const res = await fetch(`${this.activeBaseUrl}/api/clients/${encodeURIComponent(clientEmail)}/completed`);
+    const res = await this.fetchWithAutoRetry(`/api/clients/${encodeURIComponent(clientEmail)}/completed`);
     if (!res.ok) throw new Error('Failed to retrieve completed applications');
     const data = await res.json();
     return data.completed || [];
   }
 
-  public getPdfUrl(clientEmail: string, folderName: string, pdfName: string): string {
-    return `${this.activeBaseUrl}/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/pdf/${encodeURIComponent(pdfName)}`;
-  }
-
-  public async fetchPdfBlobUrl(clientEmail: string, folderName: string, pdfName: string): Promise<string> {
-    const url = this.getPdfUrl(clientEmail, folderName, pdfName);
-    const res = await fetch(url);
+  public async fetchPdfBlobUrl(relativeUrl: string): Promise<string> {
+    const cleanRel = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
+    const res = await this.fetchWithAutoRetry(cleanRel);
     if (!res.ok) throw new Error(`Could not fetch PDF (${res.status})`);
     const blob = await res.blob();
     return URL.createObjectURL(blob);
@@ -194,7 +214,7 @@ class AutomationApiService {
     folderName: string,
     arn: string
   ): Promise<{ success: boolean; arn: string; applicant_name: string; submitted_at: string }> {
-    const res = await fetch(`${this.activeBaseUrl}/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/confirm-submit`, {
+    const res = await this.fetchWithAutoRetry(`/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/confirm-submit`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
