@@ -1,7 +1,7 @@
 {
-    "public_url": null,
+    "public_url": "https://private-pac-sources-sierra.trycloudflare.com",
     "local_url": "http://127.0.0.1:8001",
-    "status": "stopped",
+    "status": "online",
     "target_port": 8001,
-    "updated_at": "2026-09-30 02:28:31"
+    "updated_at": "2026-09-30 03:20:00"
 }

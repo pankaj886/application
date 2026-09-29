@@ -1,13 +1,13 @@
 {
-  "version": "1.0.15",
-  "notes": "Foreigners Studio v1.0.15: Autonomous Cloudflare background gateway resolution, completely seamless zero-configuration connection, and clean user interface without developer endpoints.",
-  "pub_date": "2026-09-30T02:50:00Z",
+  "version": "1.0.16",
+  "notes": "Foreigners Studio v1.0.16: Expanded Content Security Policy for Cloudflare gateways, automatic uppercase portal email enforcement, clean single eye password visibility toggle, and instant GitHub API gateway resolution.",
+  "pub_date": "2026-09-30T03:30:00Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.15/Foreigners_Studio_1.0.15_x64-setup.exe"
+      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.16/Foreigners_Studio_1.0.16_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.15/Foreigners_Studio_1.0.15_universal.dmg"
+      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.16/Foreigners_Studio_1.0.16_universal.dmg"
     }
   }
 }

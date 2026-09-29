@@ -40,9 +40,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   onBackToPassport,
 }) => {
   // Client Identity & Form State
-  const initialEmail = localStorage.getItem('fs_active_client_email') || user.email || '';
+  const initialEmail = (localStorage.getItem('fs_active_client_email') || user.email || '').toUpperCase();
   const [portalEmail, setPortalEmail] = useState(initialEmail);
-  const [activeClientEmail, setActiveClientEmail] = useState(initialEmail || 'client@foreignersstudio.com');
+  const [activeClientEmail, setActiveClientEmail] = useState(initialEmail || 'CLIENT@FOREIGNERSSTUDIO.COM');
   const [portalPassword, setPortalPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -126,7 +126,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     e.preventDefault();
     setUploadMessage(null);
 
-    const targetClientEmail = portalEmail.trim().toLowerCase();
+    const targetClientEmail = portalEmail.trim().toUpperCase();
     if (!targetClientEmail || !portalPassword.trim()) {
       setUploadMessage({ text: 'Please enter portal Email ID and Password.', type: 'error' });
       return;
@@ -158,8 +158,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       if (fileInputRef.current) fileInputRef.current.value = '';
       refreshAllData(targetClientEmail);
     } catch (err: any) {
+      const errMsg = err?.message || 'Failed to submit application to automation server.';
+      const friendlyMsg = errMsg.toLowerCase().includes('failed to fetch')
+        ? `Connection failed: Could not reach automation gateway (${automationApi.getBaseUrl()}). Please ensure the background runner is active.`
+        : errMsg;
       setUploadMessage({
-        text: err.message || 'Failed to submit application to automation server.',
+        text: friendlyMsg,
         type: 'error',
       });
     } finally {
@@ -321,12 +325,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   </label>
                   <input
                     id="portalEmail"
-                    type="email"
+                    type="text"
                     required
                     value={portalEmail}
-                    onChange={(e) => setPortalEmail(e.target.value)}
-                    placeholder="e.g. client@domain.com"
+                    onChange={(e) => setPortalEmail(e.target.value.toUpperCase())}
+                    placeholder="e.g. CLIENT@DOMAIN.COM"
                     className="form-input"
+                    style={{ textTransform: 'uppercase' }}
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck="false"
                   />
                 </div>
 

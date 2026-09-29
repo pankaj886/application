@@ -4,7 +4,8 @@
  * Requires 0 user configuration or manual URL management.
  */
 
-const CLOUD_GATEWAY_URL = 'https://raw.githubusercontent.com/pankaj886/foreigners-studio-releases/main/gateway_config.json';
+const GITHUB_API_GATEWAY_URL = 'https://api.github.com/repos/pankaj886/foreigners-studio-releases/contents/gateway_config.json';
+const CLOUD_GATEWAY_RAW_URL = 'https://raw.githubusercontent.com/pankaj886/foreigners-studio-releases/main/gateway_config.json';
 const LOCAL_FALLBACK_URL = 'http://127.0.0.1:8001';
 
 export interface ApplicationItem {
@@ -47,7 +48,7 @@ class AutomationApiService {
   constructor() {
     const cached = localStorage.getItem('fs_automation_api_url');
     if (cached) {
-      this.activeBaseUrl = cached;
+      this.activeBaseUrl = cached.replace(/\/+$/, '');
     }
     // Eagerly resolve gateway in background
     this.resolveGateway().catch(() => {});
@@ -62,51 +63,87 @@ class AutomationApiService {
    * Completely transparent to the user.
    */
   public async resolveGateway(forceRefresh = false): Promise<string> {
-    if (this.isResolving) {
+    if (this.isResolving && !forceRefresh) {
       return this.isResolving;
     }
 
     this.isResolving = (async () => {
-      // 1. If we have an active URL and not forcing refresh, check if it's healthy
+      // 1. If we have an active URL and not forcing refresh, verify it quickly
       if (this.activeBaseUrl && !forceRefresh) {
-        if (await this.pingHealth(this.activeBaseUrl)) {
+        if (await this.pingHealth(this.activeBaseUrl, 3000)) {
           return this.activeBaseUrl;
         }
       }
 
-      // 2. Fetch live Cloud Gateway endpoint from public release registry
+      let candidatePublicUrl = '';
+
+      // 2A. Instant Cloud Registry lookup via GitHub Contents API (bypasses raw CDN 5-min cache)
       try {
-        const cloudRes = await fetch(`${CLOUD_GATEWAY_URL}?_t=${Date.now()}`, { cache: 'no-store' });
-        if (cloudRes.ok) {
-          const cloudData = await cloudRes.json();
-          const publicUrl = (cloudData?.public_url || '').replace(/\/+$/, '');
-          if (publicUrl && await this.pingHealth(publicUrl)) {
-            this.activeBaseUrl = publicUrl;
-            localStorage.setItem('fs_automation_api_url', publicUrl);
-            return publicUrl;
+        const ghRes = await fetch(`${GITHUB_API_GATEWAY_URL}?_t=${Date.now()}`, {
+          headers: { 'Accept': 'application/vnd.github.v3+json' },
+          cache: 'no-store',
+        });
+        if (ghRes.ok) {
+          const ghData = await ghRes.json();
+          if (ghData?.content) {
+            const decoded = atob(ghData.content.replace(/\s+/g, ''));
+            const parsed = JSON.parse(decoded);
+            const pub = (parsed?.public_url || '').replace(/\/+$/, '');
+            if (pub && pub.startsWith('http')) {
+              candidatePublicUrl = pub;
+            }
           }
         }
       } catch (_) {}
+
+      // 2B. Fallback Cloud Registry lookup via raw.githubusercontent.com
+      if (!candidatePublicUrl) {
+        try {
+          const rawRes = await fetch(`${CLOUD_GATEWAY_RAW_URL}?_t=${Date.now()}`, { cache: 'no-store' });
+          if (rawRes.ok) {
+            const rawData = await rawRes.json();
+            const pub = (rawData?.public_url || '').replace(/\/+$/, '');
+            if (pub && pub.startsWith('http')) {
+              candidatePublicUrl = pub;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // If discovered candidate from remote cloud registry, verify health
+      if (candidatePublicUrl) {
+        if (await this.pingHealth(candidatePublicUrl, 7000)) {
+          this.activeBaseUrl = candidatePublicUrl;
+          localStorage.setItem('fs_automation_api_url', candidatePublicUrl);
+          return candidatePublicUrl;
+        }
+      }
 
       // 3. Check bundled or local runtime config
       try {
         const localCfgRes = await fetch(`/tunnel_config.json?_t=${Date.now()}`, { cache: 'no-store' });
         if (localCfgRes.ok) {
           const localCfg = await localCfgRes.json();
-          const publicUrl = (localCfg?.public_url || '').replace(/\/+$/, '');
-          if (publicUrl && await this.pingHealth(publicUrl)) {
-            this.activeBaseUrl = publicUrl;
-            localStorage.setItem('fs_automation_api_url', publicUrl);
-            return publicUrl;
+          const pub = (localCfg?.public_url || '').replace(/\/+$/, '');
+          if (pub && pub.startsWith('http') && (await this.pingHealth(pub, 5000))) {
+            this.activeBaseUrl = pub;
+            localStorage.setItem('fs_automation_api_url', pub);
+            return pub;
           }
         }
       } catch (_) {}
 
-      // 4. Fallback to localhost if running on developer workstation
-      if (await this.pingHealth(LOCAL_FALLBACK_URL)) {
+      // 4. Check localhost (developer workstation)
+      if (await this.pingHealth(LOCAL_FALLBACK_URL, 1500)) {
         this.activeBaseUrl = LOCAL_FALLBACK_URL;
         localStorage.setItem('fs_automation_api_url', LOCAL_FALLBACK_URL);
         return LOCAL_FALLBACK_URL;
+      }
+
+      // If candidate was found from cloud registry but ping timed out, still use it over localhost on remote clients
+      if (candidatePublicUrl) {
+        this.activeBaseUrl = candidatePublicUrl;
+        return candidatePublicUrl;
       }
 
       return this.activeBaseUrl || LOCAL_FALLBACK_URL;
@@ -117,11 +154,12 @@ class AutomationApiService {
     return this.isResolving;
   }
 
-  private async pingHealth(url: string): Promise<boolean> {
+  private async pingHealth(url: string, timeoutMs = 6000): Promise<boolean> {
     try {
+      const cleanUrl = url.replace(/\/+$/, '');
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2000);
-      const res = await fetch(`${url}/api/health`, { signal: controller.signal });
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(`${cleanUrl}/api/health`, { signal: controller.signal });
       clearTimeout(timeout);
       return res.ok;
     } catch (_) {
@@ -137,7 +175,8 @@ class AutomationApiService {
     options: RequestInit = {}
   ): Promise<Response> {
     let baseUrl = await this.resolveGateway();
-    let url = `${baseUrl}${path}`;
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    let url = `${baseUrl}${cleanPath}`;
 
     try {
       const res = await fetch(url, options);
@@ -148,7 +187,7 @@ class AutomationApiService {
     } catch (err) {
       // Re-resolve active gateway and retry once
       baseUrl = await this.resolveGateway(true);
-      url = `${baseUrl}${path}`;
+      url = `${baseUrl}${cleanPath}`;
       return await fetch(url, options);
     }
   }
@@ -159,18 +198,39 @@ class AutomationApiService {
     portalPassword: string,
     files: File[]
   ): Promise<{ success: boolean; folder_name: string; message: string }> {
-    const formData = new FormData();
-    formData.append('client_email', clientEmail);
-    formData.append('portal_username', portalUsername);
-    formData.append('portal_password', portalPassword);
-    for (const file of files) {
-      formData.append('files', file);
-    }
+    // Ensure gateway is resolved prior to constructing payload
+    let baseUrl = await this.resolveGateway();
 
-    const res = await this.fetchWithAutoRetry('/api/upload', {
-      method: 'POST',
-      body: formData,
-    });
+    const buildFormData = () => {
+      const fd = new FormData();
+      fd.append('client_email', clientEmail);
+      fd.append('portal_username', portalUsername);
+      fd.append('portal_password', portalPassword);
+      for (const file of files) {
+        fd.append('files', file);
+      }
+      return fd;
+    };
+
+    let url = `${baseUrl}/api/upload`;
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        body: buildFormData(),
+      });
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        throw new Error('Gateway unavailable');
+      }
+    } catch (_) {
+      // Retry once with refreshed gateway
+      baseUrl = await this.resolveGateway(true);
+      url = `${baseUrl}/api/upload`;
+      res = await fetch(url, {
+        method: 'POST',
+        body: buildFormData(),
+      });
+    }
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: 'Upload failed' }));
