@@ -1,13 +1,13 @@
 {
-  "version": "1.0.12",
-  "notes": "Foreigners Studio v1.0.12: Pure white and blue browser OAuth callback screen, blue restart to update button, silent background updater, and minimal sign-in screen.",
-  "pub_date": "2026-09-29T11:15:00Z",
+  "version": "1.0.13",
+  "notes": "Foreigners Studio v1.0.13: Refined side panel user profile layout for expanded and collapsed states, accurate right-aligned version display, and minimalist pure white logout confirmation modal with red confirm and blue cancel buttons.",
+  "pub_date": "2026-09-29T13:40:00Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.12/Foreigners_Studio_1.0.12_x64-setup.exe"
+      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.13/Foreigners_Studio_1.0.13_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.12/Foreigners_Studio_1.0.12_universal.dmg"
+      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.13/Foreigners_Studio_1.0.13_universal.dmg"
     }
   }
 }

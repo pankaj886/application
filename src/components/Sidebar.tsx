@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Briefcase, 
   PanelLeftClose, 
@@ -6,6 +6,7 @@ import {
   ChevronRight,
   LogOut
 } from 'lucide-react';
+import { getVersion } from '@tauri-apps/api/app';
 import { NavigationTab, UserProfile } from '../types';
 
 interface SidebarProps {
@@ -25,6 +26,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   user,
   onLogout,
 }) => {
+  const [appVersion, setAppVersion] = useState<string>('1.0.13');
+
+  useEffect(() => {
+    getVersion()
+      .then((ver) => {
+        if (ver) setAppVersion(ver);
+      })
+      .catch(() => {
+        // Fallback default
+      });
+  }, []);
+
   return (
     <aside className={`sidebar-wrapper ${collapsed ? 'collapsed' : 'expanded'}`}>
       <div className="sidebar-top">
@@ -70,46 +83,88 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       <div className="sidebar-footer">
-        {user && (
-          <div className={`sidebar-user-card ${collapsed ? 'collapsed-card' : ''}`}>
-            <div className="sidebar-user-avatar-wrapper" title={`${user.name} (${user.email})`}>
-              {user.picture ? (
-                <img
-                  src={user.picture}
-                  alt={user.name}
-                  className="sidebar-user-avatar-img"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="sidebar-user-fallback">
-                  {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+        {collapsed ? (
+          <div className="sidebar-collapsed-footer">
+            {user && (
+              <>
+                <div
+                  className="sidebar-user-avatar-wrapper"
+                  title={`${user.name} (${user.email})`}
+                >
+                  {user.picture ? (
+                    <img
+                      src={user.picture}
+                      alt={user.name}
+                      className="sidebar-user-avatar-img"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="sidebar-user-fallback">
+                      {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {!collapsed && (
-              <div className="sidebar-user-info">
-                <span className="sidebar-user-name" title={user.name}>{user.name}</span>
-                <span className="sidebar-user-email" title={user.email}>{user.email}</span>
+                {onLogout && (
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="sidebar-collapsed-logout-btn"
+                    title={`Sign out (${user.email})`}
+                    aria-label="Sign out"
+                  >
+                    <LogOut className="sidebar-logout-icon" />
+                  </button>
+                )}
+              </>
+            )}
+            <span className="sidebar-version-collapsed">v{appVersion}</span>
+          </div>
+        ) : (
+          <div className="sidebar-expanded-footer">
+            {user && (
+              <div className="sidebar-user-card">
+                <div
+                  className="sidebar-user-avatar-wrapper"
+                  title={`${user.name} (${user.email})`}
+                >
+                  {user.picture ? (
+                    <img
+                      src={user.picture}
+                      alt={user.name}
+                      className="sidebar-user-avatar-img"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="sidebar-user-fallback">
+                      {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                  )}
+                </div>
+
+                <div className="sidebar-user-info">
+                  <span className="sidebar-user-name" title={user.name}>{user.name}</span>
+                  <span className="sidebar-user-email" title={user.email}>{user.email}</span>
+                </div>
+
+                {onLogout && (
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="sidebar-logout-btn"
+                    title={`Sign out (${user.email})`}
+                    aria-label="Sign out"
+                  >
+                    <LogOut className="sidebar-logout-icon" />
+                  </button>
+                )}
               </div>
             )}
 
-            {onLogout && (
-              <button
-                type="button"
-                onClick={onLogout}
-                className="sidebar-logout-btn"
-                title={`Sign out (${user.email})`}
-                aria-label="Sign out"
-              >
-                <LogOut className="sidebar-logout-icon" />
-              </button>
-            )}
+            <div className="sidebar-version-row">
+              <span className="sidebar-version-tag">v{appVersion}</span>
+            </div>
           </div>
-        )}
-
-        {!collapsed && (
-          <span className="sidebar-version">v1.0.10</span>
         )}
       </div>
     </aside>

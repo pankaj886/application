@@ -5,12 +5,14 @@ import { Sidebar } from './components/Sidebar';
 import { ServicesView } from './components/ServicesView';
 import { PassportView } from './components/PassportView';
 import { LoginView } from './components/LoginView';
+import { LogoutConfirmModal } from './components/LogoutConfirmModal';
 import { NavigationTab, UserProfile } from './types';
 import './App.css';
 
 export function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authChecking, setAuthChecking] = useState<boolean>(true);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<NavigationTab>('services');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 960);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
@@ -118,10 +120,19 @@ export function App() {
     setUser(newSession);
   };
 
-  const handleLogout = () => {
+  const handleLogoutRequest = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const handleConfirmLogout = () => {
+    setShowLogoutConfirm(false);
     localStorage.removeItem('fs_user_session');
     setUser(null);
     setActiveTab('services');
+  };
+
+  const handleCancelLogout = () => {
+    setShowLogoutConfirm(false);
   };
 
   const handleSelectPassport = () => {
@@ -159,7 +170,7 @@ export function App() {
             collapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed(prev => !prev)}
             user={user}
-            onLogout={handleLogout}
+            onLogout={handleLogoutRequest}
           />
 
           <main className="content-viewport">
@@ -175,6 +186,12 @@ export function App() {
           </main>
         </div>
       )}
+
+      <LogoutConfirmModal
+        isOpen={showLogoutConfirm}
+        onConfirm={handleConfirmLogout}
+        onCancel={handleCancelLogout}
+      />
     </div>
   );
 }
