@@ -30,7 +30,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: asset: https://*.googleusercontent.com https://lh3.googleusercontent.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://*.trycloudflare.com https://*.cloudflare.com http://127.0.0.1:* http://localhost:* https://github.com https://objects.githubusercontent.com https://*.githubusercontent.com https://api.github.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com; object-src 'self' blob:; frame-src 'self' blob:;"
+      "csp": "default-src 'self'; img-src 'self' data: blob: asset: https: http: https://*.googleusercontent.com https://lh3.googleusercontent.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https: http: https://*.trycloudflare.com https://*.cloudflare.com http://127.0.0.1:* http://localhost:* https://github.com https://objects.githubusercontent.com https://*.githubusercontent.com https://api.github.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com; object-src 'self' blob:; frame-src 'self' blob:;"
     }
   },
   "plugins": {

@@ -184,11 +184,22 @@ class AutomationApiService {
         throw new Error('Gateway unavailable');
       }
       return res;
-    } catch (err) {
+    } catch (_) {
       // Re-resolve active gateway and retry once
       baseUrl = await this.resolveGateway(true);
       url = `${baseUrl}${cleanPath}`;
-      return await fetch(url, options);
+      try {
+        const retryRes = await fetch(url, options);
+        if (retryRes.status === 502 || retryRes.status === 503 || retryRes.status === 504) {
+          throw new Error(`Automation Gateway temporarily unavailable (${retryRes.status}). Please verify the background runner is active.`);
+        }
+        return retryRes;
+      } catch (retryErr: any) {
+        if (retryErr?.message?.includes('temporarily unavailable')) {
+          throw retryErr;
+        }
+        throw new Error(`Cannot reach automation gateway (${baseUrl}). Please ensure the background runner is running on the host PC.`);
+      }
     }
   }
 
@@ -226,10 +237,20 @@ class AutomationApiService {
       // Retry once with refreshed gateway
       baseUrl = await this.resolveGateway(true);
       url = `${baseUrl}/api/upload`;
-      res = await fetch(url, {
-        method: 'POST',
-        body: buildFormData(),
-      });
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          body: buildFormData(),
+        });
+        if (res.status === 502 || res.status === 503 || res.status === 504) {
+          throw new Error(`Automation Gateway temporarily unavailable (${res.status}). Please verify the background runner is active.`);
+        }
+      } catch (innerErr: any) {
+        if (innerErr?.message?.includes('temporarily unavailable')) {
+          throw innerErr;
+        }
+        throw new Error(`Could not connect to automation gateway (${baseUrl}). Please check network connection and ensure the host PC runner is active.`);
+      }
     }
 
     if (!res.ok) {

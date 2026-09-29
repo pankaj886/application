@@ -121,6 +121,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleEmailBlur = () => {
+    const trimmed = portalEmail.trim().toUpperCase();
+    if (trimmed && trimmed.includes('@')) {
+      setActiveClientEmail(trimmed);
+      localStorage.setItem('fs_active_client_email', trimmed);
+    }
+  };
+
   // Submit Application Form
   const handleSubmitApplication = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,6 +337,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                     required
                     value={portalEmail}
                     onChange={(e) => setPortalEmail(e.target.value.toUpperCase())}
+                    onBlur={handleEmailBlur}
                     placeholder="e.g. CLIENT@DOMAIN.COM"
                     className="form-input"
                     style={{ textTransform: 'uppercase' }}

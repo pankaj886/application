@@ -1549,6 +1549,8 @@ svg.arrow-icon,
 }
 
 /* Hide native Edge/WebView2/browser password reveal & clear buttons to keep only one clean eye toggle */
+input::-ms-reveal,
+input::-ms-clear,
 input[type="password"]::-ms-reveal,
 input[type="password"]::-ms-clear {
   display: none !important;
