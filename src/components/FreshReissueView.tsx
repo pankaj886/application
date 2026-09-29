@@ -87,12 +87,23 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setApplications(apps);
       setPreviews(prevs);
       setCompleted(comps);
+
+      // When previews become available, automatically dismiss the waiting message
+      if (prevs && prevs.length > 0) {
+        setUploadMessage(prev => (prev?.type === 'success' ? null : prev));
+      }
     } catch (err) {
       console.warn('Error fetching automation data:', err);
     } finally {
       setIsLoadingData(false);
     }
   };
+
+  useEffect(() => {
+    if (previews.length > 0) {
+      setUploadMessage(prev => (prev?.type === 'success' ? null : prev));
+    }
+  }, [previews]);
 
   useEffect(() => {
     refreshAllData();
@@ -150,7 +161,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       localStorage.setItem('fs_active_client_email', targetClientEmail);
       setActiveClientEmail(targetClientEmail);
 
-      const res = await automationApi.uploadApplication(
+      await automationApi.uploadApplication(
         targetClientEmail,
         targetClientEmail,
         portalPassword.trim(),
@@ -158,7 +169,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       );
 
       setUploadMessage({
-        text: `Application submitted successfully! Folder '${res.folder_name}' created. Background extraction started.`,
+        text: 'File submitted, waiting for preview...',
         type: 'success',
       });
       // Clear inputs
@@ -317,7 +328,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             {uploadMessage && (
               <div className={`form-alert ${uploadMessage.type === 'success' ? 'alert-success' : 'alert-error'}`}>
                 {uploadMessage.type === 'success' ? (
-                  <CheckCircle2 className="alert-icon" />
+                  <Clock className="alert-icon animate-pulse" />
                 ) : (
                   <AlertCircle className="alert-icon" />
                 )}
@@ -449,67 +460,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               </div>
             </form>
           </div>
-
-          {/* Active Application Status Tracker */}
-          {applications.length > 0 && (
-            <div className="tracker-card">
-              <h3 className="tracker-title">Recent Pipeline Activity ({activeClientEmail})</h3>
-              <div className="tracker-list">
-                {applications.map((app, idx) => {
-                  const isError = app.status === 'ERROR';
-                  const isPending = app.status === 'PENDING_CONFIRMATION';
-                  const isDone = app.status === 'COMPLETED';
-
-                  return (
-                    <div key={idx} className={`tracker-item ${isError ? 'tracker-error' : (isPending ? 'tracker-pending' : '')}`}>
-                      <div className="tracker-item-left">
-                        <div className="tracker-avatar">
-                          {isDone ? (
-                            <CheckCircle2 className="avatar-icon text-success" />
-                          ) : isError ? (
-                            <AlertCircle className="avatar-icon text-error" />
-                          ) : isPending ? (
-                            <Eye className="avatar-icon text-blue" />
-                          ) : (
-                            <Clock className="avatar-icon text-muted animate-pulse" />
-                          )}
-                        </div>
-                        <div className="tracker-info">
-                          <span className="tracker-name">{app.applicant_name || app.folder_name}</span>
-                          <span className="tracker-stage">{app.stage || app.status}</span>
-                          {app.arn && (
-                            <span className="tracker-arn">ARN: <b>{app.arn}</b></span>
-                          )}
-                          {isError && app.error_message && (
-                            <div className="tracker-error-msg">
-                              <AlertCircle className="err-icon" />
-                              <span>{app.error_message}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="tracker-item-right">
-                        {isPending && (
-                          <button
-                            type="button"
-                            onClick={() => onSectionChange('preview')}
-                            className="btn-link-action"
-                          >
-                            <span>View Preview</span>
-                            <ArrowLeft className="rotate-180 icon-sm" />
-                          </button>
-                        )}
-                        {isDone && (
-                          <span className="badge-completed">Completed</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       )}
 

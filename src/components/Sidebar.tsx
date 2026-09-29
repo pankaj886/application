@@ -38,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   previewCount = 0,
   completedCount = 0,
 }) => {
-  const [appVersion, setAppVersion] = useState<string>('1.0.16');
+  const [appVersion, setAppVersion] = useState<string>('1.0.17');
 
   useEffect(() => {
     getVersion()
