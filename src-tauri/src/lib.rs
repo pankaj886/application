@@ -261,8 +261,8 @@ fn perform_google_login() -> Result<UserSession, String> {
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: radial-gradient(circle at 50% 25%, #1e293b 0%, #0b1120 100%);
-      color: #f8fafc;
+      background: #ffffff;
+      color: #0f172a;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       display: flex;
       align-items: center;
@@ -271,17 +271,15 @@ fn perform_google_login() -> Result<UserSession, String> {
       padding: 24px;
     }
     .card {
-      background: rgba(30, 41, 59, 0.75);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
       border-radius: 24px;
       padding: 48px 36px;
       text-align: center;
       max-width: 460px;
       width: 100%;
-      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 35px rgba(34, 197, 94, 0.15);
-      animation: popIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.1);
+      animation: popIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     }
     @keyframes popIn {
       from { opacity: 0; transform: scale(0.95) translateY(10px); }
@@ -292,18 +290,18 @@ fn perform_google_login() -> Result<UserSession, String> {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 84px;
-      height: 84px;
+      width: 80px;
+      height: 80px;
       border-radius: 50%;
-      background: linear-gradient(135deg, rgba(34, 197, 94, 0.25), rgba(16, 185, 129, 0.1));
-      border: 2px solid #22c55e;
+      background: #eff6ff;
+      border: 2px solid #3b82f6;
       margin-bottom: 24px;
-      box-shadow: 0 0 30px rgba(34, 197, 94, 0.35);
+      box-shadow: 0 4px 20px rgba(37, 99, 235, 0.18);
     }
     .checkmark {
-      width: 44px;
-      height: 44px;
-      stroke: #22c55e;
+      width: 42px;
+      height: 42px;
+      stroke: #2563eb;
       stroke-width: 3;
       stroke-linecap: round;
       stroke-linejoin: round;
@@ -316,15 +314,15 @@ fn perform_google_login() -> Result<UserSession, String> {
       to { stroke-dashoffset: 0; }
     }
     h1 {
-      font-size: 25px;
+      font-size: 24px;
       font-weight: 700;
       letter-spacing: -0.02em;
       margin-bottom: 10px;
-      color: #ffffff;
+      color: #0f172a;
     }
     p.desc {
       font-size: 15px;
-      color: #94a3b8;
+      color: #64748b;
       line-height: 1.5;
       margin-bottom: 30px;
     }
@@ -340,8 +338,8 @@ fn perform_google_login() -> Result<UserSession, String> {
       gap: 8px;
       width: 100%;
       padding: 15px 24px;
-      border-radius: 14px;
-      background: linear-gradient(135deg, #0ea5e9, #2563eb);
+      border-radius: 12px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
       color: #ffffff;
       text-decoration: none;
       font-size: 15px;
@@ -349,12 +347,12 @@ fn perform_google_login() -> Result<UserSession, String> {
       border: none;
       cursor: pointer;
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.45);
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
     }
     .action-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 15px 30px -5px rgba(37, 99, 235, 0.6);
-      background: linear-gradient(135deg, #0284c7, #1d4ed8);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
+      background: linear-gradient(135deg, #1d4ed8, #1e40af);
     }
     .action-btn:active {
       transform: translateY(0);
@@ -362,7 +360,7 @@ fn perform_google_login() -> Result<UserSession, String> {
     .hint {
       margin-top: 24px;
       font-size: 13px;
-      color: #64748b;
+      color: #94a3b8;
     }
   </style>
 </head>
