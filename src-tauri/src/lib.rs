@@ -186,7 +186,7 @@ fn apply_update_and_restart(app_handle: tauri::AppHandle, installer_path: String
     }
 }
 
-fn perform_google_login(window: tauri::Window) -> Result<UserSession, String> {
+fn perform_google_login() -> Result<UserSession, String> {
     let listener = TcpListener::bind("127.0.0.1:0")
         .map_err(|e| format!("Failed to bind local loopback listener: {}", e))?;
     listener.set_nonblocking(true)
@@ -386,11 +386,6 @@ fn perform_google_login(window: tauri::Window) -> Result<UserSession, String> {
                             let _ = stream.write_all(response_bytes.as_bytes());
                             let _ = stream.flush();
 
-                            // Automatically focus Foreigners Studio window
-                            let _ = window.unminimize();
-                            let _ = window.show();
-                            let _ = window.set_focus();
-
                             break;
                         } else {
                             let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
@@ -501,11 +496,18 @@ fn perform_google_login(window: tauri::Window) -> Result<UserSession, String> {
 
 #[tauri::command]
 async fn start_google_login(window: tauri::Window) -> Result<UserSession, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        perform_google_login(window)
+    let session = tauri::async_runtime::spawn_blocking(move || {
+        perform_google_login()
     })
     .await
-    .map_err(|e| format!("Login worker task failed: {}", e))?
+    .map_err(|e| format!("Login worker task failed: {}", e))??;
+
+    // Bring Foreigners Studio window to the foreground smoothly
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+
+    Ok(session)
 }
 
 #[tauri::command]
