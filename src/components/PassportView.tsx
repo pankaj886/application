@@ -3,9 +3,10 @@ import { ArrowLeft, ArrowRight, BookOpen } from 'lucide-react';
 
 interface PassportViewProps {
   onBack: () => void;
+  onSelectFreshReissue: () => void;
 }
 
-export const PassportView: React.FC<PassportViewProps> = ({ onBack }) => {
+export const PassportView: React.FC<PassportViewProps> = ({ onBack, onSelectFreshReissue }) => {
   return (
     <div className="passport-view-container">
       <div className="view-navigation-bar">
@@ -29,10 +30,12 @@ export const PassportView: React.FC<PassportViewProps> = ({ onBack }) => {
           aria-label="Fresh / Reissue"
           onClick={(e) => {
             e.preventDefault();
+            onSelectFreshReissue();
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
+              onSelectFreshReissue();
             }
           }}
         >

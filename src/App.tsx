@@ -4,9 +4,11 @@ import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/Sidebar';
 import { ServicesView } from './components/ServicesView';
 import { PassportView } from './components/PassportView';
+import { FreshReissueView } from './components/FreshReissueView';
 import { LoginView } from './components/LoginView';
 import { LogoutConfirmModal } from './components/LogoutConfirmModal';
-import { NavigationTab, UserProfile } from './types';
+import { NavigationTab, FreshReissueSection, UserProfile } from './types';
+import { automationApi } from './services/automationApi';
 import './App.css';
 
 export function App() {
@@ -14,6 +16,9 @@ export function App() {
   const [authChecking, setAuthChecking] = useState<boolean>(true);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<NavigationTab>('services');
+  const [freshReissueSection, setFreshReissueSection] = useState<FreshReissueSection>('form');
+  const [previewCount, setPreviewCount] = useState<number>(0);
+  const [completedCount, setCompletedCount] = useState<number>(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 960);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
@@ -50,6 +55,27 @@ export function App() {
 
     checkSavedSession();
   }, []);
+
+  // Poll automation counts for badges
+  useEffect(() => {
+    if (!user?.email) return;
+
+    const updateCounts = async () => {
+      try {
+        const activeEmail = localStorage.getItem('fs_active_client_email') || user.email;
+        const [prevs, comps] = await Promise.all([
+          automationApi.getPendingPreviews(activeEmail).catch(() => []),
+          automationApi.getCompletedApplications(activeEmail).catch(() => []),
+        ]);
+        setPreviewCount(prevs.length);
+        setCompletedCount(comps.length);
+      } catch (_) {}
+    };
+
+    updateCounts();
+    const interval = setInterval(updateCounts, 4000);
+    return () => clearInterval(interval);
+  }, [user?.email]);
 
   useEffect(() => {
     let prevWidth = window.innerWidth;
@@ -105,7 +131,9 @@ export function App() {
         setSidebarCollapsed(prev => !prev);
       }
       if (e.key === 'Escape') {
-        if (activeTab === 'passport') {
+        if (activeTab === 'fresh-reissue') {
+          setActiveTab('passport');
+        } else if (activeTab === 'passport') {
           setActiveTab('services');
         }
       }
@@ -143,9 +171,24 @@ export function App() {
     setActiveTab('services');
   };
 
+  const handleSelectFreshReissue = () => {
+    setActiveTab('fresh-reissue');
+    setFreshReissueSection('form');
+  };
+
+  const handleBackToPassport = () => {
+    setActiveTab('passport');
+  };
+
   const currentPathString = !user 
     ? 'Sign In' 
-    : (activeTab === 'passport' ? 'Services / Passport' : 'Services');
+    : (activeTab === 'fresh-reissue'
+        ? (freshReissueSection === 'preview'
+            ? 'Services / Passport / Fresh & Reissue / Preview'
+            : (freshReissueSection === 'submitted'
+                ? 'Services / Passport / Fresh & Reissue / Submitted'
+                : 'Services / Passport / Fresh & Reissue'))
+        : (activeTab === 'passport' ? 'Services / Passport' : 'Services'));
 
   return (
     <div className={`app-root ${!user ? 'auth-mode' : ''} ${windowWidth < 840 ? 'layout-compact' : ''} ${windowWidth < 600 ? 'layout-narrow' : ''}`}>
@@ -171,6 +214,10 @@ export function App() {
             onToggleCollapse={() => setSidebarCollapsed(prev => !prev)}
             user={user}
             onLogout={handleLogoutRequest}
+            freshReissueSection={freshReissueSection}
+            onFreshReissueSectionChange={(sec) => setFreshReissueSection(sec)}
+            previewCount={previewCount}
+            completedCount={completedCount}
           />
 
           <main className="content-viewport">
@@ -180,7 +227,19 @@ export function App() {
               )}
 
               {activeTab === 'passport' && (
-                <PassportView onBack={handleBackToServices} />
+                <PassportView 
+                  onBack={handleBackToServices} 
+                  onSelectFreshReissue={handleSelectFreshReissue}
+                />
+              )}
+
+              {activeTab === 'fresh-reissue' && (
+                <FreshReissueView
+                  user={user}
+                  currentSection={freshReissueSection}
+                  onSectionChange={(sec) => setFreshReissueSection(sec)}
+                  onBackToPassport={handleBackToPassport}
+                />
               )}
             </div>
           </main>

@@ -4,10 +4,14 @@ import {
   PanelLeftClose, 
   PanelLeftOpen, 
   ChevronRight,
-  LogOut
+  LogOut,
+  Upload,
+  Eye,
+  CheckCircle2,
+  BookOpen
 } from 'lucide-react';
 import { getVersion } from '@tauri-apps/api/app';
-import { NavigationTab, UserProfile } from '../types';
+import { NavigationTab, FreshReissueSection, UserProfile } from '../types';
 
 interface SidebarProps {
   activeTab: NavigationTab;
@@ -16,6 +20,10 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   user?: UserProfile | null;
   onLogout?: () => void;
+  freshReissueSection?: FreshReissueSection;
+  onFreshReissueSectionChange?: (sec: FreshReissueSection) => void;
+  previewCount?: number;
+  completedCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -25,8 +33,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
   user,
   onLogout,
+  freshReissueSection = 'form',
+  onFreshReissueSectionChange,
+  previewCount = 0,
+  completedCount = 0,
 }) => {
-  const [appVersion, setAppVersion] = useState<string>('1.0.13');
+  const [appVersion, setAppVersion] = useState<string>('1.0.14');
 
   useEffect(() => {
     getVersion()
@@ -37,6 +49,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         // Fallback default
       });
   }, []);
+
+  const isInsideFreshReissue = activeTab === 'fresh-reissue';
 
   return (
     <aside className={`sidebar-wrapper ${collapsed ? 'collapsed' : 'expanded'}`}>
@@ -60,6 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <nav className="sidebar-nav">
+        {/* Main Services Navigation Tab */}
         <button
           type="button"
           onClick={() => onTabChange('services')}
@@ -80,6 +95,79 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <ChevronRight className="nav-chevron" />
           )}
         </button>
+
+        {/* Dynamic Fresh / Reissue Sub-Sections (ONLY visible when inside fresh/reissue service) */}
+        {isInsideFreshReissue && (
+          <div className="sidebar-service-subnav">
+            {!collapsed && (
+              <div className="subnav-header">
+                <BookOpen className="subnav-header-icon" />
+                <span className="subnav-header-title">Fresh / Reissue</span>
+              </div>
+            )}
+
+            {/* 1. New Application / Form Section */}
+            <button
+              type="button"
+              onClick={() => onFreshReissueSectionChange && onFreshReissueSectionChange('form')}
+              className={`subnav-item ${freshReissueSection === 'form' ? 'active' : ''}`}
+              title="New Application"
+            >
+              <div className="subnav-icon-wrapper">
+                <Upload className="subnav-icon" />
+              </div>
+              {!collapsed && (
+                <span className="subnav-label">New Application</span>
+              )}
+            </button>
+
+            {/* 2. Preview Section */}
+            <button
+              type="button"
+              onClick={() => onFreshReissueSectionChange && onFreshReissueSectionChange('preview')}
+              className={`subnav-item ${freshReissueSection === 'preview' ? 'active' : ''}`}
+              title="Preview Section"
+            >
+              <div className="subnav-icon-wrapper">
+                <Eye className="subnav-icon" />
+              </div>
+              {!collapsed && (
+                <div className="subnav-label-group">
+                  <span className="subnav-label">Preview</span>
+                  {previewCount > 0 && (
+                    <span className="subnav-badge">{previewCount}</span>
+                  )}
+                </div>
+              )}
+              {collapsed && previewCount > 0 && (
+                <span className="subnav-dot-badge" />
+              )}
+            </button>
+
+            {/* 3. Submitted Section */}
+            <button
+              type="button"
+              onClick={() => onFreshReissueSectionChange && onFreshReissueSectionChange('submitted')}
+              className={`subnav-item ${freshReissueSection === 'submitted' ? 'active' : ''}`}
+              title="Submitted Section"
+            >
+              <div className="subnav-icon-wrapper">
+                <CheckCircle2 className="subnav-icon" />
+              </div>
+              {!collapsed && (
+                <div className="subnav-label-group">
+                  <span className="subnav-label">Submitted</span>
+                  {completedCount > 0 && (
+                    <span className="subnav-badge subnav-badge-green">{completedCount}</span>
+                  )}
+                </div>
+              )}
+              {collapsed && completedCount > 0 && (
+                <span className="subnav-dot-badge subnav-dot-badge-green" />
+              )}
+            </button>
+          </div>
+        )}
       </nav>
 
       <div className="sidebar-footer">
