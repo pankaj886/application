@@ -50,10 +50,26 @@ fn url_decode(input: &str) -> String {
     decoded
 }
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+fn create_silent_command<S: AsRef<std::ffi::OsStr>>(program: S) -> std::process::Command {
+    #[allow(unused_mut)]
+    let mut cmd = std::process::Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 fn open_browser(url: &str) {
     #[cfg(target_os = "windows")]
     {
-        let _ = std::process::Command::new("rundll32.exe")
+        let _ = create_silent_command("rundll32.exe")
             .args(["url.dll,FileProtocolHandler", url])
             .spawn();
     }
@@ -122,7 +138,7 @@ async fn download_installer(url: String) -> Result<String, String> {
 
     #[cfg(target_os = "windows")]
     {
-        let status = std::process::Command::new("curl.exe")
+        let status = create_silent_command("curl.exe")
             .args(["-s", "-L", "-o", &target_str, &url])
             .status()
             .map_err(|e| format!("Failed to execute curl: {}", e))?;
@@ -134,7 +150,7 @@ async fn download_installer(url: String) -> Result<String, String> {
 
     #[cfg(not(target_os = "windows"))]
     {
-        let status = std::process::Command::new("curl")
+        let status = create_silent_command("curl")
             .args(["-s", "-L", "-o", &target_str, &url])
             .status()
             .map_err(|e| format!("Failed to execute curl: {}", e))?;
@@ -159,8 +175,8 @@ fn apply_update_and_restart(app_handle: tauri::AppHandle, installer_path: String
             installer_path, app_exe
         );
 
-        let _ = std::process::Command::new("powershell.exe")
-            .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &ps_cmd])
+        let _ = create_silent_command("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", &ps_cmd])
             .spawn()
             .map_err(|e| format!("Failed to spawn update process: {}", e))?;
 
@@ -422,7 +438,7 @@ fn perform_google_login() -> Result<UserSession, String> {
         url_encode(&redirect_uri)
     );
 
-    let output = std::process::Command::new(curl_cmd)
+    let output = create_silent_command(curl_cmd)
         .args([
             "-s",
             "-X", "POST",
@@ -456,7 +472,7 @@ fn perform_google_login() -> Result<UserSession, String> {
         .unwrap_or(3600);
 
     // Cryptographic verification with Google's public token verification service
-    let verify_output = std::process::Command::new(curl_cmd)
+    let verify_output = create_silent_command(curl_cmd)
         .args([
             "-s",
             &format!("https://oauth2.googleapis.com/tokeninfo?id_token={}", id_token),
@@ -518,7 +534,7 @@ async fn verify_google_session(id_token: String) -> Result<UserSession, String> 
         #[cfg(not(target_os = "windows"))]
         let curl_cmd = "curl";
 
-        let verify_output = std::process::Command::new(curl_cmd)
+        let verify_output = create_silent_command(curl_cmd)
             .args([
                 "-s",
                 &format!("https://oauth2.googleapis.com/tokeninfo?id_token={}", id_token),

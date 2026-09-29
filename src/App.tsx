@@ -137,7 +137,7 @@ export function App() {
     : (activeTab === 'passport' ? 'Services / Passport' : 'Services');
 
   return (
-    <div className={`app-root ${windowWidth < 840 ? 'layout-compact' : ''} ${windowWidth < 600 ? 'layout-narrow' : ''}`}>
+    <div className={`app-root ${!user ? 'auth-mode' : ''} ${windowWidth < 840 ? 'layout-compact' : ''} ${windowWidth < 600 ? 'layout-narrow' : ''}`}>
       <TitleBar currentPath={currentPathString} />
 
       {authChecking ? (
