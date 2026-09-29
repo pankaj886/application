@@ -1,8 +1,6 @@
 name: Build Foreigners Studio (Windows & macOS)
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
 
 jobs:
