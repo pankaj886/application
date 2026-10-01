@@ -874,6 +874,30 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                     Dismiss / Upload New Instead
                   </button>
                   <button
+                    type="button"
+                    onClick={() => {
+                      setCorrectionFormData({
+                        "Educational qualification": "10TH PASS AND ABOVE",
+                        "Employment type": "PRIVATE",
+                        "PIN Code": "",
+                        "State": "",
+                        "District": "",
+                        "House No. and Street Name": "",
+                        "Village or Town or City": "",
+                        "Indian mobile number": "",
+                        "Italian address line 1": "",
+                        "Italian address line 2": "",
+                        "Italian mobile number": "",
+                        "Marital status": "SINGLE",
+                        "Spouse name": "",
+                        "Spouse given name": "",
+                      });
+                    }}
+                    className="dismiss-btn clear-fields-btn"
+                  >
+                    Clear All Fields
+                  </button>
+                  <button
                     type="submit"
                     disabled={isSubmittingCorrection}
                     className="submit-btn save-correction-btn"
