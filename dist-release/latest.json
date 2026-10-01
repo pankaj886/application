@@ -1,13 +1,13 @@
 {
-  "version": "1.0.17",
-  "notes": "Foreigners Studio v1.0.17: Seamless user experience with auto-dismissing waiting alerts, hidden technical backend pipeline details, and enhanced preview readiness notifications.",
-  "pub_date": "2026-09-30T04:00:00Z",
+  "version": "1.0.18",
+  "notes": "Foreigners Studio v1.0.18: Native Windows drag-and-drop file upload, strict error sanitization, missing data in-app correction workflow, smart Indian address parsing with PIN fallback, persistent portal credentials, and cryptographic 7-day session management.",
+  "pub_date": "2026-10-01T08:30:00Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.17/Foreigners_Studio_1.0.17_x64-setup.exe"
+      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.18/Foreigners_Studio_1.0.18_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.17/Foreigners_Studio_1.0.17_universal.dmg"
+      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.18/Foreigners_Studio_1.0.18_universal.dmg"
     }
   }
 }
