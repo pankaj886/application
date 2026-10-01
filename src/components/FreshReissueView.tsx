@@ -435,7 +435,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       if (correctionFormData["PIN Code"] !== undefined) {
         finalData["PIN Code"] = (correctionFormData["PIN Code"] || "").trim();
       }
-      if (isFieldMissing(["PIN Code", "pin", "pincode"]) && (!finalData["PIN Code"] || finalData["PIN Code"].length !== 6 || !/^\d{6}$/.test(finalData["PIN Code"]))) {
+      if (isFieldMissing(["PIN Code", "pin", "pincode"]) && (!finalData["PIN Code"] || finalData["PIN Code"].length !== 6 || !/^[1-9]\d{5}$/.test(finalData["PIN Code"]))) {
         setUploadMessage({
           text: 'Please enter a valid 6-digit PIN code.',
           type: 'error',
