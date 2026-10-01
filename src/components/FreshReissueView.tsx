@@ -527,18 +527,56 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     )
   );
 
-  // Helper to determine if a specific field is marked missing or empty
+  // Exact Canonical Field Alias Dictionary to eliminate false positive matches
+  const FIELD_ALIAS_MAP: Record<string, string[]> = {
+    given_name: ['givenname', 'givennames', 'firstname', 'applicantgivenname'],
+    surname: ['surname', 'lastname', 'applicantsurname'],
+    dob: ['dateofbirth', 'dob', 'birthdate'],
+    pob: ['placeofbirth', 'pob', 'birthplace'],
+    gender: ['gender', 'sex'],
+    father: ['fathersname', 'father', 'fathername', 'fathersgivenname', 'nameoffatherlegalguardian', 'applicantfathername'],
+    mother: ['mothersname', 'mother', 'mothername', 'mothersgivenname', 'nameofmother', 'applicantmothername'],
+    education: ['educationalqualification', 'education', 'qualification'],
+    employment: ['employmenttype', 'employment'],
+    marital: ['maritalstatus', 'marital'],
+    spouse: ['spousename', 'spouse', 'spousesname', 'spousesgivenname', 'spousegivenname'],
+    house: ['housenoandstreetname', 'houseno', 'streetname', 'house', 'housenumber', 'street'],
+    village: ['villageortownorcity', 'village', 'city', 'town', 'villagetowncity'],
+    state: ['state', 'stateut', 'addrstate'],
+    district: ['district', 'addrdist'],
+    pin: ['pincode', 'pin', 'postalcode'],
+    police: ['policestation', 'police'],
+    indian_mobile: ['indianmobilenumber', 'indianmobile', 'mobile', 'mobilenumber'],
+    italian_l1: ['italianaddressline1', 'addr_l1', 'addrl1', 'italianaddress1', 'italianaddress'],
+    italian_l2: ['italianaddressline2', 'addr_l2', 'addrl2', 'italianaddress2'],
+    italian_mobile: ['italianmobilenumber', 'italianmobile', 'em_mobile', 'emmobile', 'overseasmobile'],
+  };
+
+  const allKnownCleanAliases = new Set(
+    Object.values(FIELD_ALIAS_MAP).flat().map(s => s.toLowerCase().replace(/[^a-z0-9]/g, ''))
+  );
+
+  // Helper to determine if a specific field is explicitly marked missing
   const isFieldMissing = (fieldKeys: string[]): boolean => {
     const missingList = correctionApp?.missing_fields;
-    if (missingList && missingList.length > 0) {
-      const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const cleanTargets = fieldKeys.map(clean);
-      return missingList.some(mf => {
-        const cleanMf = clean(mf);
-        return cleanTargets.some(ct => ct === cleanMf || cleanMf.includes(ct) || ct.includes(cleanMf));
-      });
+    if (!missingList || missingList.length === 0) {
+      // NEVER dump full form if missing_fields is empty!
+      return false;
     }
-    return fieldKeys.some(k => !correctionFormData[k] || correctionFormData[k].trim() === '');
+    const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanTargets = new Set(fieldKeys.map(clean));
+
+    // Also include canonical aliases mapped to this field
+    for (const [_, aliases] of Object.entries(FIELD_ALIAS_MAP)) {
+      if (aliases.some(a => cleanTargets.has(clean(a)))) {
+        aliases.forEach(a => cleanTargets.add(clean(a)));
+      }
+    }
+
+    return missingList.some(mf => {
+      const cleanMf = clean(mf);
+      return cleanTargets.has(cleanMf);
+    });
   };
 
   const hasGeneralMissing = 
@@ -568,33 +606,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     isFieldMissing(["Italian address line 2", "addr_l2"]) ||
     isFieldMissing(["Italian mobile number", "em_mobile", "italian mobile"]);
 
-  const knownFieldKeys = [
-    "Educational qualification", "education", "qualification",
-    "Employment type", "employment",
-    "Marital status", "marital",
-    "Spouse name", "spouse",
-    "Given NAME", "given_name", "first name",
-    "SURNAME", "surname", "last name",
-    "Date of birth", "dob", "birth date",
-    "Place of birth", "pob",
-    "GENDER", "gender", "sex",
-    "Father's name", "father",
-    "Mother's name", "mother",
-    "House No. and Street Name", "house", "houseno",
-    "Village or Town or City", "village", "city",
-    "State", "state/ut",
-    "District",
-    "PIN Code", "pin", "pincode",
-    "Indian mobile number", "mobile",
-    "Italian address line 1", "addr_l1", "italian address",
-    "Italian address line 2", "addr_l2",
-    "Italian mobile number", "em_mobile", "italian mobile",
-    "Police Station", "police"
-  ].map(s => s.toLowerCase().replace(/[^a-z0-9]/g, ''));
-
   const otherMissingFields = (correctionApp?.missing_fields || []).filter(mf => {
     const cleanMf = mf.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return !knownFieldKeys.some(k => k === cleanMf || cleanMf.includes(k) || k.includes(cleanMf));
+    return !allKnownCleanAliases.has(cleanMf);
   });
 
   const handleClearMissingFields = () => {
