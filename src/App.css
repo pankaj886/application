@@ -1819,6 +1819,50 @@ input::-webkit-credentials-auto-fill-button {
   text-transform: capitalize;
 }
 
+.missing-tag-in {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.missing-tag-it {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #065f46;
+}
+
+.missing-tag-gen {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1e40af;
+}
+
+.tag-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-right: 6px;
+  letter-spacing: 0.3px;
+}
+
+.tag-badge-in {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.tag-badge-it {
+  background: #059669;
+  color: #ffffff;
+}
+
+.tag-badge-gen {
+  background: #2563eb;
+  color: #ffffff;
+}
+
 .form-section-title {
   font-size: var(--font-md);
   font-weight: 700;

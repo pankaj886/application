@@ -34,8 +34,17 @@ export function App() {
           setAuthChecking(false);
           return;
         }
-      } catch (secErr) {
-        // If native token verification failed or expired, check localStorage as fallback
+      } catch (secErr: any) {
+        const errStr = String(secErr || '');
+        if (errStr.toLowerCase().includes('expired') || errStr.toLowerCase().includes('inactivity')) {
+          console.warn('Cryptographic session expired:', errStr);
+          localStorage.removeItem('fs_user_session');
+          setUser(null);
+          setAuthChecking(false);
+          return;
+        }
+
+        // Only check localStorage if no previous native token was found at all
         try {
           const rawSaved = localStorage.getItem('fs_user_session');
           if (rawSaved) {
@@ -56,7 +65,7 @@ export function App() {
             }
           }
         } catch (_) {}
-        console.warn('Session verification failed or expired, sign in required:', secErr);
+        console.warn('Session verification failed, sign in required:', secErr);
         localStorage.removeItem('fs_user_session');
       }
       setUser(null);

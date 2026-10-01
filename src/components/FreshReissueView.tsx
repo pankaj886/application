@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   FileCheck
 } from 'lucide-react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 import { 
   automationApi, 
   ApplicationItem, 
@@ -124,6 +126,64 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     app => (app.status === 'NEEDS_CORRECTION' || (app.status === 'ERROR' && (app.error_type === 'PORTAL_FORM_ERROR' || app.error_type === 'STAGE1_7_FAILED'))) && app.folder_name !== dismissedCorrectionFolder
   );
 
+  // Helper to categorize missing fields into Indian vs Italian vs General
+  const classifyMissingField = (fieldName: string) => {
+    const lower = fieldName.toLowerCase();
+    if (
+      lower.includes('italian') ||
+      lower.includes('italy') ||
+      lower.includes('permesso') ||
+      lower.includes('cie')
+    ) {
+      return { type: 'it', label: 'Italian', badgeClass: 'tag-badge-it', tagClass: 'missing-tag-it' };
+    }
+    if (
+      lower.includes('indian') ||
+      lower.includes('pin') ||
+      lower.includes('district') ||
+      lower.includes('state') ||
+      lower.includes('village') ||
+      lower.includes('house') ||
+      lower.includes('police station') ||
+      lower.includes('street')
+    ) {
+      return { type: 'in', label: 'Indian', badgeClass: 'tag-badge-in', tagClass: 'missing-tag-in' };
+    }
+    return { type: 'gen', label: 'General', badgeClass: 'tag-badge-gen', tagClass: 'missing-tag-gen' };
+  };
+
+  // Strict Error Sanitizer to prevent any Cloudflare/tunnel URLs or technical stack traces from reaching user
+  const sanitizeErrorMessage = (err: any): string => {
+    const raw = typeof err === 'string' ? err : (err?.message || '');
+    if (!raw) return 'Error Connecting to Server';
+    const lower = raw.toLowerCase();
+    if (
+      lower.includes('connect') ||
+      lower.includes('fetch') ||
+      lower.includes('gateway') ||
+      lower.includes('network') ||
+      lower.includes('cloudflare') ||
+      lower.includes('trycloudflare') ||
+      lower.includes('502') ||
+      lower.includes('503') ||
+      lower.includes('504') ||
+      lower.includes('520') ||
+      lower.includes('521') ||
+      lower.includes('522') ||
+      lower.includes('523') ||
+      lower.includes('524') ||
+      lower.includes('http://') ||
+      lower.includes('https://') ||
+      lower.includes('load failed') ||
+      lower.includes('failed to fetch') ||
+      lower.includes('aborted') ||
+      lower.includes('timeout')
+    ) {
+      return 'Error Connecting to Server';
+    }
+    return raw;
+  };
+
   useEffect(() => {
     if (correctionApp && correctionApp.extracted_data) {
       const ed = correctionApp.extracted_data;
@@ -140,7 +200,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         "Italian address line 2": ed["Italian address line 2"] || "",
         "Italian mobile number": ed["Italian mobile number"] || "",
         "Marital status": ed["Marital status"] || "SINGLE",
-        "Spouse given name": ed["Spouse given name"] || "",
+        "Spouse name": ed["Spouse name"] || ed["Spouse given name"] || "",
+        "Spouse given name": ed["Spouse given name"] || ed["Spouse name"] || "",
       });
     }
   }, [correctionApp?.folder_name]);
@@ -192,8 +253,68 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     localStorage.setItem('fs_portal_password', val);
   };
 
-  // Window-level file drag & drop listener to capture files dragged anywhere
+  // Window-level file drag & drop listener: Native Tauri OLE drop + HTML5 fallback
   useEffect(() => {
+    let unlistenNative: (() => void) | null = null;
+    let isSubscribed = true;
+
+    // 1. Native Tauri OS-level drag and drop listener (reads files from Windows Explorer)
+    try {
+      getCurrentWindow().onDragDropEvent(async (event) => {
+        if (!isSubscribed) return;
+        if (currentSection !== 'form' || !!correctionApp) return;
+
+        if (event.payload.type === 'over' || event.payload.type === 'enter') {
+          setIsDragActive(true);
+        } else if (event.payload.type === 'leave') {
+          setIsDragActive(false);
+        } else if (event.payload.type === 'drop') {
+          setIsDragActive(false);
+          const paths = event.payload.paths || [];
+          if (paths.length > 0) {
+            const loadedFiles: File[] = [];
+            for (const p of paths) {
+              try {
+                const info = await invoke<{ name: string; data: number[] }>('read_local_file', { path: p });
+                const bytes = new Uint8Array(info.data);
+                const ext = info.name.toLowerCase();
+                const mime = ext.endsWith('.pdf')
+                  ? 'application/pdf'
+                  : ext.match(/\.(jpg|jpeg)$/)
+                  ? 'image/jpeg'
+                  : ext.match(/\.png$/)
+                  ? 'image/png'
+                  : ext.match(/\.docx$/)
+                  ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                  : 'application/octet-stream';
+                loadedFiles.push(new File([bytes], info.name, { type: mime }));
+              } catch (readErr) {
+                console.warn('Native drag drop read failed for:', p, readErr);
+              }
+            }
+            if (loadedFiles.length > 0) {
+              setSelectedFiles((prev) => {
+                const existingKeys = new Set(prev.map((f) => `${f.name}_${f.size}`));
+                const toAdd = loadedFiles.filter((f) => !existingKeys.has(`${f.name}_${f.size}`));
+                return [...prev, ...toAdd];
+              });
+            }
+          }
+        }
+      }).then((unlisten) => {
+        if (isSubscribed) {
+          unlistenNative = unlisten;
+        } else {
+          unlisten();
+        }
+      }).catch((e) => {
+        console.warn('Native onDragDropEvent listener failed:', e);
+      });
+    } catch (e) {
+      console.warn('Could not attach native drag-drop listener:', e);
+    }
+
+    // 2. HTML5 drag and drop fallback
     const handleWindowDragOver = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -216,7 +337,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setIsDragActive(false);
       if (currentSection === 'form' && !correctionApp && e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
         const added = Array.from(e.dataTransfer.files);
-        setSelectedFiles(prev => [...prev, ...added]);
+        setSelectedFiles(prev => {
+          const existingKeys = new Set(prev.map(f => `${f.name}_${f.size}`));
+          const toAdd = added.filter(f => !existingKeys.has(`${f.name}_${f.size}`));
+          return [...prev, ...toAdd];
+        });
       }
     };
 
@@ -225,6 +350,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     window.addEventListener('drop', handleWindowDrop);
 
     return () => {
+      isSubscribed = false;
+      if (unlistenNative) {
+        unlistenNative();
+      }
       window.removeEventListener('dragover', handleWindowDragOver);
       window.removeEventListener('dragleave', handleWindowDragLeave);
       window.removeEventListener('drop', handleWindowDrop);
@@ -270,13 +399,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       if (fileInputRef.current) fileInputRef.current.value = '';
       refreshAllData(targetClientEmail);
     } catch (err: any) {
-      const errMsg = err?.message || 'Error Connecting to Server';
-      const isConnectionIssue = errMsg.toLowerCase().includes('connect') ||
-                               errMsg.toLowerCase().includes('fetch') ||
-                               errMsg.toLowerCase().includes('gateway') ||
-                               errMsg.toLowerCase().includes('network') ||
-                               errMsg.toLowerCase().includes('cloudflare');
-      const friendlyMsg = isConnectionIssue ? 'Error Connecting to Server' : errMsg;
+      const friendlyMsg = sanitizeErrorMessage(err);
       setUploadMessage({
         text: friendlyMsg,
         type: 'error',
@@ -304,8 +427,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         "Marital status": (correctionFormData["Marital status"] || "").trim() || "SINGLE",
       };
 
-      if (finalData["Marital status"] !== "MARRIED") {
-        finalData["Spouse given name"] = "";
+      if (finalData["Marital status"] === "MARRIED") {
+        finalData["Spouse name"] = (correctionFormData["Spouse name"] || correctionFormData["Spouse given name"] || "").trim().toUpperCase();
+        delete finalData["Spouse given name"];
+      } else {
+        finalData["Spouse name"] = null;
+        delete finalData["Spouse given name"];
       }
 
       await automationApi.submitCorrection(
@@ -320,14 +447,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       });
       refreshAllData();
     } catch (err: any) {
-      const errMsg = err?.message || 'Error Connecting to Server';
-      const isConnectionIssue = errMsg.toLowerCase().includes('connect') ||
-                               errMsg.toLowerCase().includes('fetch') ||
-                               errMsg.toLowerCase().includes('gateway') ||
-                               errMsg.toLowerCase().includes('network') ||
-                               errMsg.toLowerCase().includes('cloudflare');
+      const friendlyMsg = sanitizeErrorMessage(err);
       setUploadMessage({
-        text: isConnectionIssue ? 'Error Connecting to Server' : errMsg,
+        text: friendlyMsg,
         type: 'error',
       });
     } finally {
@@ -358,7 +480,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       await refreshAllData();
       onSectionChange('submitted');
     } catch (err: any) {
-      alert(`Final submission note: ${err.message || 'Could not submit to portal'}. Please retry.`);
+      alert(`Final submission note: ${sanitizeErrorMessage(err)}. Please retry.`);
       await refreshAllData();
     } finally {
       setSubmittingArn(null);
@@ -482,9 +604,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   )}
                   {correctionApp.missing_fields && correctionApp.missing_fields.length > 0 && (
                     <div className="missing-tags">
-                      {correctionApp.missing_fields.map((f, i) => (
-                        <span key={i} className="missing-tag">{f}</span>
-                      ))}
+                      {correctionApp.missing_fields.map((f, i) => {
+                        const meta = classifyMissingField(f);
+                        return (
+                          <span key={i} className={`missing-tag ${meta.tagClass}`}>
+                            <span className={`tag-badge ${meta.badgeClass}`}>{meta.label}</span>
+                            {f}
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -560,7 +688,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         setCorrectionFormData(prev => ({
                           ...prev,
                           "Marital status": val,
-                          "Spouse given name": val === "MARRIED" ? (prev["Spouse given name"] || "") : ""
+                          "Spouse name": val === "MARRIED" ? (prev["Spouse name"] || prev["Spouse given name"] || "") : "",
+                          "Spouse given name": val === "MARRIED" ? (prev["Spouse given name"] || prev["Spouse name"] || "") : ""
                         }));
                       }}
                       required
@@ -583,8 +712,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         type="text"
                         className="form-input"
                         placeholder="Spouse full name"
-                        value={correctionFormData["Spouse given name"] || ""}
-                        onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Spouse given name": e.target.value.toUpperCase() }))}
+                        value={correctionFormData["Spouse name"] || correctionFormData["Spouse given name"] || ""}
+                        onChange={(e) => setCorrectionFormData(prev => ({ 
+                          ...prev, 
+                          "Spouse name": e.target.value.toUpperCase(),
+                          "Spouse given name": e.target.value.toUpperCase()
+                        }))}
                         required={correctionFormData["Marital status"] === "MARRIED"}
                       />
                     </div>

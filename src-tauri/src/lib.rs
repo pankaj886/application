@@ -807,6 +807,25 @@ async fn verify_google_session(id_token: String) -> Result<UserSession, String> 
     .map_err(|e| format!("Verification worker failed: {}", e))?
 }
 
+#[derive(serde::Serialize)]
+pub struct LocalFileInfo {
+    pub name: String,
+    pub data: Vec<u8>,
+}
+
+#[tauri::command]
+async fn read_local_file(path: String) -> Result<LocalFileInfo, String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() || !p.is_file() {
+        return Err(format!("File '{}' does not exist or is not a regular file.", path));
+    }
+    let name = p.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "file".to_string());
+    let data = std::fs::read(p).map_err(|e| format!("Failed to read file {}: {}", path, e))?;
+    Ok(LocalFileInfo { name, data })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -827,7 +846,8 @@ pub fn run() {
             verify_secure_session,
             save_secure_session,
             touch_session_activity,
-            clear_saved_session
+            clear_saved_session,
+            read_local_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running Foreigners Studio application");

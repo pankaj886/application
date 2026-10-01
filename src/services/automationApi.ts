@@ -190,7 +190,7 @@ class AutomationApiService {
 
     try {
       const res = await fetch(url, options);
-      if (res.status === 502 || res.status === 503 || res.status === 504) {
+      if (res.status >= 500) {
         throw new Error('Error Connecting to Server');
       }
       return res;
@@ -200,7 +200,7 @@ class AutomationApiService {
       url = `${baseUrl}${cleanPath}`;
       try {
         const retryRes = await fetch(url, options);
-        if (retryRes.status === 502 || retryRes.status === 503 || retryRes.status === 504) {
+        if (retryRes.status >= 500) {
           throw new Error('Error Connecting to Server');
         }
         return retryRes;
@@ -237,7 +237,7 @@ class AutomationApiService {
         method: 'POST',
         body: buildFormData(),
       });
-      if (res.status === 502 || res.status === 503 || res.status === 504) {
+      if (res.status >= 500) {
         throw new Error('Error Connecting to Server');
       }
     } catch (_) {
@@ -249,7 +249,7 @@ class AutomationApiService {
           method: 'POST',
           body: buildFormData(),
         });
-        if (res.status === 502 || res.status === 503 || res.status === 504) {
+        if (res.status >= 500) {
           throw new Error('Error Connecting to Server');
         }
       } catch (innerErr: any) {
@@ -258,8 +258,15 @@ class AutomationApiService {
     }
 
     if (!res.ok) {
+      if (res.status >= 500) {
+        throw new Error('Error Connecting to Server');
+      }
       const err = await res.json().catch(() => ({ detail: 'Upload failed' }));
-      throw new Error(err.detail || 'Upload failed');
+      const msg = err.detail || 'Upload failed';
+      if (msg.toLowerCase().includes('cloudflare') || msg.toLowerCase().includes('connect') || msg.toLowerCase().includes('gateway')) {
+        throw new Error('Error Connecting to Server');
+      }
+      throw new Error(msg);
     }
 
     return await res.json();
