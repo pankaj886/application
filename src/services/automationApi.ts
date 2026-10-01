@@ -10,12 +10,22 @@ const LOCAL_FALLBACK_URL = 'http://127.0.0.1:8001';
 
 export interface ApplicationItem {
   folder_name: string;
-  status: 'UPLOADED' | 'EXTRACTING' | 'EXTRACTED' | 'FILLING_PORTAL' | 'PENDING_CONFIRMATION' | 'SUBMITTING_PORTAL' | 'COMPLETED' | 'ERROR' | string;
+  status: 'UPLOADED' | 'EXTRACTING' | 'EXTRACTED' | 'NEEDS_CORRECTION' | 'FILLING_PORTAL' | 'PENDING_CONFIRMATION' | 'SUBMITTING_PORTAL' | 'COMPLETED' | 'ERROR' | string;
   stage: string;
   arn?: string;
   applicant_name?: string;
   error_type?: string;
   error_message?: string;
+  missing_fields?: string[];
+  missing_details?: Array<{
+    field: string;
+    label: string;
+    type: 'text' | 'dropdown';
+    options?: string[];
+    section: 'general' | 'indian_address' | 'italian_address';
+    current_value?: string;
+  }>;
+  extracted_data?: Record<string, any>;
   has_passport_preview?: boolean;
   has_declaration_preview?: boolean;
   has_receipt?: boolean;
@@ -181,7 +191,7 @@ class AutomationApiService {
     try {
       const res = await fetch(url, options);
       if (res.status === 502 || res.status === 503 || res.status === 504) {
-        throw new Error('Gateway unavailable');
+        throw new Error('Error Connecting to Server');
       }
       return res;
     } catch (_) {
@@ -191,14 +201,11 @@ class AutomationApiService {
       try {
         const retryRes = await fetch(url, options);
         if (retryRes.status === 502 || retryRes.status === 503 || retryRes.status === 504) {
-          throw new Error(`Automation Gateway temporarily unavailable (${retryRes.status}). Please verify the background runner is active.`);
+          throw new Error('Error Connecting to Server');
         }
         return retryRes;
       } catch (retryErr: any) {
-        if (retryErr?.message?.includes('temporarily unavailable')) {
-          throw retryErr;
-        }
-        throw new Error(`Cannot reach automation gateway (${baseUrl}). Please ensure the background runner is running on the host PC.`);
+        throw new Error('Error Connecting to Server');
       }
     }
   }
@@ -231,7 +238,7 @@ class AutomationApiService {
         body: buildFormData(),
       });
       if (res.status === 502 || res.status === 503 || res.status === 504) {
-        throw new Error('Gateway unavailable');
+        throw new Error('Error Connecting to Server');
       }
     } catch (_) {
       // Retry once with refreshed gateway
@@ -243,13 +250,10 @@ class AutomationApiService {
           body: buildFormData(),
         });
         if (res.status === 502 || res.status === 503 || res.status === 504) {
-          throw new Error(`Automation Gateway temporarily unavailable (${res.status}). Please verify the background runner is active.`);
+          throw new Error('Error Connecting to Server');
         }
       } catch (innerErr: any) {
-        if (innerErr?.message?.includes('temporarily unavailable')) {
-          throw innerErr;
-        }
-        throw new Error(`Could not connect to automation gateway (${baseUrl}). Please check network connection and ensure the host PC runner is active.`);
+        throw new Error('Error Connecting to Server');
       }
     }
 
@@ -306,6 +310,27 @@ class AutomationApiService {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: 'Submission failed' }));
       throw new Error(err.detail || 'Final submission failed');
+    }
+
+    return await res.json();
+  }
+
+  public async submitCorrection(
+    clientEmail: string,
+    folderName: string,
+    correctedData: Record<string, any>
+  ): Promise<{ success: boolean; message: string }> {
+    const res = await this.fetchWithAutoRetry(`/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/correct-data`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ corrected_data: correctedData }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to submit corrected details' }));
+      throw new Error(err.detail || 'Failed to submit corrected details');
     }
 
     return await res.json();

@@ -22,31 +22,41 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 960);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
-  // Initialize and verify saved session on startup
+  // Initialize and verify saved cryptographic session on startup
   useEffect(() => {
     const checkSavedSession = async () => {
       try {
-        const rawSaved = localStorage.getItem('fs_user_session');
-        if (rawSaved) {
-          const parsed: UserProfile = JSON.parse(rawSaved);
-          if (parsed && parsed.id_token) {
-            // Verify cryptographically with Google endpoint
-            const verified = await invoke<UserProfile>('verify_google_session', { idToken: parsed.id_token });
-            // Maintain original access token and update session
-            setUser({
-              ...verified,
-              access_token: parsed.access_token || verified.access_token,
-            });
-            localStorage.setItem('fs_user_session', JSON.stringify({
-              ...verified,
-              access_token: parsed.access_token || verified.access_token,
-            }));
-            setAuthChecking(false);
-            return;
-          }
+        // 1. First check local native cryptographic token storage
+        const secureSession = await invoke<UserProfile>('verify_secure_session', { sessionToken: null });
+        if (secureSession && secureSession.email) {
+          setUser(secureSession);
+          localStorage.setItem('fs_user_session', JSON.stringify(secureSession));
+          setAuthChecking(false);
+          return;
         }
-      } catch (err) {
-        console.warn('Session verification failed, requesting new sign in:', err);
+      } catch (secErr) {
+        // If native token verification failed or expired, check localStorage as fallback
+        try {
+          const rawSaved = localStorage.getItem('fs_user_session');
+          if (rawSaved) {
+            const parsed: UserProfile = JSON.parse(rawSaved);
+            if (parsed && parsed.id_token) {
+              const verified = await invoke<UserProfile>('verify_google_session', { idToken: parsed.id_token });
+              setUser({
+                ...verified,
+                access_token: parsed.access_token || verified.access_token,
+              });
+              localStorage.setItem('fs_user_session', JSON.stringify({
+                ...verified,
+                access_token: parsed.access_token || verified.access_token,
+              }));
+              await invoke('save_secure_session', { session: verified }).catch(() => {});
+              setAuthChecking(false);
+              return;
+            }
+          }
+        } catch (_) {}
+        console.warn('Session verification failed or expired, sign in required:', secErr);
         localStorage.removeItem('fs_user_session');
       }
       setUser(null);
@@ -55,6 +65,15 @@ export function App() {
 
     checkSavedSession();
   }, []);
+
+  // Periodic heartbeat to refresh user activity timestamp
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(() => {
+      invoke('touch_session_activity').catch(() => {});
+    }, 5 * 60 * 1000); // Every 5 minutes
+    return () => clearInterval(interval);
+  }, [user]);
 
   // Poll automation counts for badges
   useEffect(() => {
@@ -146,6 +165,7 @@ export function App() {
   const handleLoginSuccess = (newSession: UserProfile) => {
     localStorage.setItem('fs_user_session', JSON.stringify(newSession));
     setUser(newSession);
+    invoke('save_secure_session', { session: newSession }).catch(() => {});
   };
 
   const handleLogoutRequest = () => {
@@ -155,6 +175,7 @@ export function App() {
   const handleConfirmLogout = () => {
     setShowLogoutConfirm(false);
     localStorage.removeItem('fs_user_session');
+    invoke('clear_saved_session').catch(() => {});
     setUser(null);
     setActiveTab('services');
   };

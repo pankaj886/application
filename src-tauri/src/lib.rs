@@ -1,6 +1,13 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use hmac::{Hmac, Mac, KeyInit};
+use sha2::Sha256;
+
+type HmacSha256 = Hmac<Sha256>;
+
+const SESSION_MAX_DURATION_SECS: u64 = 7 * 24 * 3600; // 7 days
+const SESSION_MAX_INACTIVITY_SECS: u64 = 24 * 3600;    // 24 hours
 
 const GOOGLE_CLIENT_ID: &str = "854859981023-n5pmt0docrrpu16lum1tjpddojfqoqlv.apps.googleusercontent.com";
 const GOOGLE_CLIENT_SECRET: &str = "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";
@@ -508,6 +515,193 @@ fn perform_google_login() -> Result<UserSession, String> {
     })
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct SessionPayload {
+    pub email: String,
+    pub name: String,
+    pub picture: String,
+    pub id_token: String,
+    pub access_token: String,
+    pub created_at: u64,
+    pub last_active_at: u64,
+}
+
+fn get_session_dir() -> std::path::PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let p = std::path::PathBuf::from(local_app_data).join("ForeignersStudio").join("session");
+            let _ = std::fs::create_dir_all(&p);
+            return p;
+        }
+    }
+    if let Ok(home) = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")) {
+        let p = std::path::PathBuf::from(home).join(".foreigners_studio").join("session");
+        let _ = std::fs::create_dir_all(&p);
+        return p;
+    }
+    let p = std::env::temp_dir().join("foreigners_studio_session");
+    let _ = std::fs::create_dir_all(&p);
+    p
+}
+
+fn get_or_create_session_secret() -> Vec<u8> {
+    let key_file = get_session_dir().join("session_hmac.key");
+    if let Ok(data) = std::fs::read(&key_file) {
+        if data.len() >= 32 {
+            return data;
+        }
+    }
+    let mut key = vec![0u8; 32];
+    let seed1 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos();
+    let seed2 = std::process::id();
+    let seed_str = format!("fs_secret_token_seed_{}_{}_entropy", seed1, seed2);
+    use sha2::Digest;
+    let hash = sha2::Sha256::digest(seed_str.as_bytes());
+    key.copy_from_slice(&hash[..32]);
+    let _ = std::fs::write(&key_file, &key);
+    key
+}
+
+fn compute_hmac_hex(secret: &[u8], data: &[u8]) -> String {
+    let mut mac = HmacSha256::new_from_slice(secret).expect("HMAC can take key of any size");
+    mac.update(data);
+    let result = mac.finalize();
+    let bytes = result.into_bytes();
+    let mut hex = String::new();
+    for b in bytes {
+        hex.push_str(&format!("{:02x}", b));
+    }
+    hex
+}
+
+fn sign_and_save_session(payload: &SessionPayload) -> Result<String, String> {
+    let json_bytes = serde_json::to_vec(payload).map_err(|e| e.to_string())?;
+    let secret = get_or_create_session_secret();
+    let hmac_hex = compute_hmac_hex(&secret, &json_bytes);
+
+    let mut hex_data = String::new();
+    for b in json_bytes {
+        hex_data.push_str(&format!("{:02x}", b));
+    }
+    let token = format!("{}.{}", hex_data, hmac_hex);
+
+    let session_file = get_session_dir().join("active_session.token");
+    let _ = std::fs::write(&session_file, token.as_bytes());
+
+    Ok(token)
+}
+
+#[tauri::command]
+async fn verify_secure_session(session_token: Option<String>) -> Result<UserSession, String> {
+    let token = match session_token.filter(|s| !s.trim().is_empty()) {
+        Some(t) => t,
+        None => {
+            let session_file = get_session_dir().join("active_session.token");
+            if let Ok(disk_bytes) = std::fs::read(&session_file) {
+                String::from_utf8_lossy(&disk_bytes).trim().to_string()
+            } else {
+                return Err("No active session found.".into());
+            }
+        }
+    };
+
+    if token.is_empty() {
+        return Err("No active session found.".into());
+    }
+
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 2 {
+        let _ = std::fs::remove_file(get_session_dir().join("active_session.token"));
+        return Err("Malformed cryptographic session token.".into());
+    }
+
+    let hex_data = parts[0];
+    let sig_hex = parts[1];
+
+    if hex_data.len() % 2 != 0 {
+        return Err("Invalid token format.".into());
+    }
+    let mut json_bytes = Vec::new();
+    for i in (0..hex_data.len()).step_by(2) {
+        if let Ok(b) = u8::from_str_radix(&hex_data[i..i+2], 16) {
+            json_bytes.push(b);
+        } else {
+            return Err("Invalid token hex encoding.".into());
+        }
+    }
+
+    let secret = get_or_create_session_secret();
+    let expected_sig = compute_hmac_hex(&secret, &json_bytes);
+
+    if expected_sig != sig_hex {
+        let _ = std::fs::remove_file(get_session_dir().join("active_session.token"));
+        return Err("Cryptographic signature verification failed.".into());
+    }
+
+    let mut payload: SessionPayload = serde_json::from_slice(&json_bytes)
+        .map_err(|e| format!("Corrupted session payload: {}", e))?;
+
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+
+    // Check 7-day max session duration
+    if now.saturating_sub(payload.created_at) > SESSION_MAX_DURATION_SECS {
+        let _ = std::fs::remove_file(get_session_dir().join("active_session.token"));
+        return Err("Session expired after 7 days. Please sign in again.".into());
+    }
+
+    // Check 24-hour inactivity limit
+    if now.saturating_sub(payload.last_active_at) > SESSION_MAX_INACTIVITY_SECS {
+        let _ = std::fs::remove_file(get_session_dir().join("active_session.token"));
+        return Err("Session expired due to 24 hours of inactivity. Please sign in again.".into());
+    }
+
+    // Refresh last active timestamp and persist
+    payload.last_active_at = now;
+    let _ = sign_and_save_session(&payload);
+
+    Ok(UserSession {
+        email: payload.email,
+        name: payload.name,
+        picture: payload.picture,
+        id_token: payload.id_token,
+        access_token: payload.access_token,
+        expires_at: payload.created_at + SESSION_MAX_DURATION_SECS,
+    })
+}
+
+#[tauri::command]
+async fn save_secure_session(session: UserSession) -> Result<String, String> {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let payload = SessionPayload {
+        email: session.email,
+        name: session.name,
+        picture: session.picture,
+        id_token: session.id_token,
+        access_token: session.access_token,
+        created_at: now,
+        last_active_at: now,
+    };
+    sign_and_save_session(&payload)
+}
+
+#[tauri::command]
+async fn touch_session_activity() -> Result<(), String> {
+    let session_file = get_session_dir().join("active_session.token");
+    if let Ok(disk_bytes) = std::fs::read(&session_file) {
+        let token = String::from_utf8_lossy(&disk_bytes).trim().to_string();
+        let _ = verify_secure_session(Some(token)).await;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn clear_saved_session() -> Result<(), String> {
+    let session_file = get_session_dir().join("active_session.token");
+    let _ = std::fs::remove_file(session_file);
+    Ok(())
+}
+
 #[tauri::command]
 async fn start_google_login(window: tauri::Window) -> Result<UserSession, String> {
     let session = tauri::async_runtime::spawn_blocking(move || {
@@ -515,6 +709,19 @@ async fn start_google_login(window: tauri::Window) -> Result<UserSession, String
     })
     .await
     .map_err(|e| format!("Login worker task failed: {}", e))??;
+
+    // Save cryptographic 7-day session token to disk
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let payload = SessionPayload {
+        email: session.email.clone(),
+        name: session.name.clone(),
+        picture: session.picture.clone(),
+        id_token: session.id_token.clone(),
+        access_token: session.access_token.clone(),
+        created_at: now,
+        last_active_at: now,
+    };
+    let _ = sign_and_save_session(&payload);
 
     // Bring Foreigners Studio window to the foreground smoothly
     let _ = window.unminimize();
@@ -526,6 +733,11 @@ async fn start_google_login(window: tauri::Window) -> Result<UserSession, String
 
 #[tauri::command]
 async fn verify_google_session(id_token: String) -> Result<UserSession, String> {
+    // Check local cryptographic session first if valid
+    if let Ok(sec_session) = verify_secure_session(None).await {
+        return Ok(sec_session);
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "windows")]
         let curl_cmd = "curl.exe";
@@ -568,14 +780,28 @@ async fn verify_google_session(id_token: String) -> Result<UserSession, String> 
         let name = verify_json.get("name").and_then(|v| v.as_str()).unwrap_or("User").to_string();
         let picture = verify_json.get("picture").and_then(|v| v.as_str()).unwrap_or("").to_string();
 
-        Ok(UserSession {
+        let session = UserSession {
             email,
             name,
             picture,
-            id_token,
+            id_token: id_token.clone(),
             access_token: String::new(),
             expires_at: exp,
-        })
+        };
+
+        // Create cryptographic 7-day token
+        let payload = SessionPayload {
+            email: session.email.clone(),
+            name: session.name.clone(),
+            picture: session.picture.clone(),
+            id_token,
+            access_token: String::new(),
+            created_at: now,
+            last_active_at: now,
+        };
+        let _ = sign_and_save_session(&payload);
+
+        Ok(session)
     })
     .await
     .map_err(|e| format!("Verification worker failed: {}", e))?
@@ -597,7 +823,11 @@ pub fn run() {
             download_installer,
             apply_update_and_restart,
             start_google_login,
-            verify_google_session
+            verify_google_session,
+            verify_secure_session,
+            save_secure_session,
+            touch_session_activity,
+            clear_saved_session
         ])
         .run(tauri::generate_context!())
         .expect("error while running Foreigners Studio application");

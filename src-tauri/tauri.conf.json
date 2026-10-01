@@ -26,7 +26,8 @@
         "center": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "devtools": false
+        "devtools": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {
