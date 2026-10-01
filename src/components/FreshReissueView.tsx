@@ -190,7 +190,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setCorrectionFormData({
         "Educational qualification": ed["Educational qualification"] || "10TH PASS AND ABOVE",
         "Employment type": ed["Employment type"] || "PRIVATE",
-        "PIN Code": ed["PIN Code"] || "332301",
+        "PIN Code": ed["PIN Code"] || "",
         "State": ed["State"] || "",
         "District": ed["District"] || "",
         "House No. and Street Name": ed["House No. and Street Name"] || "VPO",
@@ -433,7 +433,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       };
 
       if (correctionFormData["PIN Code"] !== undefined) {
-        finalData["PIN Code"] = (correctionFormData["PIN Code"] || "").trim() || "332301";
+        finalData["PIN Code"] = (correctionFormData["PIN Code"] || "").trim();
+      }
+      if (isFieldMissing(["PIN Code", "pin", "pincode"]) && (!finalData["PIN Code"] || finalData["PIN Code"].length !== 6 || !/^\d{6}$/.test(finalData["PIN Code"]))) {
+        setUploadMessage({
+          text: 'Please enter a valid 6-digit PIN code.',
+          type: 'error',
+        });
+        setIsSubmittingCorrection(false);
+        return;
       }
       if (correctionFormData["House No. and Street Name"] !== undefined) {
         finalData["House No. and Street Name"] = (correctionFormData["House No. and Street Name"] || "").trim() || "VPO";
@@ -1075,7 +1083,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             type="text"
                             maxLength={6}
                             className="form-input"
-                            placeholder="e.g. 332301"
+                            placeholder="e.g. 110001"
                             value={correctionFormData["PIN Code"] || ""}
                             onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "PIN Code": e.target.value.trim() }))}
                             required

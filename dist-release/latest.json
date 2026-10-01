@@ -1,13 +1,13 @@
 {
-  "version": "1.0.19",
-  "notes": "Foreigners Studio v1.0.19: Focused missing fields correction UI, pre-filled suggested values with single-action submission, official 3-line passport address formatting, and enhanced portal automation stability.",
-  "pub_date": "2026-10-01T10:00:00Z",
+  "version": "1.0.20",
+  "notes": "Foreigners Studio v1.0.20: Fully dynamic PIN code extraction and resolution without mock/demo fallbacks, explicit missing PIN code prompt, robust Indian postal validation, and enhanced portal submission stability.",
+  "pub_date": "2026-10-01T11:00:00Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.19/Foreigners_Studio_1.0.19_x64-setup.exe"
+      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.20/Foreigners_Studio_1.0.20_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.19/Foreigners_Studio_1.0.19_universal.dmg"
+      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.20/Foreigners_Studio_1.0.20_universal.dmg"
     }
   }
 }
