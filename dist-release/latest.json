@@ -1,13 +1,13 @@
 {
-  "version": "1.0.18",
-  "notes": "Foreigners Studio v1.0.18: Native Windows drag-and-drop file upload, strict error sanitization, missing data in-app correction workflow, smart Indian address parsing with PIN fallback, persistent portal credentials, and cryptographic 7-day session management.",
-  "pub_date": "2026-10-01T08:30:00Z",
+  "version": "1.0.19",
+  "notes": "Foreigners Studio v1.0.19: Focused missing fields correction UI, pre-filled suggested values with single-action submission, official 3-line passport address formatting, and enhanced portal automation stability.",
+  "pub_date": "2026-10-01T10:00:00Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.18/Foreigners_Studio_1.0.18_x64-setup.exe"
+      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.19/Foreigners_Studio_1.0.19_x64-setup.exe"
     },
     "darwin-universal": {
-      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.18/Foreigners_Studio_1.0.18_universal.dmg"
+      "url": "https://github.com/pankaj886/foreigners-studio-releases/releases/download/v1.0.19/Foreigners_Studio_1.0.19_universal.dmg"
     }
   }
 }

@@ -202,9 +202,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         "Marital status": ed["Marital status"] || "SINGLE",
         "Spouse name": ed["Spouse name"] || ed["Spouse given name"] || "",
         "Spouse given name": ed["Spouse given name"] || ed["Spouse name"] || "",
+        "Given NAME": ed["Given NAME"] || ed["given_name"] || "",
+        "SURNAME": ed["SURNAME"] || ed["surname"] || "",
+        "Date of birth": ed["Date of birth"] || ed["dob"] || "",
+        "Place of birth": ed["Place of birth"] || ed["pob"] || "",
+        "GENDER": ed["GENDER"] || ed["gender"] || "M",
+        "Father's name": ed["Father's name"] || ed["father"] || "",
+        "Mother's name": ed["Mother's name"] || ed["mother"] || "",
+        "Police Station": ed["Police Station"] || ed["police"] || "",
+        ...ed,
       });
     }
-  }, [correctionApp?.folder_name]);
+  }, [correctionApp?.folder_name, correctionApp?.updated_at]);
 
   // Handle file drop & selection
   const handleFileDrop = (e: React.DragEvent) => {
@@ -419,13 +428,25 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setUploadMessage(null);
 
       const finalData: Record<string, any> = {
+        ...(correctionApp.extracted_data || {}),
         ...correctionFormData,
-        "PIN Code": (correctionFormData["PIN Code"] || "").trim() || "332301",
-        "House No. and Street Name": (correctionFormData["House No. and Street Name"] || "").trim() || "VPO",
-        "Educational qualification": (correctionFormData["Educational qualification"] || "").trim() || "10TH PASS AND ABOVE",
-        "Employment type": (correctionFormData["Employment type"] || "").trim() || "PRIVATE",
-        "Marital status": (correctionFormData["Marital status"] || "").trim() || "SINGLE",
       };
+
+      if (correctionFormData["PIN Code"] !== undefined) {
+        finalData["PIN Code"] = (correctionFormData["PIN Code"] || "").trim() || "332301";
+      }
+      if (correctionFormData["House No. and Street Name"] !== undefined) {
+        finalData["House No. and Street Name"] = (correctionFormData["House No. and Street Name"] || "").trim() || "VPO";
+      }
+      if (correctionFormData["Educational qualification"] !== undefined) {
+        finalData["Educational qualification"] = (correctionFormData["Educational qualification"] || "").trim() || "10TH PASS AND ABOVE";
+      }
+      if (correctionFormData["Employment type"] !== undefined) {
+        finalData["Employment type"] = (correctionFormData["Employment type"] || "").trim() || "PRIVATE";
+      }
+      if (correctionFormData["Marital status"] !== undefined) {
+        finalData["Marital status"] = (correctionFormData["Marital status"] || "").trim() || "SINGLE";
+      }
 
       if (finalData["Marital status"] === "MARRIED") {
         finalData["Spouse name"] = (correctionFormData["Spouse name"] || correctionFormData["Spouse given name"] || "").trim().toUpperCase();
@@ -505,6 +526,109 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       (a.error_message && a.error_message.toLowerCase().includes('authentication failed'))
     )
   );
+
+  // Helper to determine if a specific field is marked missing or empty
+  const isFieldMissing = (fieldKeys: string[]): boolean => {
+    const missingList = correctionApp?.missing_fields;
+    if (missingList && missingList.length > 0) {
+      const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const cleanTargets = fieldKeys.map(clean);
+      return missingList.some(mf => {
+        const cleanMf = clean(mf);
+        return cleanTargets.some(ct => ct === cleanMf || cleanMf.includes(ct) || ct.includes(cleanMf));
+      });
+    }
+    return fieldKeys.some(k => !correctionFormData[k] || correctionFormData[k].trim() === '');
+  };
+
+  const hasGeneralMissing = 
+    isFieldMissing(["Educational qualification", "education", "qualification"]) ||
+    isFieldMissing(["Employment type", "employment"]) ||
+    isFieldMissing(["Marital status", "marital"]) ||
+    (correctionFormData["Marital status"] === "MARRIED" && isFieldMissing(["Spouse name", "spouse"])) ||
+    isFieldMissing(["Given NAME", "given_name", "first name"]) ||
+    isFieldMissing(["SURNAME", "surname", "last name"]) ||
+    isFieldMissing(["Date of birth", "dob", "birth date"]) ||
+    isFieldMissing(["Place of birth", "pob"]) ||
+    isFieldMissing(["GENDER", "gender", "sex"]) ||
+    isFieldMissing(["Father's name", "father"]) ||
+    isFieldMissing(["Mother's name", "mother"]);
+
+  const hasIndianAddressMissing =
+    isFieldMissing(["House No. and Street Name", "house", "houseno"]) ||
+    isFieldMissing(["Village or Town or City", "village", "city"]) ||
+    isFieldMissing(["State", "state/ut"]) ||
+    isFieldMissing(["District"]) ||
+    isFieldMissing(["PIN Code", "pin", "pincode"]) ||
+    isFieldMissing(["Indian mobile number", "mobile"]) ||
+    isFieldMissing(["Police Station", "police"]);
+
+  const hasItalianAddressMissing =
+    isFieldMissing(["Italian address line 1", "addr_l1", "italian address"]) ||
+    isFieldMissing(["Italian address line 2", "addr_l2"]) ||
+    isFieldMissing(["Italian mobile number", "em_mobile", "italian mobile"]);
+
+  const knownFieldKeys = [
+    "Educational qualification", "education", "qualification",
+    "Employment type", "employment",
+    "Marital status", "marital",
+    "Spouse name", "spouse",
+    "Given NAME", "given_name", "first name",
+    "SURNAME", "surname", "last name",
+    "Date of birth", "dob", "birth date",
+    "Place of birth", "pob",
+    "GENDER", "gender", "sex",
+    "Father's name", "father",
+    "Mother's name", "mother",
+    "House No. and Street Name", "house", "houseno",
+    "Village or Town or City", "village", "city",
+    "State", "state/ut",
+    "District",
+    "PIN Code", "pin", "pincode",
+    "Indian mobile number", "mobile",
+    "Italian address line 1", "addr_l1", "italian address",
+    "Italian address line 2", "addr_l2",
+    "Italian mobile number", "em_mobile", "italian mobile",
+    "Police Station", "police"
+  ].map(s => s.toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+  const otherMissingFields = (correctionApp?.missing_fields || []).filter(mf => {
+    const cleanMf = mf.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return !knownFieldKeys.some(k => k === cleanMf || cleanMf.includes(k) || k.includes(cleanMf));
+  });
+
+  const handleClearMissingFields = () => {
+    setCorrectionFormData(prev => {
+      const updated = { ...prev };
+      if (isFieldMissing(["PIN Code", "pin", "pincode"])) updated["PIN Code"] = "";
+      if (isFieldMissing(["Educational qualification", "education", "qualification"])) updated["Educational qualification"] = "";
+      if (isFieldMissing(["Employment type", "employment"])) updated["Employment type"] = "";
+      if (isFieldMissing(["Marital status", "marital"])) {
+        updated["Marital status"] = "SINGLE";
+        updated["Spouse name"] = "";
+      }
+      if (isFieldMissing(["Spouse name", "spouse"])) updated["Spouse name"] = "";
+      if (isFieldMissing(["House No. and Street Name", "house", "houseno"])) updated["House No. and Street Name"] = "";
+      if (isFieldMissing(["Village or Town or City", "village", "city"])) updated["Village or Town or City"] = "";
+      if (isFieldMissing(["State", "state/ut"])) updated["State"] = "";
+      if (isFieldMissing(["District"])) updated["District"] = "";
+      if (isFieldMissing(["Indian mobile number", "mobile"])) updated["Indian mobile number"] = "";
+      if (isFieldMissing(["Italian address line 1", "addr_l1", "italian address"])) updated["Italian address line 1"] = "";
+      if (isFieldMissing(["Italian address line 2", "addr_l2"])) updated["Italian address line 2"] = "";
+      if (isFieldMissing(["Italian mobile number", "em_mobile", "italian mobile"])) updated["Italian mobile number"] = "";
+      if (isFieldMissing(["Given NAME", "given_name", "first name"])) updated["Given NAME"] = "";
+      if (isFieldMissing(["SURNAME", "surname", "last name"])) updated["SURNAME"] = "";
+      if (isFieldMissing(["Date of birth", "dob", "birth date"])) updated["Date of birth"] = "";
+      if (isFieldMissing(["Place of birth", "pob"])) updated["Place of birth"] = "";
+      if (isFieldMissing(["Father's name", "father"])) updated["Father's name"] = "";
+      if (isFieldMissing(["Mother's name", "mother"])) updated["Mother's name"] = "";
+      if (isFieldMissing(["Police Station", "police"])) updated["Police Station"] = "";
+      otherMissingFields.forEach(f => {
+        updated[f] = "";
+      });
+      return updated;
+    });
+  };
 
   return (
     <div className="fresh-reissue-container">
@@ -598,7 +722,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               <div className="missing-fields-banner">
                 <AlertCircle className="missing-alert-icon" />
                 <div className="missing-content">
-                  <span className="missing-title">Action Required: Complete or correct the information below to continue</span>
+                  <span className="missing-title">Some information from your side was missing and we suggested these values. Please review or edit before submitting.</span>
                   {correctionApp.error_message && (
                     <span className="missing-error-msg">{correctionApp.error_message}</span>
                   )}
@@ -630,239 +754,442 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               )}
 
               <form onSubmit={handleSubmitCorrection} className="fresh-form">
-                {/* SECTION: GENERAL & APPLICANT DETAILS */}
-                <h3 className="form-section-title">General Details</h3>
-                <div className="form-grid-2">
-                  <div className="input-group">
-                    <label htmlFor="corrQualification" className="input-label">
-                      Educational Qualification <span className="required-star">*</span>
-                    </label>
-                    <select
-                      id="corrQualification"
-                      className="form-input"
-                      value={correctionFormData["Educational qualification"] || "10TH PASS AND ABOVE"}
-                      onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Educational qualification": e.target.value }))}
-                      required
-                    >
-                      <option value="GRADUATE AND ABOVE">GRADUATE AND ABOVE</option>
-                      <option value="10TH PASS AND ABOVE">10TH PASS AND ABOVE</option>
-                      <option value="BETWEEN 8TH AND 9TH STANDARD">BETWEEN 8TH AND 9TH STANDARD</option>
-                      <option value="7TH PASS OR LESS">7TH PASS OR LESS</option>
-                    </select>
-                  </div>
+                {/* SECTION: GENERAL & APPLICANT DETAILS (ONLY IF MISSING) */}
+                {hasGeneralMissing && (
+                  <>
+                    <h3 className="form-section-title">General Details</h3>
+                    <div className="form-grid-2">
+                      {isFieldMissing(["Given NAME", "given_name", "first name"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrGivenName" className="input-label">
+                            Given Name <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrGivenName"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. AMIT"
+                            value={correctionFormData["Given NAME"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Given NAME": e.target.value.toUpperCase() }))}
+                            required
+                          />
+                        </div>
+                      )}
 
-                  <div className="input-group">
-                    <label htmlFor="corrEmployment" className="input-label">
-                      Employment Type <span className="required-star">*</span>
-                    </label>
-                    <select
-                      id="corrEmployment"
-                      className="form-input"
-                      value={correctionFormData["Employment type"] || "PRIVATE"}
-                      onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Employment type": e.target.value }))}
-                      required
-                    >
-                      <option value="PRIVATE">PRIVATE</option>
-                      <option value="GOVERNMENT">GOVERNMENT</option>
-                      <option value="SELF EMPLOYED">SELF EMPLOYED</option>
-                      <option value="HOME MAKER">HOME MAKER</option>
-                      <option value="STUDENT">STUDENT</option>
-                      <option value="NOT EMPLOYED">NOT EMPLOYED</option>
-                      <option value="RETIRED PRIVATE SERVANT">RETIRED PRIVATE SERVANT</option>
-                      <option value="RETIRED GOVERNMENT SERVANT">RETIRED GOVERNMENT SERVANT</option>
-                      <option value="PSU">PSU</option>
-                      <option value="STATUTORY BODY">STATUTORY BODY</option>
-                    </select>
-                  </div>
+                      {isFieldMissing(["SURNAME", "surname", "last name"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrSurname" className="input-label">
+                            Surname
+                          </label>
+                          <input
+                            id="corrSurname"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. KUMAR"
+                            value={correctionFormData["SURNAME"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "SURNAME": e.target.value.toUpperCase() }))}
+                          />
+                        </div>
+                      )}
 
-                  <div className="input-group">
-                    <label htmlFor="corrMarital" className="input-label">
-                      Marital Status <span className="required-star">*</span>
-                    </label>
-                    <select
-                      id="corrMarital"
-                      className="form-input"
-                      value={correctionFormData["Marital status"] || "SINGLE"}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setCorrectionFormData(prev => ({
-                          ...prev,
-                          "Marital status": val,
-                          "Spouse name": val === "MARRIED" ? (prev["Spouse name"] || prev["Spouse given name"] || "") : "",
-                          "Spouse given name": val === "MARRIED" ? (prev["Spouse given name"] || prev["Spouse name"] || "") : ""
-                        }));
-                      }}
-                      required
-                    >
-                      <option value="SINGLE">SINGLE</option>
-                      <option value="MARRIED">MARRIED</option>
-                      <option value="WIDOW/ WIDOWER">WIDOW/ WIDOWER</option>
-                      <option value="DIVORCED">DIVORCED</option>
-                      <option value="SEPARATED">SEPARATED</option>
-                    </select>
-                  </div>
+                      {isFieldMissing(["Date of birth", "dob", "birth date"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrDob" className="input-label">
+                            Date of Birth <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrDob"
+                            type="text"
+                            className="form-input"
+                            placeholder="DD/MM/YYYY"
+                            value={correctionFormData["Date of birth"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Date of birth": e.target.value.trim() }))}
+                            required
+                          />
+                        </div>
+                      )}
 
-                  {correctionFormData["Marital status"] === "MARRIED" && (
-                    <div className="input-group">
-                      <label htmlFor="corrSpouse" className="input-label">
-                        Spouse Name <span className="required-star">*</span>
-                      </label>
-                      <input
-                        id="corrSpouse"
-                        type="text"
-                        className="form-input"
-                        placeholder="Spouse full name"
-                        value={correctionFormData["Spouse name"] || correctionFormData["Spouse given name"] || ""}
-                        onChange={(e) => setCorrectionFormData(prev => ({ 
-                          ...prev, 
-                          "Spouse name": e.target.value.toUpperCase(),
-                          "Spouse given name": e.target.value.toUpperCase()
-                        }))}
-                        required={correctionFormData["Marital status"] === "MARRIED"}
-                      />
+                      {isFieldMissing(["Place of birth", "pob"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrPob" className="input-label">
+                            Place of Birth <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrPob"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. JAIPUR"
+                            value={correctionFormData["Place of birth"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Place of birth": e.target.value.toUpperCase() }))}
+                            required
+                          />
+                        </div>
+                      )}
+
+                      {isFieldMissing(["GENDER", "gender", "sex"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrGender" className="input-label">
+                            Gender <span className="required-star">*</span>
+                          </label>
+                          <select
+                            id="corrGender"
+                            className="form-input"
+                            value={correctionFormData["GENDER"] || "MALE"}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "GENDER": e.target.value }))}
+                            required
+                          >
+                            <option value="MALE">MALE</option>
+                            <option value="FEMALE">FEMALE</option>
+                            <option value="TRANSGENDER">TRANSGENDER</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {isFieldMissing(["Father's name", "father"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrFather" className="input-label">
+                            Father's Name <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrFather"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. RAMESH CHAND"
+                            value={correctionFormData["Father's name"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Father's name": e.target.value.toUpperCase() }))}
+                            required
+                          />
+                        </div>
+                      )}
+
+                      {isFieldMissing(["Mother's name", "mother"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrMother" className="input-label">
+                            Mother's Name <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrMother"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. SUNITA DEVI"
+                            value={correctionFormData["Mother's name"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Mother's name": e.target.value.toUpperCase() }))}
+                            required
+                          />
+                        </div>
+                      )}
+
+                      {isFieldMissing(["Educational qualification", "education", "qualification"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrQualification" className="input-label">
+                            Educational Qualification <span className="required-star">*</span>
+                          </label>
+                          <select
+                            id="corrQualification"
+                            className="form-input"
+                            value={correctionFormData["Educational qualification"] || "10TH PASS AND ABOVE"}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Educational qualification": e.target.value }))}
+                            required
+                          >
+                            <option value="GRADUATE AND ABOVE">GRADUATE AND ABOVE</option>
+                            <option value="10TH PASS AND ABOVE">10TH PASS AND ABOVE</option>
+                            <option value="BETWEEN 8TH AND 9TH STANDARD">BETWEEN 8TH AND 9TH STANDARD</option>
+                            <option value="7TH PASS OR LESS">7TH PASS OR LESS</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {isFieldMissing(["Employment type", "employment"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrEmployment" className="input-label">
+                            Employment Type <span className="required-star">*</span>
+                          </label>
+                          <select
+                            id="corrEmployment"
+                            className="form-input"
+                            value={correctionFormData["Employment type"] || "PRIVATE"}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Employment type": e.target.value }))}
+                            required
+                          >
+                            <option value="PRIVATE">PRIVATE</option>
+                            <option value="GOVERNMENT">GOVERNMENT</option>
+                            <option value="SELF EMPLOYED">SELF EMPLOYED</option>
+                            <option value="HOME MAKER">HOME MAKER</option>
+                            <option value="STUDENT">STUDENT</option>
+                            <option value="NOT EMPLOYED">NOT EMPLOYED</option>
+                            <option value="RETIRED PRIVATE SERVANT">RETIRED PRIVATE SERVANT</option>
+                            <option value="RETIRED GOVERNMENT SERVANT">RETIRED GOVERNMENT SERVANT</option>
+                            <option value="PSU">PSU</option>
+                            <option value="STATUTORY BODY">STATUTORY BODY</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {isFieldMissing(["Marital status", "marital"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrMarital" className="input-label">
+                            Marital Status <span className="required-star">*</span>
+                          </label>
+                          <select
+                            id="corrMarital"
+                            className="form-input"
+                            value={correctionFormData["Marital status"] || "SINGLE"}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCorrectionFormData(prev => ({
+                                ...prev,
+                                "Marital status": val,
+                                "Spouse name": val === "MARRIED" ? (prev["Spouse name"] || prev["Spouse given name"] || "") : "",
+                                "Spouse given name": val === "MARRIED" ? (prev["Spouse given name"] || prev["Spouse name"] || "") : ""
+                              }));
+                            }}
+                            required
+                          >
+                            <option value="SINGLE">SINGLE</option>
+                            <option value="MARRIED">MARRIED</option>
+                            <option value="WIDOW/ WIDOWER">WIDOW/ WIDOWER</option>
+                            <option value="DIVORCED">DIVORCED</option>
+                            <option value="SEPARATED">SEPARATED</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {correctionFormData["Marital status"] === "MARRIED" && (isFieldMissing(["Spouse name", "spouse"]) || isFieldMissing(["Marital status", "marital"])) && (
+                        <div className="input-group">
+                          <label htmlFor="corrSpouse" className="input-label">
+                            Spouse Name <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrSpouse"
+                            type="text"
+                            className="form-input"
+                            placeholder="Spouse full name"
+                            value={correctionFormData["Spouse name"] || correctionFormData["Spouse given name"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ 
+                              ...prev, 
+                              "Spouse name": e.target.value.toUpperCase(),
+                              "Spouse given name": e.target.value.toUpperCase()
+                            }))}
+                            required={correctionFormData["Marital status"] === "MARRIED"}
+                          />
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </>
+                )}
 
-                {/* SECTION: PRESENT RESIDENTIAL ADDRESS (INDIA) */}
-                <h3 className="form-section-title">Present Residential Address (India)</h3>
-                <div className="form-grid-2">
-                  <div className="input-group">
-                    <label htmlFor="corrHouse" className="input-label">
-                      House No. and Street Name <span className="required-star">*</span>
-                    </label>
-                    <input
-                      id="corrHouse"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. VPO or House / Ward No."
-                      value={correctionFormData["House No. and Street Name"] || ""}
-                      onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "House No. and Street Name": e.target.value.toUpperCase() }))}
-                      required
-                    />
-                  </div>
+                {/* SECTION: PRESENT RESIDENTIAL ADDRESS (INDIA) (ONLY IF MISSING) */}
+                {hasIndianAddressMissing && (
+                  <>
+                    <h3 className="form-section-title">Present Residential Address (India)</h3>
+                    <div className="form-grid-2">
+                      {isFieldMissing(["House No. and Street Name", "house", "houseno"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrHouse" className="input-label">
+                            House No. and Street Name <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrHouse"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. VPO or House / Ward No."
+                            value={correctionFormData["House No. and Street Name"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "House No. and Street Name": e.target.value.toUpperCase() }))}
+                            required
+                          />
+                        </div>
+                      )}
 
-                  <div className="input-group">
-                    <label htmlFor="corrVillage" className="input-label">
-                      Village or Town or City <span className="required-star">*</span>
-                    </label>
-                    <input
-                      id="corrVillage"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. FATEHPUR SHEKHAWATI"
-                      value={correctionFormData["Village or Town or City"] || ""}
-                      onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Village or Town or City": e.target.value.toUpperCase() }))}
-                      required
-                    />
-                  </div>
+                      {isFieldMissing(["Village or Town or City", "village", "city"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrVillage" className="input-label">
+                            Village or Town or City <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrVillage"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. FATEHPUR SHEKHAWATI"
+                            value={correctionFormData["Village or Town or City"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Village or Town or City": e.target.value.toUpperCase() }))}
+                            required
+                          />
+                        </div>
+                      )}
 
-                  <div className="input-group">
-                    <label htmlFor="corrState" className="input-label">
-                      State <span className="required-star">*</span>
-                    </label>
-                    <input
-                      id="corrState"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. RAJASTHAN"
-                      value={correctionFormData["State"] || ""}
-                      onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "State": e.target.value.toUpperCase() }))}
-                      required
-                    />
-                  </div>
+                      {isFieldMissing(["State", "state/ut"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrState" className="input-label">
+                            State <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrState"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. RAJASTHAN"
+                            value={correctionFormData["State"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "State": e.target.value.toUpperCase() }))}
+                            required
+                          />
+                        </div>
+                      )}
 
-                  <div className="input-group">
-                    <label htmlFor="corrDistrict" className="input-label">
-                      District <span className="required-star">*</span>
-                    </label>
-                    <input
-                      id="corrDistrict"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. SIKAR"
-                      value={correctionFormData["District"] || ""}
-                      onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "District": e.target.value.toUpperCase() }))}
-                      required
-                    />
-                  </div>
+                      {isFieldMissing(["District"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrDistrict" className="input-label">
+                            District <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrDistrict"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. SIKAR"
+                            value={correctionFormData["District"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "District": e.target.value.toUpperCase() }))}
+                            required
+                          />
+                        </div>
+                      )}
 
-                  <div className="input-group">
-                    <label htmlFor="corrPin" className="input-label">
-                      PIN Code <span className="required-star">*</span>
-                    </label>
-                    <input
-                      id="corrPin"
-                      type="text"
-                      maxLength={6}
-                      className="form-input"
-                      placeholder="e.g. 332301"
-                      value={correctionFormData["PIN Code"] || ""}
-                      onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "PIN Code": e.target.value.trim() }))}
-                      required
-                    />
-                  </div>
+                      {isFieldMissing(["PIN Code", "pin", "pincode"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrPin" className="input-label">
+                            PIN Code <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrPin"
+                            type="text"
+                            maxLength={6}
+                            className="form-input"
+                            placeholder="e.g. 332301"
+                            value={correctionFormData["PIN Code"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "PIN Code": e.target.value.trim() }))}
+                            required
+                          />
+                        </div>
+                      )}
 
-                  <div className="input-group">
-                    <label htmlFor="corrIndianMobile" className="input-label">
-                      Indian Mobile Number
-                    </label>
-                    <input
-                      id="corrIndianMobile"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. 9876543210"
-                      value={correctionFormData["Indian mobile number"] || ""}
-                      onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Indian mobile number": e.target.value.trim() }))}
-                    />
-                  </div>
-                </div>
+                      {isFieldMissing(["Police Station", "police"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrPolice" className="input-label">
+                            Police Station
+                          </label>
+                          <input
+                            id="corrPolice"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. KOTWALI"
+                            value={correctionFormData["Police Station"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Police Station": e.target.value.toUpperCase() }))}
+                          />
+                        </div>
+                      )}
 
-                {/* SECTION: ADDRESS IN ITALY */}
-                <h3 className="form-section-title">Address in Italy</h3>
-                <div className="form-grid-2">
-                  <div className="input-group">
-                    <label htmlFor="corrItLine1" className="input-label">
-                      Italian Address Line 1
-                    </label>
-                    <input
-                      id="corrItLine1"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. VIA ROMA 10"
-                      value={correctionFormData["Italian address line 1"] || ""}
-                      onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Italian address line 1": e.target.value.toUpperCase() }))}
-                    />
-                  </div>
+                      {isFieldMissing(["Indian mobile number", "mobile"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrIndianMobile" className="input-label">
+                            Indian Mobile Number
+                          </label>
+                          <input
+                            id="corrIndianMobile"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. 9876543210"
+                            value={correctionFormData["Indian mobile number"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Indian mobile number": e.target.value.trim() }))}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
 
-                  <div className="input-group">
-                    <label htmlFor="corrItLine2" className="input-label">
-                      Italian Address Line 2
-                    </label>
-                    <input
-                      id="corrItLine2"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. MILANO"
-                      value={correctionFormData["Italian address line 2"] || ""}
-                      onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Italian address line 2": e.target.value.toUpperCase() }))}
-                    />
-                  </div>
+                {/* SECTION: ADDRESS IN ITALY (ONLY IF MISSING) */}
+                {hasItalianAddressMissing && (
+                  <>
+                    <h3 className="form-section-title">Address in Italy</h3>
+                    <div className="form-grid-2">
+                      {isFieldMissing(["Italian address line 1", "addr_l1", "italian address"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrItLine1" className="input-label">
+                            Italian Address Line 1
+                          </label>
+                          <input
+                            id="corrItLine1"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. VIA ROMA 10"
+                            value={correctionFormData["Italian address line 1"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Italian address line 1": e.target.value.toUpperCase() }))}
+                          />
+                        </div>
+                      )}
 
-                  <div className="input-group">
-                    <label htmlFor="corrItMobile" className="input-label">
-                      Italian Mobile Number
-                    </label>
-                    <input
-                      id="corrItMobile"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. 3279020120"
-                      value={correctionFormData["Italian mobile number"] || ""}
-                      onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Italian mobile number": e.target.value.trim() }))}
-                    />
+                      {isFieldMissing(["Italian address line 2", "addr_l2"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrItLine2" className="input-label">
+                            Italian Address Line 2
+                          </label>
+                          <input
+                            id="corrItLine2"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. MILANO"
+                            value={correctionFormData["Italian address line 2"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Italian address line 2": e.target.value.toUpperCase() }))}
+                          />
+                        </div>
+                      )}
+
+                      {isFieldMissing(["Italian mobile number", "em_mobile", "italian mobile"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrItMobile" className="input-label">
+                            Italian Mobile Number
+                          </label>
+                          <input
+                            id="corrItMobile"
+                            type="text"
+                            className="form-input"
+                            placeholder="e.g. 3279020120"
+                            value={correctionFormData["Italian mobile number"] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Italian mobile number": e.target.value.trim() }))}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* SECTION: OTHER MISSING FIELDS (DYNAMIC) */}
+                {otherMissingFields.length > 0 && (
+                  <>
+                    <h3 className="form-section-title">Other Required Details</h3>
+                    <div className="form-grid-2">
+                      {otherMissingFields.map((fieldKey) => (
+                        <div className="input-group" key={fieldKey}>
+                          <label htmlFor={`corr_${fieldKey}`} className="input-label">
+                            {fieldKey} <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id={`corr_${fieldKey}`}
+                            type="text"
+                            className="form-input"
+                            placeholder={`Enter ${fieldKey}`}
+                            value={correctionFormData[fieldKey] || ""}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, [fieldKey]: e.target.value }))}
+                            required
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {!hasGeneralMissing && !hasIndianAddressMissing && !hasItalianAddressMissing && otherMissingFields.length === 0 && (
+                  <div className="empty-correction-notice" style={{ padding: '16px', color: '#94a3b8', textAlign: 'center' }}>
+                    All required fields appear to be present. Click Save to continue.
                   </div>
-                </div>
+                )}
 
                 {/* ACTION BUTTONS */}
                 <div className="correction-actions-row">
@@ -875,27 +1202,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      setCorrectionFormData({
-                        "Educational qualification": "10TH PASS AND ABOVE",
-                        "Employment type": "PRIVATE",
-                        "PIN Code": "",
-                        "State": "",
-                        "District": "",
-                        "House No. and Street Name": "",
-                        "Village or Town or City": "",
-                        "Indian mobile number": "",
-                        "Italian address line 1": "",
-                        "Italian address line 2": "",
-                        "Italian mobile number": "",
-                        "Marital status": "SINGLE",
-                        "Spouse name": "",
-                        "Spouse given name": "",
-                      });
-                    }}
+                    onClick={handleClearMissingFields}
                     className="dismiss-btn clear-fields-btn"
                   >
-                    Clear All Fields
+                    Clear Fields
                   </button>
                   <button
                     type="submit"
