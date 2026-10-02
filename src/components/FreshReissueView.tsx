@@ -83,9 +83,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const queryAccountEmail = user?.email ? user.email.trim().toLowerCase() : activeClientEmail;
+
   // Fetch status, previews, and completed items
   const refreshAllData = async (targetEmailOverride?: string) => {
-    const targetEmail = targetEmailOverride || activeClientEmail;
+    const targetEmail = targetEmailOverride || queryAccountEmail;
     try {
       setIsLoadingData(true);
       const [apps, prevs, comps] = await Promise.all([
@@ -119,7 +121,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     // 24/7 background polling interval for live updates
     const interval = setInterval(() => refreshAllData(), 4000);
     return () => clearInterval(interval);
-  }, [activeClientEmail]);
+  }, [user?.email, activeClientEmail]);
 
   // Find application that requires user correction / missing data
   const correctionApp = applications.find(
@@ -196,6 +198,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         "House No. and Street Name": ed["House No. and Street Name"] || "VPO",
         "Village or Town or City": ed["Village or Town or City"] || "",
         "Indian mobile number": ed["Indian mobile number"] || "",
+        "Email id": ed["Email id"] || ed["presentAddressEmail"] || ed["Email"] || "",
+        "presentAddressEmail": ed["presentAddressEmail"] || ed["Email id"] || ed["Email"] || "",
         "Italian address line 1": ed["Italian address line 1"] || "",
         "Italian address line 2": ed["Italian address line 2"] || "",
         "Italian mobile number": ed["Italian mobile number"] || "",
@@ -396,7 +400,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         targetClientEmail,
         targetClientEmail,
         cleanPassword,
-        selectedFiles
+        selectedFiles,
+        user?.email
       );
 
       setUploadMessage({
@@ -406,7 +411,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       // Clear inputs
       setSelectedFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = '';
-      refreshAllData(targetClientEmail);
+      refreshAllData(user?.email || targetClientEmail);
     } catch (err: any) {
       const friendlyMsg = sanitizeErrorMessage(err);
       setUploadMessage({
@@ -464,8 +469,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         delete finalData["Spouse given name"];
       }
 
+      if (isFieldMissing(["Email id", "email", "presentaddressemail", "mail"])) {
+        const em = (correctionFormData["Email id"] || correctionFormData["presentAddressEmail"] || "").trim();
+        if (!em || !em.includes("@") || !em.includes(".")) {
+          setUploadMessage({
+            text: 'Please enter a valid Email ID.',
+            type: 'error',
+          });
+          setIsSubmittingCorrection(false);
+          return;
+        }
+        finalData["Email id"] = em;
+        finalData["presentAddressEmail"] = em;
+      }
+
       await automationApi.submitCorrection(
-        activeClientEmail,
+        user?.email || activeClientEmail,
         correctionApp.folder_name,
         finalData
       );
@@ -504,7 +523,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const handleConfirmFinalSubmit = async (folderName: string, arn: string) => {
     try {
       setSubmittingArn(arn);
-      await automationApi.confirmSubmission(activeClientEmail, folderName, arn);
+      await automationApi.confirmSubmission(user?.email || activeClientEmail, folderName, arn);
       // Refresh data so preview is cleared and completed has the new application
       await refreshAllData();
       onSectionChange('submitted');
@@ -555,6 +574,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     pin: ['pincode', 'pin', 'postalcode'],
     police: ['policestation', 'police'],
     indian_mobile: ['indianmobilenumber', 'indianmobile', 'mobile', 'mobilenumber'],
+    email: ['emailid', 'email', 'presentaddressemail', 'mail', 'emailaddress'],
     italian_l1: ['italianaddressline1', 'addr_l1', 'addrl1', 'italianaddress1', 'italianaddress'],
     italian_l2: ['italianaddressline2', 'addr_l2', 'addrl2', 'italianaddress2'],
     italian_mobile: ['italianmobilenumber', 'italianmobile', 'em_mobile', 'emmobile', 'overseasmobile'],
@@ -607,6 +627,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     isFieldMissing(["District"]) ||
     isFieldMissing(["PIN Code", "pin", "pincode"]) ||
     isFieldMissing(["Indian mobile number", "mobile"]) ||
+    isFieldMissing(["Email id", "email", "presentaddressemail", "mail"]) ||
     isFieldMissing(["Police Station", "police"]);
 
   const hasItalianAddressMissing =
@@ -635,6 +656,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       if (isFieldMissing(["State", "state/ut"])) updated["State"] = "";
       if (isFieldMissing(["District"])) updated["District"] = "";
       if (isFieldMissing(["Indian mobile number", "mobile"])) updated["Indian mobile number"] = "";
+      if (isFieldMissing(["Email id", "email", "presentaddressemail", "mail"])) {
+        updated["Email id"] = "";
+        updated["presentAddressEmail"] = "";
+      }
       if (isFieldMissing(["Italian address line 1", "addr_l1", "italian address"])) updated["Italian address line 1"] = "";
       if (isFieldMissing(["Italian address line 2", "addr_l2"])) updated["Italian address line 2"] = "";
       if (isFieldMissing(["Italian mobile number", "em_mobile", "italian mobile"])) updated["Italian mobile number"] = "";
@@ -1122,6 +1147,30 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           />
                         </div>
                       )}
+
+                      {isFieldMissing(["Email id", "email", "presentaddressemail", "mail"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrEmail" className="input-label">
+                            Email ID <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrEmail"
+                            type="email"
+                            className="form-input"
+                            placeholder="e.g. applicant@domain.com"
+                            value={correctionFormData["Email id"] || correctionFormData["presentAddressEmail"] || ""}
+                            onChange={(e) => {
+                              const val = e.target.value.trim();
+                              setCorrectionFormData(prev => ({
+                                ...prev,
+                                "Email id": val,
+                                "presentAddressEmail": val
+                              }));
+                            }}
+                            required
+                          />
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -1439,6 +1488,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       <div className="preview-client-badge">
                         <span className="preview-client-name">{item.applicant_name}</span>
                         <span className="preview-client-arn">ARN: {item.arn}</span>
+                        {item.portal_email && (
+                          <span className="preview-portal-badge" style={{ fontSize: '11px', color: '#94a3b8', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '4px' }}>
+                            Portal: {item.portal_email}
+                          </span>
+                        )}
                       </div>
                       <span className="status-tag-pending">Awaiting Verification</span>
                     </div>
@@ -1586,6 +1640,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       <h3 className="completed-client-name">{item.applicant_name}</h3>
                       <div className="completed-meta-row">
                         <span className="arn-badge">ARN: {item.arn}</span>
+                        {item.portal_email && (
+                          <span className="arn-badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
+                            Portal: {item.portal_email}
+                          </span>
+                        )}
                         <span className="submission-date">Submitted: {item.submitted_at}</span>
                       </div>
                     </div>

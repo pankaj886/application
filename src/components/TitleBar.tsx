@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Minus, Square, Copy, X, RotateCw } from 'lucide-react';
 import { updateService, UpdateStatus, UpdateInfo } from '../services/updateService';
 
@@ -53,6 +54,22 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
       unsubscribe();
     };
   }, []);
+
+  const handleMouseDown = async (e: React.MouseEvent) => {
+    if (e.button === 0) {
+      const target = e.target as HTMLElement;
+      if (target.closest('button') || target.closest('input') || target.closest('a') || target.closest('.no-drag')) {
+        return;
+      }
+      try {
+        await getCurrentWindow().startDragging();
+      } catch {
+        try {
+          await invoke('app_start_dragging');
+        } catch {}
+      }
+    }
+  };
 
   const handleMinimize = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -132,15 +149,50 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
   return (
     <header
       data-tauri-drag-region
+      onMouseDown={handleMouseDown}
       onDoubleClick={handleToggleMaximize}
       className={`titlebar-container ${isMac ? 'titlebar-mac' : ''}`}
     >
-      <div className={`titlebar-brand ${isMac ? 'ml-18' : ''}`} data-tauri-drag-region>
-        <div className="brand-crest">
-          <img src="/fs_logo.svg" alt="Foreigners Studio Logo" className="brand-logo-img" />
-        </div>
-        <div className="brand-meta" data-tauri-drag-region>
-          <span className="brand-name">Foreigners Studio</span>
+      <div className="titlebar-left" data-tauri-drag-region>
+        {isMac && (
+          <div className="titlebar-mac-traffic-lights" data-tauri-drag-region="false">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="mac-traffic-btn mac-close"
+              title="Close"
+              aria-label="Close"
+            >
+              <X className="mac-traffic-icon" />
+            </button>
+            <button
+              type="button"
+              onClick={handleMinimize}
+              className="mac-traffic-btn mac-minimize"
+              title="Minimize"
+              aria-label="Minimize"
+            >
+              <Minus className="mac-traffic-icon" />
+            </button>
+            <button
+              type="button"
+              onClick={handleToggleMaximize}
+              className="mac-traffic-btn mac-maximize"
+              title={isMaximized ? 'Restore' : 'Zoom'}
+              aria-label={isMaximized ? 'Restore' : 'Zoom'}
+            >
+              <Square className="mac-traffic-icon" />
+            </button>
+          </div>
+        )}
+
+        <div className="titlebar-brand" data-tauri-drag-region>
+          <div className="brand-crest">
+            <img src="/fs_logo.svg" alt="Foreigners Studio Logo" className="brand-logo-img" />
+          </div>
+          <div className="brand-meta" data-tauri-drag-region>
+            <span className="brand-name">Foreigners Studio</span>
+          </div>
         </div>
       </div>
 
@@ -148,13 +200,11 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
         <span className="titlebar-path">{currentPath}</span>
       </div>
 
-      {isMac && (
+      {isMac ? (
         <div className="titlebar-controls-mac" data-tauri-drag-region="false">
           {renderUpdateAction()}
         </div>
-      )}
-
-      {!isMac && (
+      ) : (
         <div className="titlebar-controls" data-tauri-drag-region="false">
           {/* Top UI corner: Action button placed immediately before Minimize button */}
           {renderUpdateAction()}

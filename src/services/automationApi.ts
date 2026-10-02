@@ -14,6 +14,8 @@ export interface ApplicationItem {
   stage: string;
   arn?: string;
   applicant_name?: string;
+  portal_email?: string;
+  google_email?: string;
   error_type?: string;
   error_message?: string;
   missing_fields?: string[];
@@ -37,6 +39,8 @@ export interface PreviewItem {
   applicant_name: string;
   arn: string;
   status: string;
+  portal_email?: string;
+  google_email?: string;
   passport_preview_url: string;
   declaration_preview_url: string;
   updated_at?: string;
@@ -47,6 +51,8 @@ export interface CompletedItem {
   applicant_name: string;
   arn: string;
   status: string;
+  portal_email?: string;
+  google_email?: string;
   submitted_at: string;
   receipt_url?: string;
 }
@@ -214,7 +220,8 @@ class AutomationApiService {
     clientEmail: string,
     portalUsername: string,
     portalPassword: string,
-    files: File[]
+    files: File[],
+    userEmail?: string
   ): Promise<{ success: boolean; folder_name: string; message: string }> {
     // Ensure gateway is resolved prior to constructing payload
     let baseUrl = await this.resolveGateway();
@@ -224,6 +231,9 @@ class AutomationApiService {
       fd.append('client_email', clientEmail);
       fd.append('portal_username', portalUsername);
       fd.append('portal_password', portalPassword);
+      if (userEmail) {
+        fd.append('user_email', userEmail);
+      }
       for (const file of files) {
         fd.append('files', file);
       }

@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use hmac::{Hmac, Mac, KeyInit};
+use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -123,6 +123,11 @@ fn app_is_maximized(window: tauri::Window) -> bool {
 #[tauri::command]
 fn app_restart(app_handle: tauri::AppHandle) {
     app_handle.restart();
+}
+
+#[tauri::command]
+fn app_start_dragging(window: tauri::Window) {
+    let _ = window.start_dragging();
 }
 
 #[tauri::command]
@@ -838,6 +843,7 @@ pub fn run() {
             app_close,
             app_is_maximized,
             app_restart,
+            app_start_dragging,
             app_focus_window,
             download_installer,
             apply_update_and_restart,
