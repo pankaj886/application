@@ -118,6 +118,7 @@ body {
   justify-content: space-between;
   padding: 0 10px 0 16px;
   user-select: none;
+  -webkit-user-select: none;
   z-index: 100;
   flex-shrink: 0;
   -webkit-app-region: drag;
@@ -133,12 +134,35 @@ body {
   gap: 12px;
 }
 
+.titlebar-brand,
+.brand-crest,
+.brand-logo-img,
+.brand-meta,
+.brand-name,
+.titlebar-center,
+.titlebar-path {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  pointer-events: none;
+}
+
+.titlebar-controls,
+.titlebar-controls-mac,
+.titlebar-mac-traffic-lights,
+.mac-traffic-btn,
+.control-btn,
+.titlebar-update-btn {
+  pointer-events: auto !important;
+  -webkit-app-region: no-drag !important;
+}
+
 .titlebar-mac-traffic-lights {
-  display: flex;
+  display: flex !important;
   align-items: center;
   gap: 8px;
   padding: 0 4px 0 2px;
-  -webkit-app-region: no-drag;
+  margin-right: 6px;
+  -webkit-app-region: no-drag !important;
 }
 
 .mac-traffic-btn {

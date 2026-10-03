@@ -469,8 +469,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         delete finalData["Spouse given name"];
       }
 
-      if (isFieldMissing(["Email id", "email", "presentaddressemail", "mail"])) {
-        const em = (correctionFormData["Email id"] || correctionFormData["presentAddressEmail"] || "").trim();
+      const em = (correctionFormData["Email id"] || correctionFormData["presentAddressEmail"] || finalData["Email id"] || finalData["presentAddressEmail"] || "").trim();
+      if (isFieldMissing(["Email id", "email", "presentaddressemail", "mail"]) || !em) {
         if (!em || !em.includes("@") || !em.includes(".")) {
           setUploadMessage({
             text: 'Please enter a valid Email ID.',
@@ -479,6 +479,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           setIsSubmittingCorrection(false);
           return;
         }
+      }
+      if (em) {
         finalData["Email id"] = em;
         finalData["presentAddressEmail"] = em;
       }

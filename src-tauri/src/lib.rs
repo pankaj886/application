@@ -131,6 +131,26 @@ fn app_start_dragging(window: tauri::Window) {
 }
 
 #[tauri::command]
+fn get_platform() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "macos"
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "windows"
+    }
+    #[cfg(target_os = "linux")]
+    {
+        "linux"
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        "unknown"
+    }
+}
+
+#[tauri::command]
 fn app_focus_window(window: tauri::Window) {
     let _ = window.unminimize();
     let _ = window.show();
@@ -853,7 +873,8 @@ pub fn run() {
             save_secure_session,
             touch_session_activity,
             clear_saved_session,
-            read_local_file
+            read_local_file,
+            get_platform
         ])
         .run(tauri::generate_context!())
         .expect("error while running Foreigners Studio application");

@@ -14,7 +14,27 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
 
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/.test(navigator.userAgent);
+  const [platform, setPlatform] = useState<string>(() => {
+    if (typeof navigator !== 'undefined') {
+      const ua = navigator.userAgent || '';
+      const plat = (navigator as any).platform || '';
+      const uadPlat = (navigator as any).userAgentData?.platform || '';
+      if (/Mac|iPhone|iPod|iPad/i.test(ua) || /Mac/i.test(plat) || /macOS/i.test(uadPlat)) {
+        return 'macos';
+      }
+    }
+    return 'windows';
+  });
+
+  useEffect(() => {
+    invoke<string>('get_platform')
+      .then((p) => {
+        if (p) setPlatform(p);
+      })
+      .catch(() => {});
+  }, []);
+
+  const isMac = platform === 'macos';
 
   const checkMaximized = async () => {
     try {
@@ -55,46 +75,45 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
     };
   }, []);
 
-  const handleMouseDown = async (e: React.MouseEvent) => {
+  const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 0) {
       const target = e.target as HTMLElement;
-      if (target.closest('button') || target.closest('input') || target.closest('a') || target.closest('.no-drag')) {
+      if (
+        target.closest('button') ||
+        target.closest('input') ||
+        target.closest('a') ||
+        target.closest('.no-drag') ||
+        target.closest('[data-tauri-drag-region="false"]')
+      ) {
         return;
       }
-      try {
-        await getCurrentWindow().startDragging();
-      } catch {
-        try {
-          await invoke('app_start_dragging');
-        } catch {}
-      }
+      getCurrentWindow().startDragging().catch(() => {
+        invoke('app_start_dragging').catch(() => {});
+      });
     }
   };
 
-  const handleMinimize = async (e: React.MouseEvent) => {
+  const handleMinimize = (e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      await invoke('app_minimize');
-    } catch {
-    }
+    getCurrentWindow().minimize().catch(() => {
+      invoke('app_minimize').catch(() => {});
+    });
   };
 
-  const handleToggleMaximize = async (e: React.MouseEvent) => {
+  const handleToggleMaximize = (e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      await invoke('app_toggle_maximize');
-      await checkMaximized();
-    } catch {
-      setIsMaximized(prev => !prev);
-    }
+    getCurrentWindow().toggleMaximize().then(checkMaximized).catch(() => {
+      invoke('app_toggle_maximize').then(checkMaximized).catch(() => {
+        setIsMaximized(prev => !prev);
+      });
+    });
   };
 
-  const handleClose = async (e: React.MouseEvent) => {
+  const handleClose = (e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      await invoke('app_close');
-    } catch {
-    }
+    getCurrentWindow().close().catch(() => {
+      invoke('app_close').catch(() => {});
+    });
   };
 
   const handleRestartToUpdate = async (e: React.MouseEvent) => {
@@ -187,17 +206,17 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
         )}
 
         <div className="titlebar-brand" data-tauri-drag-region>
-          <div className="brand-crest">
-            <img src="/fs_logo.svg" alt="Foreigners Studio Logo" className="brand-logo-img" />
+          <div className="brand-crest" data-tauri-drag-region>
+            <img src="/fs_logo.svg" alt="Foreigners Studio Logo" className="brand-logo-img" data-tauri-drag-region />
           </div>
           <div className="brand-meta" data-tauri-drag-region>
-            <span className="brand-name">Foreigners Studio</span>
+            <span className="brand-name" data-tauri-drag-region>Foreigners Studio</span>
           </div>
         </div>
       </div>
 
       <div className="titlebar-center" data-tauri-drag-region>
-        <span className="titlebar-path">{currentPath}</span>
+        <span className="titlebar-path" data-tauri-drag-region>{currentPath}</span>
       </div>
 
       {isMac ? (

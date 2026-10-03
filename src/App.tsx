@@ -90,7 +90,7 @@ export function App() {
 
     const updateCounts = async () => {
       try {
-        const activeEmail = (localStorage.getItem('fs_active_client_email') || user.email || '').toUpperCase();
+        const activeEmail = user.email.trim().toLowerCase();
         const [prevs, comps] = await Promise.all([
           automationApi.getPendingPreviews(activeEmail).catch(() => []),
           automationApi.getCompletedApplications(activeEmail).catch(() => []),
