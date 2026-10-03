@@ -1,6 +1,9 @@
-import os, json, re
+import os, json, re, sys
+from datetime import datetime
 
-def bump_json(file, key_path):
+NEW_VERSION = sys.argv[1] if len(sys.argv) > 1 else "1.0.25"
+
+def bump_json(file, key_path, val):
     if not os.path.exists(file): return
     with open(file, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -9,13 +12,13 @@ def bump_json(file, key_path):
     d = data
     for p in parts[:-1]:
         d = d[p]
-    d[parts[-1]] = "1.0.24"
+    d[parts[-1]] = val
     
     with open(file, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2)
 
-bump_json(r'c:\Users\Work PC\Documents\passport\Application\package.json', 'version')
-bump_json(r'c:\Users\Work PC\Documents\passport\Application\src-tauri\tauri.conf.json', 'version')
+bump_json(r'c:\Users\Work PC\Documents\passport\Application\package.json', 'version', NEW_VERSION)
+bump_json(r'c:\Users\Work PC\Documents\passport\Application\src-tauri\tauri.conf.json', 'version', NEW_VERSION)
 
 def bump_text(file, regex_old, replacement):
     if not os.path.exists(file): return
@@ -25,7 +28,26 @@ def bump_text(file, regex_old, replacement):
     with open(file, 'w', encoding='utf-8') as f:
         f.write(content)
 
-bump_text(r'c:\Users\Work PC\Documents\passport\Application\src-tauri\Cargo.toml', r'(?m)^version = "[^"]+"', 'version = "1.0.24"')
-bump_text(r'c:\Users\Work PC\Documents\passport\Application\src\components\Sidebar.tsx', r'appVersion, setAppVersion\] = useState<string>\(\'[\d\.]+\'\)', "appVersion, setAppVersion] = useState<string>('1.0.24')")
+bump_text(r'c:\Users\Work PC\Documents\passport\Application\src-tauri\Cargo.toml', r'(?m)^version = "[^"]+"', f'version = "{NEW_VERSION}"')
+bump_text(r'c:\Users\Work PC\Documents\passport\Application\src\components\Sidebar.tsx', r'appVersion, setAppVersion\] = useState<string>\(\'[\d\.]+\'\)', f"appVersion, setAppVersion] = useState<string>('{NEW_VERSION}')")
 
-print("Bumped to 1.0.24")
+# Update latest.json in foreigners-studio-releases
+latest_json_path = r'c:\Users\Work PC\Documents\foreigners-studio-releases\latest.json'
+if os.path.exists(latest_json_path):
+    with open(latest_json_path, 'r', encoding='utf-8') as f:
+        latest = json.load(f)
+    latest['version'] = NEW_VERSION
+    latest['notes'] = f"Foreigners Studio v{NEW_VERSION} release update."
+    latest['pub_date'] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    latest['platforms'] = {
+        "windows-x86_64": {
+            "url": f"https://github.com/pankaj886/foreigners-studio-releases/releases/download/v{NEW_VERSION}/Foreigners_Studio_{NEW_VERSION}_x64-setup.exe"
+        },
+        "darwin-universal": {
+            "url": f"https://github.com/pankaj886/foreigners-studio-releases/releases/download/v{NEW_VERSION}/Foreigners_Studio_{NEW_VERSION}_universal.dmg"
+        }
+    }
+    with open(latest_json_path, 'w', encoding='utf-8') as f:
+        json.dump(latest, f, indent=2)
+
+print(f"Bumped to {NEW_VERSION}")

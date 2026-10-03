@@ -27,13 +27,19 @@ def get_token():
 
 TOKEN = get_token()
 REPO = "pankaj886/foreigners-studio-releases"
-TAG = "v1.0.24"
-VERSION = "1.0.24"
+
+pkg_file = os.path.join(os.path.dirname(__file__), "package.json")
+with open(pkg_file, "r", encoding="utf-8") as f:
+    VERSION = json.load(f).get("version", "1.0.25")
+
+TAG = f"v{VERSION}"
 NAME = f"Foreigners Studio {TAG}"
 BODY = f"""Foreigners Studio {TAG} release update.
 
 ### Release Notes:
-- **Cross-Platform Window Dragging**: Synchronous native window dragging across Windows and macOS.
+- **Address Line Decomposition & Invariant**: Deterministic top-line extraction invariant for House No. & Street Name across all extraction, submission, and preview engines.
+- **Village/Town/City Resolution**: Intelligent component extraction stripping district, state, PIN, prefixes, and noise.
+- **Cross-Platform Window Dragging**: Synchronous native window dragging across Windows and macOS desktop builds.
 - **macOS Window Controls**: Native traffic lights (close, minimize, maximize) on the top left.
 - **Account Isolation**: Client applications isolated by logged-in Google Account ID.
 - **Single-Pass Validation**: All missing mandatory application fields prompted in a single step upon upload.

@@ -195,8 +195,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         "PIN Code": ed["PIN Code"] || "",
         "State": ed["State"] || "",
         "District": ed["District"] || "",
-        "House No. and Street Name": ed["House No. and Street Name"] || "VPO",
-        "Village or Town or City": ed["Village or Town or City"] || "",
+        "House No. and Street Name": ed["House No. and Street Name"] || ed["address_line1"] || "VPO",
+        "Village or Town or City": ed["Village or Town or City"] || ed["address_line2"] || "",
         "Indian mobile number": ed["Indian mobile number"] || "",
         "Email id": ed["Email id"] || ed["presentAddressEmail"] || ed["Email"] || "",
         "presentAddressEmail": ed["presentAddressEmail"] || ed["Email id"] || ed["Email"] || "",
@@ -450,6 +450,17 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
       if (correctionFormData["House No. and Street Name"] !== undefined) {
         finalData["House No. and Street Name"] = (correctionFormData["House No. and Street Name"] || "").trim() || "VPO";
+      }
+      if (correctionFormData["Village or Town or City"] !== undefined) {
+        finalData["Village or Town or City"] = (correctionFormData["Village or Town or City"] || "").trim().toUpperCase();
+      }
+      if (isFieldMissing(["Village or Town or City", "village", "city"]) && !finalData["Village or Town or City"]) {
+        setUploadMessage({
+          text: 'Please enter Village or Town or City.',
+          type: 'error',
+        });
+        setIsSubmittingCorrection(false);
+        return;
       }
       if (correctionFormData["Educational qualification"] !== undefined) {
         finalData["Educational qualification"] = (correctionFormData["Educational qualification"] || "").trim() || "10TH PASS AND ABOVE";
