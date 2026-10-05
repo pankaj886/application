@@ -1,19 +1,3 @@
-<#
-.SYNOPSIS
-    Foreigners Studio - Windows Secure Installer & SmartScreen Eliminator
-.DESCRIPTION
-    This script:
-    1. Strips the Mark-of-the-Web (Zone.Identifier) from ALL files in the package
-    2. Installs the Foreigners Studio Code Signing Certificate to the trusted stores
-    3. Adds SmartScreen publisher exception via registry
-    4. Launches the application with zero warnings
-
-    HOW TO RUN (if you see "script is blocked"):
-      Right-click this file -> "Run with PowerShell"
-      OR from command prompt:
-      powershell.exe -NoProfile -ExecutionPolicy Bypass -File install-windows.ps1
-#>
-
 [CmdletBinding()]
 param(
     [switch]$NoLaunch
@@ -36,9 +20,6 @@ if (-not $scriptDir) {
     $scriptDir = Get-Location
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# STEP 1: Strip Mark-of-the-Web (Zone.Identifier) from ALL files
-# ─────────────────────────────────────────────────────────────────────────────
 Write-Host "[1/4] Stripping Web Quarantine (Zone.Identifier)..." -ForegroundColor Yellow
 
 $unblockExtensions = @("*.exe", "*.msi", "*.dll", "*.zip", "*.bat", "*.ps1", "*.cer", "*.pfx")
@@ -53,7 +34,6 @@ foreach ($file in $targetFiles) {
 }
 Write-Host "      Unblocked $unblockCount file(s)." -ForegroundColor Green
 
-# Also use streams deletion as backup (some files need this too)
 foreach ($file in $targetFiles) {
     try {
         $streamPath = $file.FullName + ":Zone.Identifier"
@@ -63,9 +43,6 @@ foreach ($file in $targetFiles) {
     } catch {}
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# STEP 2: Locate and import Foreigners Studio Certificate
-# ─────────────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[2/4] Configuring Trusted Publisher & Root Certificates..." -ForegroundColor Yellow
 
@@ -95,7 +72,6 @@ if (-not $cerPath) {
     Write-Host "      Subject:    $subject"
     Write-Host "      Thumbprint: $thumbprint"
 
-    # Import to TrustedPublisher store
     $inTP = Get-ChildItem -Path Cert:\CurrentUser\TrustedPublisher -ErrorAction SilentlyContinue |
         Where-Object { $_.Thumbprint -eq $thumbprint }
     if ($inTP) {
@@ -113,14 +89,12 @@ if (-not $cerPath) {
         }
     }
 
-    # Import to Root store (Trusted Root Certification Authorities)
     $inRoot = Get-ChildItem -Path Cert:\CurrentUser\Root -ErrorAction SilentlyContinue |
         Where-Object { $_.Thumbprint -eq $thumbprint }
     if ($inRoot) {
         Write-Host "      [OK] Already in Cert:\CurrentUser\Root" -ForegroundColor Green
     } else {
         Write-Host "      Importing to Cert:\CurrentUser\Root..."
-        # Auto-dismiss the Windows security dialog
         $watcherJob = Start-Job -ScriptBlock {
             $wscript = New-Object -ComObject WScript.Shell
             for ($i = 0; $i -lt 20; $i++) {
@@ -149,29 +123,20 @@ if (-not $cerPath) {
     }
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# STEP 3: Add SmartScreen exception in registry
-#         This tells Windows Defender to allow this publisher
-# ─────────────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[3/4] Registering SmartScreen bypass for Foreigners Studio..." -ForegroundColor Yellow
 
 try {
-    # Disable SmartScreen check for this specific app (stores exception per file hash / publisher)
     $regKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Attachments"
     if (-not (Test-Path $regKey)) {
         New-Item -Path $regKey -Force | Out-Null
     }
-    # SaveZoneInformation = 1 means "do not save zone information" (disables MOTW on saves)
     Set-ItemProperty -Path $regKey -Name "SaveZoneInformation" -Value 1 -Type DWord -ErrorAction SilentlyContinue
     Write-Host "      [OK] Zone.Identifier save policy configured." -ForegroundColor Green
 } catch {
     Write-Warning "Registry configuration failed (non-critical): $_"
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# STEP 4: Locate and launch the application
-# ─────────────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[4/4] Launching Foreigners Studio..." -ForegroundColor Yellow
 
@@ -197,7 +162,6 @@ if (-not $targetExe) {
     Write-Host "      If Windows still shows a SmartScreen warning, click:" -ForegroundColor Yellow
     Write-Host "        'More info'  →  'Run anyway'" -ForegroundColor Yellow
 } else {
-    # Ensure target binary is unblocked
     Unblock-File -LiteralPath $targetExe -ErrorAction SilentlyContinue
 
     $sig = Get-AuthenticodeSignature -FilePath $targetExe -ErrorAction SilentlyContinue

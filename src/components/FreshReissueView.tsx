@@ -318,6 +318,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   }, [correctionApp?.folder_name, correctionApp?.updated_at]);
 
   const updateSlotFile = (slot: 'photo' | 'sign' | 'passport' | 'residence' | 'info', file: File | null) => {
+    filesStateRef.current[slot] = file;
     if (slot === 'photo') {
       setPhotoFile(file);
       if (!file && photoInputRef.current) photoInputRef.current.value = '';
@@ -355,9 +356,33 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         s = f;
       } else if (!pass && (lower.includes('pass') || lower.includes('passport') || lower.includes('passaporto'))) {
         pass = f;
-      } else if (!res && (lower.includes('pds') || lower.includes('cie') || lower.includes('carta') || lower.includes('soggiorno') || lower.includes('residen'))) {
+      } else if (!res && (
+        lower.includes('pds') || 
+        lower.includes('cie') || 
+        lower.includes('carta') || 
+        lower.includes('soggiorno') || 
+        lower.includes('residen') || 
+        lower.includes('ospiti') || 
+        lower.includes('ospitalita') || 
+        lower.includes('fabbricato') || 
+        lower.includes('cessione') || 
+        lower.includes('affitto') || 
+        lower.includes('locazione') || 
+        lower.includes('bolletta') ||
+        lower.includes('contratto')
+      )) {
         res = f;
-      } else if (!inf && (lower.includes('info') || lower.includes('detail') || lower.includes('dettagli') || lower.endsWith('.docx') || lower.endsWith('.doc') || lower.includes('ospiti') || lower.includes('support') || lower.includes('fabbricato') || lower.includes('affitto') || lower.includes('annexure') || lower.includes('necessity') || lower.includes('bolletta'))) {
+      } else if (!inf && (
+        lower.includes('info') || 
+        lower.includes('detail') || 
+        lower.includes('dettagli') || 
+        lower.endsWith('.docx') || 
+        lower.endsWith('.doc') || 
+        lower.includes('support') || 
+        lower.includes('annexure') || 
+        lower.includes('necessity') ||
+        lower.endsWith('.txt')
+      )) {
         inf = f;
       } else {
         if (!pass && lower.endsWith('.pdf')) {
@@ -376,11 +401,26 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
     }
 
-    if (p !== current.photo) setPhotoFile(p);
-    if (s !== current.sign) setSignFile(s);
-    if (pass !== current.passport) setPassportFile(pass);
-    if (res !== current.residence) setResidenceFile(res);
-    if (inf !== current.info) setInfoFile(inf);
+    if (p !== current.photo) {
+      filesStateRef.current.photo = p;
+      setPhotoFile(p);
+    }
+    if (s !== current.sign) {
+      filesStateRef.current.sign = s;
+      setSignFile(s);
+    }
+    if (pass !== current.passport) {
+      filesStateRef.current.passport = pass;
+      setPassportFile(pass);
+    }
+    if (res !== current.residence) {
+      filesStateRef.current.residence = res;
+      setResidenceFile(res);
+    }
+    if (inf !== current.info) {
+      filesStateRef.current.info = inf;
+      setInfoFile(inf);
+    }
 
     if (extras.length > 0) {
       setSelectedFiles(prev => {
@@ -450,7 +490,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           setIsDragActive(true);
           const pos = (event.payload as any).position;
           if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
-            const el = document.elementFromPoint(pos.x, pos.y);
+            const scale = window.devicePixelRatio || 1;
+            const el = document.elementFromPoint(pos.x / scale, pos.y / scale) || document.elementFromPoint(pos.x, pos.y);
             const targetSlot = el?.closest('[data-drop-slot]')?.getAttribute('data-drop-slot');
             if (targetSlot) {
               dragSlotRef.current = targetSlot;
@@ -469,7 +510,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             return;
           }
           lastDropTimeRef.current = Date.now();
-          const targetSlot = dragSlotRef.current;
+          let targetSlot = dragSlotRef.current;
+          const dropPos = (event.payload as any).position;
+          if (dropPos && typeof dropPos.x === 'number' && typeof dropPos.y === 'number') {
+            const scale = window.devicePixelRatio || 1;
+            const el = document.elementFromPoint(dropPos.x / scale, dropPos.y / scale) || document.elementFromPoint(dropPos.x, dropPos.y);
+            const found = el?.closest('[data-drop-slot]')?.getAttribute('data-drop-slot');
+            if (found) targetSlot = found;
+          }
           dragSlotRef.current = null;
           setDragSlot(null);
 
@@ -498,11 +546,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               }
             }
             if (loadedFiles.length > 0) {
-              if (targetSlot && ['photo', 'sign', 'passport', 'residence', 'info'].includes(targetSlot)) {
+              if (loadedFiles.length > 1) {
+                autoCategorizeFiles(loadedFiles);
+              } else if (targetSlot && ['photo', 'sign', 'passport', 'residence', 'info'].includes(targetSlot)) {
                 updateSlotFile(targetSlot as any, loadedFiles[0]);
-                if (loadedFiles.length > 1) {
-                  autoCategorizeFiles(loadedFiles.slice(1));
-                }
               } else {
                 autoCategorizeFiles(loadedFiles);
               }
@@ -550,11 +597,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
       if (currentSection === 'form' && !correctionApp && e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
         const droppedFiles = Array.from(e.dataTransfer.files);
-        if (targetSlot && ['photo', 'sign', 'passport', 'residence', 'info'].includes(targetSlot)) {
+        if (droppedFiles.length > 1) {
+          autoCategorizeFiles(droppedFiles);
+        } else if (targetSlot && ['photo', 'sign', 'passport', 'residence', 'info'].includes(targetSlot)) {
           updateSlotFile(targetSlot as any, droppedFiles[0]);
-          if (droppedFiles.length > 1) {
-            autoCategorizeFiles(droppedFiles.slice(1));
-          }
         } else {
           autoCategorizeFiles(droppedFiles);
         }
@@ -1816,7 +1862,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         lastDropTimeRef.current = Date.now();
                         dragSlotRef.current = null;
                         setDragSlot(null);
-                        if (e.dataTransfer.files?.[0]) updateSlotFile('photo', e.dataTransfer.files[0]);
+                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                          if (e.dataTransfer.files.length > 1) {
+                            autoCategorizeFiles(Array.from(e.dataTransfer.files));
+                          } else {
+                            updateSlotFile('photo', e.dataTransfer.files[0]);
+                          }
+                        }
                       }}
                     >
                       <input
@@ -1876,7 +1928,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         lastDropTimeRef.current = Date.now();
                         dragSlotRef.current = null;
                         setDragSlot(null);
-                        if (e.dataTransfer.files?.[0]) updateSlotFile('sign', e.dataTransfer.files[0]);
+                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                          if (e.dataTransfer.files.length > 1) {
+                            autoCategorizeFiles(Array.from(e.dataTransfer.files));
+                          } else {
+                            updateSlotFile('sign', e.dataTransfer.files[0]);
+                          }
+                        }
                       }}
                     >
                       <input
@@ -1936,7 +1994,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         lastDropTimeRef.current = Date.now();
                         dragSlotRef.current = null;
                         setDragSlot(null);
-                        if (e.dataTransfer.files?.[0]) updateSlotFile('passport', e.dataTransfer.files[0]);
+                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                          if (e.dataTransfer.files.length > 1) {
+                            autoCategorizeFiles(Array.from(e.dataTransfer.files));
+                          } else {
+                            updateSlotFile('passport', e.dataTransfer.files[0]);
+                          }
+                        }
                       }}
                     >
                       <input
@@ -1996,7 +2060,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         lastDropTimeRef.current = Date.now();
                         dragSlotRef.current = null;
                         setDragSlot(null);
-                        if (e.dataTransfer.files?.[0]) updateSlotFile('residence', e.dataTransfer.files[0]);
+                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                          if (e.dataTransfer.files.length > 1) {
+                            autoCategorizeFiles(Array.from(e.dataTransfer.files));
+                          } else {
+                            updateSlotFile('residence', e.dataTransfer.files[0]);
+                          }
+                        }
                       }}
                     >
                       <input
@@ -2032,7 +2102,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </div>
                         ) : (
                           <div className="doc-box-empty">
-                            <span className="doc-box-badge">Permesso / CIE</span>
+                            <span className="doc-box-badge">Permesso / CIE / Ospiti</span>
                             <div className="doc-box-action-hint">
                               <Upload style={{ width: '12px', height: '12px' }} />
                               <span>Upload</span>
@@ -2056,7 +2126,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         lastDropTimeRef.current = Date.now();
                         dragSlotRef.current = null;
                         setDragSlot(null);
-                        if (e.dataTransfer.files?.[0]) updateSlotFile('info', e.dataTransfer.files[0]);
+                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                          if (e.dataTransfer.files.length > 1) {
+                            autoCategorizeFiles(Array.from(e.dataTransfer.files));
+                          } else {
+                            updateSlotFile('info', e.dataTransfer.files[0]);
+                          }
+                        }
                       }}
                     >
                       <input
