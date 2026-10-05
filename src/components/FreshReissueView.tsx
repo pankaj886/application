@@ -32,6 +32,7 @@ import {
 } from '../services/automationApi';
 import { FreshReissueSection, UserProfile } from '../types';
 import { PdfViewerModal } from './PdfViewerModal';
+import { ImageViewerModal } from './ImageViewerModal';
 
 interface FreshReissueViewProps {
   user: UserProfile;
@@ -99,6 +100,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     isOpen: false,
     title: '',
     pdfUrl: '',
+  });
+
+  const [imageViewerModal, setImageViewerModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    imageUrl: string;
+  }>({
+    isOpen: false,
+    title: '',
+    imageUrl: '',
   });
 
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -725,6 +736,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       isOpen: true,
       title,
       pdfUrl: fullUrl,
+    });
+  };
+
+  const openImageViewer = (title: string, fullUrl: string) => {
+    setImageViewerModal({
+      isOpen: true,
+      title,
+      imageUrl: fullUrl,
     });
   };
 
@@ -1667,7 +1686,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 {!isPlaceSubmitted && (
                   <div className="input-group">
                     <label htmlFor="declarationPlace" className="input-label">
-                      Declaration Place (Application Place) <span className="required-star">*</span>
+                      Declaration Place <span className="required-star">*</span>
                     </label>
                     <input
                       id="declarationPlace"
@@ -1686,34 +1705,24 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       autoCorrect="off"
                       spellCheck="false"
                     />
-                    <span className="input-hint" style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                      City where application is signed and submitted from. This exact place will be filled in the Self-Declaration PDF under Place &amp; Date.
-                    </span>
                   </div>
                 )}
 
-                <div className="guided-upload-section">
-                  <div className="guided-slots-header">
-                    <div>
-                      <span className="guided-slots-title">Required Documents</span>
-                      <span className="required-star"> *</span>
-                      <div className="guided-slots-subtitle">
-                        Upload client documents below. Photos are framed &amp; resized to 630x810 JPG (&le;250 KB), Signatures to JPG (&le;100 KB), and all documents converted &amp; compressed to PDF (&le;1 MB).
-                      </div>
-                    </div>
+                <div className="compact-docs-section">
+                  <div className="compact-docs-header">
+                    <span className="compact-docs-title">Required Documents <span className="required-star">*</span></span>
+                    <span className="compact-docs-hint">Photos &amp; signatures to JPG, documents to PDF (&le;1 MB)</span>
                   </div>
 
-                  <div className="guided-slots-grid">
-                    {/* 1. Photo Slot */}
+                  <div className="compact-slots-list">
+                    {/* 1. Photograph */}
                     <div
-                      className={`guided-slot-card ${photoFile ? 'has-file' : ''} ${dragSlot === 'photo' ? 'drag-target' : ''}`}
+                      className={`compact-slot-row ${photoFile ? 'has-file' : ''} ${dragSlot === 'photo' ? 'drag-target' : ''}`}
                       onClick={() => photoInputRef.current?.click()}
                       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot('photo'); }}
                       onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot(null); }}
                       onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setDragSlot(null);
+                        e.preventDefault(); e.stopPropagation(); setDragSlot(null);
                         if (e.dataTransfer.files?.[0]) setPhotoFile(e.dataTransfer.files[0]);
                       }}
                     >
@@ -1722,38 +1731,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         type="file"
                         accept="image/jpeg,image/png,image/webp,image/jpg"
                         style={{ display: 'none' }}
-                        onChange={(e) => {
-                          if (e.target.files?.[0]) setPhotoFile(e.target.files[0]);
-                        }}
+                        onChange={(e) => { if (e.target.files?.[0]) setPhotoFile(e.target.files[0]); }}
                       />
-                      <div className="slot-card-header">
-                        <div className="slot-identity">
-                          <div className="slot-icon-wrapper">
-                            <Camera style={{ width: '18px', height: '18px' }} />
-                          </div>
-                          <div>
-                            <div className="slot-name">Photograph</div>
-                            <span style={{ fontSize: '11px', color: '#64748b' }}>Applicant Photo</span>
-                          </div>
-                        </div>
-                        <span className="slot-spec-badge">JPG &le;250 KB (630x810)</span>
+                      <div className="compact-slot-label">
+                        <Camera className="compact-slot-icon" />
+                        <span className="compact-slot-name">Photograph <span className="required-star">*</span></span>
+                        <span className="compact-slot-spec">630×810 JPG</span>
                       </div>
-
-                      <div className="slot-card-body">
+                      <div className="compact-slot-action">
                         {photoFile ? (
-                          <div className="slot-file-details">
-                            <img
-                              src={URL.createObjectURL(photoFile)}
-                              alt="Photo preview"
-                              className="slot-thumb-preview"
-                            />
-                            <div className="slot-file-info">
-                              <span className="slot-file-name" title={photoFile.name}>{photoFile.name}</span>
-                              <span className="slot-file-size">{(photoFile.size / 1024).toFixed(1)} KB (Auto-frames face)</span>
-                            </div>
+                          <div className="compact-file-badge">
+                            <img src={URL.createObjectURL(photoFile)} alt="Photo" className="compact-thumb" />
+                            <span className="compact-file-name" title={photoFile.name}>{photoFile.name}</span>
+                            <span className="compact-file-size">({(photoFile.size / 1024).toFixed(0)} KB)</span>
                             <button
                               type="button"
-                              className="slot-remove-btn"
+                              className="compact-remove-btn"
                               title="Remove photo"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1761,28 +1754,26 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                                 if (photoInputRef.current) photoInputRef.current.value = '';
                               }}
                             >
-                              <X style={{ width: '14px', height: '14px' }} />
+                              <X style={{ width: '13px', height: '13px' }} />
                             </button>
                           </div>
                         ) : (
-                          <div className="slot-empty-prompt">
-                            <Upload style={{ width: '14px', height: '14px', color: '#3b82f6' }} />
-                            <span>Click or drop Photo</span>
+                          <div className="compact-upload-btn">
+                            <Upload style={{ width: '13px', height: '13px' }} />
+                            <span>Choose Photo</span>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* 2. Signature Slot */}
+                    {/* 2. Signature */}
                     <div
-                      className={`guided-slot-card ${signFile ? 'has-file' : ''} ${dragSlot === 'sign' ? 'drag-target' : ''}`}
+                      className={`compact-slot-row ${signFile ? 'has-file' : ''} ${dragSlot === 'sign' ? 'drag-target' : ''}`}
                       onClick={() => signInputRef.current?.click()}
                       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot('sign'); }}
                       onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot(null); }}
                       onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setDragSlot(null);
+                        e.preventDefault(); e.stopPropagation(); setDragSlot(null);
                         if (e.dataTransfer.files?.[0]) setSignFile(e.dataTransfer.files[0]);
                       }}
                     >
@@ -1791,38 +1782,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         type="file"
                         accept="image/jpeg,image/png,image/jpg"
                         style={{ display: 'none' }}
-                        onChange={(e) => {
-                          if (e.target.files?.[0]) setSignFile(e.target.files[0]);
-                        }}
+                        onChange={(e) => { if (e.target.files?.[0]) setSignFile(e.target.files[0]); }}
                       />
-                      <div className="slot-card-header">
-                        <div className="slot-identity">
-                          <div className="slot-icon-wrapper">
-                            <PenTool style={{ width: '18px', height: '18px' }} />
-                          </div>
-                          <div>
-                            <div className="slot-name">Signature</div>
-                            <span style={{ fontSize: '11px', color: '#64748b' }}>Applicant Signature</span>
-                          </div>
-                        </div>
-                        <span className="slot-spec-badge">JPG &le;100 KB</span>
+                      <div className="compact-slot-label">
+                        <PenTool className="compact-slot-icon" />
+                        <span className="compact-slot-name">Signature <span className="required-star">*</span></span>
+                        <span className="compact-slot-spec">&le;100 KB</span>
                       </div>
-
-                      <div className="slot-card-body">
+                      <div className="compact-slot-action">
                         {signFile ? (
-                          <div className="slot-file-details">
-                            <img
-                              src={URL.createObjectURL(signFile)}
-                              alt="Sign preview"
-                              className="slot-thumb-preview"
-                            />
-                            <div className="slot-file-info">
-                              <span className="slot-file-name" title={signFile.name}>{signFile.name}</span>
-                              <span className="slot-file-size">{(signFile.size / 1024).toFixed(1)} KB (Clean white bg)</span>
-                            </div>
+                          <div className="compact-file-badge">
+                            <img src={URL.createObjectURL(signFile)} alt="Sign" className="compact-thumb" />
+                            <span className="compact-file-name" title={signFile.name}>{signFile.name}</span>
+                            <span className="compact-file-size">({(signFile.size / 1024).toFixed(0)} KB)</span>
                             <button
                               type="button"
-                              className="slot-remove-btn"
+                              className="compact-remove-btn"
                               title="Remove signature"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1830,28 +1805,26 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                                 if (signInputRef.current) signInputRef.current.value = '';
                               }}
                             >
-                              <X style={{ width: '14px', height: '14px' }} />
+                              <X style={{ width: '13px', height: '13px' }} />
                             </button>
                           </div>
                         ) : (
-                          <div className="slot-empty-prompt">
-                            <Upload style={{ width: '14px', height: '14px', color: '#3b82f6' }} />
-                            <span>Click or drop Signature</span>
+                          <div className="compact-upload-btn">
+                            <Upload style={{ width: '13px', height: '13px' }} />
+                            <span>Choose Signature</span>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* 3. Passport Slot */}
+                    {/* 3. Passport Copy */}
                     <div
-                      className={`guided-slot-card ${passportFile ? 'has-file' : ''} ${dragSlot === 'passport' ? 'drag-target' : ''}`}
+                      className={`compact-slot-row ${passportFile ? 'has-file' : ''} ${dragSlot === 'passport' ? 'drag-target' : ''}`}
                       onClick={() => passportInputRef.current?.click()}
                       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot('passport'); }}
                       onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot(null); }}
                       onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setDragSlot(null);
+                        e.preventDefault(); e.stopPropagation(); setDragSlot(null);
                         if (e.dataTransfer.files?.[0]) setPassportFile(e.dataTransfer.files[0]);
                       }}
                     >
@@ -1860,34 +1833,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         type="file"
                         accept=".pdf,image/jpeg,image/png,image/jpg"
                         style={{ display: 'none' }}
-                        onChange={(e) => {
-                          if (e.target.files?.[0]) setPassportFile(e.target.files[0]);
-                        }}
+                        onChange={(e) => { if (e.target.files?.[0]) setPassportFile(e.target.files[0]); }}
                       />
-                      <div className="slot-card-header">
-                        <div className="slot-identity">
-                          <div className="slot-icon-wrapper">
-                            <BookOpen style={{ width: '18px', height: '18px' }} />
-                          </div>
-                          <div>
-                            <div className="slot-name">Passport Copy</div>
-                            <span style={{ fontSize: '11px', color: '#64748b' }}>Front &amp; Back Pages</span>
-                          </div>
-                        </div>
-                        <span className="slot-spec-badge">PDF &le;1 MB</span>
+                      <div className="compact-slot-label">
+                        <BookOpen className="compact-slot-icon" />
+                        <span className="compact-slot-name">Passport Copy <span className="required-star">*</span></span>
+                        <span className="compact-slot-spec">PDF &le;1 MB</span>
                       </div>
-
-                      <div className="slot-card-body">
+                      <div className="compact-slot-action">
                         {passportFile ? (
-                          <div className="slot-file-details">
-                            <FileText style={{ width: '32px', height: '32px', color: '#059669', flexShrink: 0 }} />
-                            <div className="slot-file-info">
-                              <span className="slot-file-name" title={passportFile.name}>{passportFile.name}</span>
-                              <span className="slot-file-size">{(passportFile.size / 1024).toFixed(1)} KB (Auto-compressed)</span>
-                            </div>
+                          <div className="compact-file-badge">
+                            <FileText style={{ width: '16px', height: '16px', color: '#059669', flexShrink: 0 }} />
+                            <span className="compact-file-name" title={passportFile.name}>{passportFile.name}</span>
+                            <span className="compact-file-size">({(passportFile.size / 1024).toFixed(0)} KB)</span>
                             <button
                               type="button"
-                              className="slot-remove-btn"
+                              className="compact-remove-btn"
                               title="Remove passport"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1895,28 +1856,26 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                                 if (passportInputRef.current) passportInputRef.current.value = '';
                               }}
                             >
-                              <X style={{ width: '14px', height: '14px' }} />
+                              <X style={{ width: '13px', height: '13px' }} />
                             </button>
                           </div>
                         ) : (
-                          <div className="slot-empty-prompt">
-                            <Upload style={{ width: '14px', height: '14px', color: '#3b82f6' }} />
-                            <span>Click or drop Passport</span>
+                          <div className="compact-upload-btn">
+                            <Upload style={{ width: '13px', height: '13px' }} />
+                            <span>Choose Passport</span>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* 4. Residence Proof Slot */}
+                    {/* 4. Residence Card / Proof */}
                     <div
-                      className={`guided-slot-card ${residenceFile ? 'has-file' : ''} ${dragSlot === 'residence' ? 'drag-target' : ''}`}
+                      className={`compact-slot-row ${residenceFile ? 'has-file' : ''} ${dragSlot === 'residence' ? 'drag-target' : ''}`}
                       onClick={() => residenceInputRef.current?.click()}
                       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot('residence'); }}
                       onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot(null); }}
                       onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setDragSlot(null);
+                        e.preventDefault(); e.stopPropagation(); setDragSlot(null);
                         if (e.dataTransfer.files?.[0]) setResidenceFile(e.dataTransfer.files[0]);
                       }}
                     >
@@ -1925,63 +1884,49 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         type="file"
                         accept=".pdf,image/jpeg,image/png,image/jpg"
                         style={{ display: 'none' }}
-                        onChange={(e) => {
-                          if (e.target.files?.[0]) setResidenceFile(e.target.files[0]);
-                        }}
+                        onChange={(e) => { if (e.target.files?.[0]) setResidenceFile(e.target.files[0]); }}
                       />
-                      <div className="slot-card-header">
-                        <div className="slot-identity">
-                          <div className="slot-icon-wrapper">
-                            <ShieldCheck style={{ width: '18px', height: '18px' }} />
-                          </div>
-                          <div>
-                            <div className="slot-name">Residence Card / Proof</div>
-                            <span style={{ fontSize: '11px', color: '#64748b' }}>Permesso / Carta d'identit&agrave;</span>
-                          </div>
-                        </div>
-                        <span className="slot-spec-badge">PDF &le;1 MB</span>
+                      <div className="compact-slot-label">
+                        <ShieldCheck className="compact-slot-icon" />
+                        <span className="compact-slot-name">Residence Card / Proof <span className="required-star">*</span></span>
+                        <span className="compact-slot-spec">PDF &le;1 MB</span>
                       </div>
-
-                      <div className="slot-card-body">
+                      <div className="compact-slot-action">
                         {residenceFile ? (
-                          <div className="slot-file-details">
-                            <FileText style={{ width: '32px', height: '32px', color: '#059669', flexShrink: 0 }} />
-                            <div className="slot-file-info">
-                              <span className="slot-file-name" title={residenceFile.name}>{residenceFile.name}</span>
-                              <span className="slot-file-size">{(residenceFile.size / 1024).toFixed(1)} KB (Auto-compressed)</span>
-                            </div>
+                          <div className="compact-file-badge">
+                            <FileText style={{ width: '16px', height: '16px', color: '#059669', flexShrink: 0 }} />
+                            <span className="compact-file-name" title={residenceFile.name}>{residenceFile.name}</span>
+                            <span className="compact-file-size">({(residenceFile.size / 1024).toFixed(0)} KB)</span>
                             <button
                               type="button"
-                              className="slot-remove-btn"
-                              title="Remove residence proof"
+                              className="compact-remove-btn"
+                              title="Remove residence card"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setResidenceFile(null);
                                 if (residenceInputRef.current) residenceInputRef.current.value = '';
                               }}
                             >
-                              <X style={{ width: '14px', height: '14px' }} />
+                              <X style={{ width: '13px', height: '13px' }} />
                             </button>
                           </div>
                         ) : (
-                          <div className="slot-empty-prompt">
-                            <Upload style={{ width: '14px', height: '14px', color: '#3b82f6' }} />
-                            <span>Click or drop Residence card</span>
+                          <div className="compact-upload-btn">
+                            <Upload style={{ width: '13px', height: '13px' }} />
+                            <span>Choose Residence Card</span>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* 5. Supporting Document / Necessity Slot */}
+                    {/* 5. Supporting Document / Necessity */}
                     <div
-                      className={`guided-slot-card ${supportingFile ? 'has-file' : ''} ${dragSlot === 'supporting' ? 'drag-target' : ''}`}
+                      className={`compact-slot-row ${supportingFile ? 'has-file' : ''} ${dragSlot === 'supporting' ? 'drag-target' : ''}`}
                       onClick={() => supportingInputRef.current?.click()}
                       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot('supporting'); }}
                       onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot(null); }}
                       onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setDragSlot(null);
+                        e.preventDefault(); e.stopPropagation(); setDragSlot(null);
                         if (e.dataTransfer.files?.[0]) setSupportingFile(e.dataTransfer.files[0]);
                       }}
                     >
@@ -1990,34 +1935,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         type="file"
                         accept=".pdf,image/jpeg,image/png,image/jpg,.doc,.docx"
                         style={{ display: 'none' }}
-                        onChange={(e) => {
-                          if (e.target.files?.[0]) setSupportingFile(e.target.files[0]);
-                        }}
+                        onChange={(e) => { if (e.target.files?.[0]) setSupportingFile(e.target.files[0]); }}
                       />
-                      <div className="slot-card-header">
-                        <div className="slot-identity">
-                          <div className="slot-icon-wrapper">
-                            <Home style={{ width: '18px', height: '18px' }} />
-                          </div>
-                          <div>
-                            <div className="slot-name">Supporting / Necessity</div>
-                            <span style={{ fontSize: '11px', color: '#64748b' }}>Hospitality / Annexure / Rent</span>
-                          </div>
-                        </div>
-                        <span className="slot-spec-badge">PDF &le;1 MB</span>
+                      <div className="compact-slot-label">
+                        <Home className="compact-slot-icon" />
+                        <span className="compact-slot-name">Supporting / Necessity</span>
+                        <span className="compact-slot-spec">PDF &le;1 MB</span>
                       </div>
-
-                      <div className="slot-card-body">
+                      <div className="compact-slot-action">
                         {supportingFile ? (
-                          <div className="slot-file-details">
-                            <FileText style={{ width: '32px', height: '32px', color: '#059669', flexShrink: 0 }} />
-                            <div className="slot-file-info">
-                              <span className="slot-file-name" title={supportingFile.name}>{supportingFile.name}</span>
-                              <span className="slot-file-size">{(supportingFile.size / 1024).toFixed(1)} KB (Auto-compressed)</span>
-                            </div>
+                          <div className="compact-file-badge">
+                            <FileText style={{ width: '16px', height: '16px', color: '#059669', flexShrink: 0 }} />
+                            <span className="compact-file-name" title={supportingFile.name}>{supportingFile.name}</span>
+                            <span className="compact-file-size">({(supportingFile.size / 1024).toFixed(0)} KB)</span>
                             <button
                               type="button"
-                              className="slot-remove-btn"
+                              className="compact-remove-btn"
                               title="Remove supporting doc"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2025,22 +1958,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                                 if (supportingInputRef.current) supportingInputRef.current.value = '';
                               }}
                             >
-                              <X style={{ width: '14px', height: '14px' }} />
+                              <X style={{ width: '13px', height: '13px' }} />
                             </button>
                           </div>
                         ) : (
-                          <div className="slot-empty-prompt">
-                            <Upload style={{ width: '14px', height: '14px', color: '#3b82f6' }} />
-                            <span>Click or drop Supporting doc</span>
+                          <div className="compact-upload-btn">
+                            <Upload style={{ width: '13px', height: '13px' }} />
+                            <span>Choose Supporting Doc</span>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Batch Dropzone Fallback Row */}
+                  {/* Compact Batch Dropstrip */}
                   <div
-                    className={`batch-drop-row ${isDragActive ? 'drag-active' : ''}`}
+                    className={`compact-drop-strip ${isDragActive ? 'drag-active' : ''}`}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleFileDrop}
@@ -2054,10 +1987,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       style={{ display: 'none' }}
                       onChange={handleFileSelect}
                     />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '12px' }}>
-                      <Upload style={{ width: '16px', height: '16px', color: '#3b82f6' }} />
-                      <span><b>Drag all 5 documents together</b> or click here to auto-assign files</span>
-                    </div>
+                    <Upload style={{ width: '14px', height: '14px', color: '#3b82f6' }} />
+                    <span>Or drag all 5 documents together here to auto-assign</span>
                   </div>
 
                   {selectedFiles.length > 0 && (
@@ -2154,6 +2085,79 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         <span className="status-tag-pending">Awaiting Verification</span>
                       </div>
                     </div>
+
+                    {/* Photo & Signature Crop Verification Section */}
+                    {(item.photo_preview_url || item.signature_preview_url) && (
+                      <div className="preview-media-verify-section">
+                        <div className="preview-media-verify-header">
+                          <span className="media-verify-label">Processed Photo &amp; Signature</span>
+                          <span className="media-verify-hint">Verify crop framing &amp; margins before final submission</span>
+                        </div>
+                        <div className="preview-media-verify-grid">
+                          {/* Photo Preview Card */}
+                          <div className="preview-media-card">
+                            <div className="media-card-top">
+                              <div className="media-card-info">
+                                <Camera style={{ width: '13px', height: '13px', color: '#2563eb' }} />
+                                <span className="media-card-title">Photograph</span>
+                              </div>
+                              <span className="media-card-tag">630×810 JPG (&le;250 KB)</span>
+                            </div>
+                            <div
+                              className="media-card-preview-area"
+                              onClick={() => {
+                                if (item.photo_preview_url) {
+                                  openImageViewer('Applicant Photograph (630×810)', `${automationApi.getBaseUrl()}${item.photo_preview_url}`);
+                                }
+                              }}
+                            >
+                              {item.photo_preview_url ? (
+                                <img
+                                  src={`${automationApi.getBaseUrl()}${item.photo_preview_url}`}
+                                  alt="Photograph"
+                                  className="media-card-img photo-frame"
+                                  title="Click to zoom &amp; inspect face framing"
+                                />
+                              ) : (
+                                <div className="media-card-empty">No Photograph</div>
+                              )}
+                            </div>
+                            <span className="media-card-subhint">Click image to inspect face framing</span>
+                          </div>
+
+                          {/* Signature Preview Card */}
+                          <div className="preview-media-card">
+                            <div className="media-card-top">
+                              <div className="media-card-info">
+                                <PenTool style={{ width: '13px', height: '13px', color: '#2563eb' }} />
+                                <span className="media-card-title">Signature</span>
+                              </div>
+                              <span className="media-card-tag">JPG &le;100 KB</span>
+                            </div>
+                            <div
+                              className="media-card-preview-area"
+                              onClick={() => {
+                                if (item.signature_preview_url) {
+                                  openImageViewer('Applicant Signature', `${automationApi.getBaseUrl()}${item.signature_preview_url}`);
+                                }
+                              }}
+                            >
+                              {item.signature_preview_url ? (
+                                <img
+                                  src={`${automationApi.getBaseUrl()}${item.signature_preview_url}`}
+                                  alt="Signature"
+                                  className="media-card-img sign-frame"
+                                  title="Click to zoom &amp; inspect signature crop"
+                                />
+                              ) : (
+                                <div className="media-card-empty">No Signature</div>
+                              )}
+                            </div>
+                            <span className="media-card-subhint">Click image to inspect signature crop</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="preview-docs-container">
 
@@ -2418,6 +2422,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         title={viewerModal.title}
         pdfUrl={viewerModal.pdfUrl}
         onClose={() => setViewerModal(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      <ImageViewerModal
+        isOpen={imageViewerModal.isOpen}
+        title={imageViewerModal.title}
+        imageUrl={imageViewerModal.imageUrl}
+        onClose={() => setImageViewerModal(prev => ({ ...prev, isOpen: false }))}
       />
     </div>
   );

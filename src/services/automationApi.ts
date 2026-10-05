@@ -48,6 +48,8 @@ export interface PreviewItem {
   declaration_place?: string;
   passport_preview_url: string;
   declaration_preview_url: string;
+  photo_preview_url?: string;
+  signature_preview_url?: string;
   updated_at?: string;
 }
 
