@@ -22,11 +22,9 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 960);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
-  // Initialize and verify saved cryptographic session on startup
   useEffect(() => {
     const checkSavedSession = async () => {
       try {
-        // 1. First check local native cryptographic token storage
         const secureSession = await invoke<UserProfile>('verify_secure_session', { sessionToken: null });
         if (secureSession && secureSession.email) {
           setUser(secureSession);
@@ -44,7 +42,6 @@ export function App() {
           return;
         }
 
-        // Only check localStorage if no previous native token was found at all
         try {
           const rawSaved = localStorage.getItem('fs_user_session');
           if (rawSaved) {
@@ -75,16 +72,14 @@ export function App() {
     checkSavedSession();
   }, []);
 
-  // Periodic heartbeat to refresh user activity timestamp
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(() => {
       invoke('touch_session_activity').catch(() => {});
-    }, 5 * 60 * 1000); // Every 5 minutes
+    }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [user]);
 
-  // Poll automation counts for badges
   useEffect(() => {
     if (!user?.email) return;
 

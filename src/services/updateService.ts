@@ -16,10 +16,6 @@ export interface UpdateProgressCallback {
   (downloaded: number, total: number, percent: number): void;
 }
 
-/**
- * Compare two semver strings (e.g. "1.0.7" vs "1.0.0").
- * Returns true if remote is strictly newer than current.
- */
 function isNewerVersion(remote: string, current: string): boolean {
   const parse = (v: string) => v.replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
   const [rMaj = 0, rMin = 0, rPat = 0] = parse(remote);
@@ -40,7 +36,6 @@ class UpdateService {
 
   public subscribe(cb: (status: UpdateStatus, info?: UpdateInfo, progress?: number) => void) {
     this.listeners.add(cb);
-    // Immediately emit current state
     cb(this.status, this.updateInfo ?? undefined, this.progressPercent);
     return () => {
       this.listeners.delete(cb);
@@ -65,9 +60,6 @@ class UpdateService {
     return this.progressPercent;
   }
 
-  /**
-   * Fallback release check: queries latest.json or GitHub API
-   */
   private async checkRemoteRelease(): Promise<UpdateInfo | null> {
     let currentVersion = '1.0.0';
     try {
@@ -78,7 +70,6 @@ class UpdateService {
 
     const isWindows = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows');
 
-    // 1. Try fetching latest.json directly from GitHub releases
     try {
       const res = await fetch('https://github.com/pankaj886/foreigners-studio-releases/releases/latest/download/latest.json', {
         cache: 'no-store'
@@ -101,10 +92,8 @@ class UpdateService {
         }
       }
     } catch {
-      // Ignore network errors in silent check
     }
 
-    // 2. Try fetching latest release from GitHub API
     try {
       const apiRes = await fetch('https://api.github.com/repos/pankaj886/foreigners-studio-releases/releases/latest', {
         headers: { 'Accept': 'application/vnd.github.v3+json' },
@@ -114,7 +103,6 @@ class UpdateService {
         const release = await apiRes.json();
         const tag = (release.tag_name || '').replace(/^v/, '');
         if (tag && isNewerVersion(tag, currentVersion)) {
-          // Find matching installer asset
           if (Array.isArray(release.assets)) {
             if (isWindows) {
               const exeAsset = release.assets.find((a: any) =>
@@ -140,17 +128,11 @@ class UpdateService {
         }
       }
     } catch {
-      // Ignore network errors in silent check
     }
 
     return null;
   }
 
-  /**
-   * Check for remote updates from the release server.
-   * If an update is detected, automatically downloads it in the background
-   * and transitions to 'ready' status ("Restart to update").
-   */
   public async checkForUpdates(silent: boolean = true): Promise<boolean> {
     try {
       this.status = 'checking';
@@ -177,19 +159,16 @@ class UpdateService {
         this.status = 'available';
         this.notify();
 
-        // Automatically download the update in the background
         await this.downloadUpdate();
         return true;
       }
 
-      // Fallback check via release metadata
       const remoteInfo = await this.checkRemoteRelease();
       if (remoteInfo) {
         this.updateInfo = remoteInfo;
         this.status = 'available';
         this.notify();
 
-        // Automatically download the update in the background
         await this.downloadUpdate();
         return true;
       }
@@ -207,9 +186,6 @@ class UpdateService {
     }
   }
 
-  /**
-   * Download the update chunk-by-chunk with progress updates.
-   */
   public async downloadUpdate(): Promise<void> {
     try {
       this.status = 'downloading';
@@ -268,10 +244,6 @@ class UpdateService {
     }
   }
 
-  /**
-   * Relaunch the application to finalize installation of the new version.
-   * Can be invoked when status is 'ready'.
-   */
   public async restartAndApplyUpdate(): Promise<void> {
     this.status = 'restarting';
     this.notify();
@@ -311,9 +283,6 @@ class UpdateService {
     }
   }
 
-  /**
-   * Demo/Simulation mode for testing UI in development.
-   */
   public simulateUpdateReady(mockVersion: string = '1.0.8'): void {
     this.updateInfo = {
       version: mockVersion,

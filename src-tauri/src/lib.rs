@@ -6,8 +6,8 @@ use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
-const SESSION_MAX_DURATION_SECS: u64 = 7 * 24 * 3600; // 7 days
-const SESSION_MAX_INACTIVITY_SECS: u64 = 24 * 3600;    // 24 hours
+const SESSION_MAX_DURATION_SECS: u64 = 7 * 24 * 3600;
+const SESSION_MAX_INACTIVITY_SECS: u64 = 24 * 3600;
 
 const GOOGLE_CLIENT_ID: &str = "854859981023-n5pmt0docrrpu16lum1tjpddojfqoqlv.apps.googleusercontent.com";
 const GOOGLE_CLIENT_SECRET: &str = "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";
@@ -251,7 +251,6 @@ fn perform_google_login() -> Result<UserSession, String> {
         url_encode(&redirect_uri)
     );
 
-    // Open user's default browser to Google OAuth
     open_browser(&auth_url);
 
     let start = Instant::now();
@@ -267,7 +266,6 @@ fn perform_google_login() -> Result<UserSession, String> {
                         let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
 
                         if request_str.starts_with("GET /callback") {
-                            // Extract code
                             if let Some(query_start) = request_str.find("/callback?") {
                                 let query_line = &request_str[query_start + 10..];
                                 let end = query_line.find(' ').unwrap_or(query_line.len());
@@ -454,7 +452,6 @@ fn perform_google_login() -> Result<UserSession, String> {
         None => return Err("Authentication timed out or was cancelled. Please try again.".into()),
     };
 
-    // Exchange authorization code for tokens with Google
     #[cfg(target_os = "windows")]
     let curl_cmd = "curl.exe";
     #[cfg(not(target_os = "windows"))]
@@ -501,7 +498,6 @@ fn perform_google_login() -> Result<UserSession, String> {
         .and_then(|v| v.as_u64())
         .unwrap_or(3600);
 
-    // Cryptographic verification with Google's public token verification service
     let verify_output = create_silent_command(curl_cmd)
         .args([
             "-s",
@@ -669,19 +665,16 @@ async fn verify_secure_session(session_token: Option<String>) -> Result<UserSess
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
 
-    // Check 7-day max session duration
     if now.saturating_sub(payload.created_at) > SESSION_MAX_DURATION_SECS {
         let _ = std::fs::remove_file(get_session_dir().join("active_session.token"));
         return Err("Session expired after 7 days. Please sign in again.".into());
     }
 
-    // Check 24-hour inactivity limit
     if now.saturating_sub(payload.last_active_at) > SESSION_MAX_INACTIVITY_SECS {
         let _ = std::fs::remove_file(get_session_dir().join("active_session.token"));
         return Err("Session expired due to 24 hours of inactivity. Please sign in again.".into());
     }
 
-    // Refresh last active timestamp and persist
     payload.last_active_at = now;
     let _ = sign_and_save_session(&payload);
 
@@ -735,7 +728,6 @@ async fn start_google_login(window: tauri::Window) -> Result<UserSession, String
     .await
     .map_err(|e| format!("Login worker task failed: {}", e))??;
 
-    // Save cryptographic 7-day session token to disk
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
     let payload = SessionPayload {
         email: session.email.clone(),
@@ -748,7 +740,6 @@ async fn start_google_login(window: tauri::Window) -> Result<UserSession, String
     };
     let _ = sign_and_save_session(&payload);
 
-    // Bring Foreigners Studio window to the foreground smoothly
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
@@ -758,7 +749,6 @@ async fn start_google_login(window: tauri::Window) -> Result<UserSession, String
 
 #[tauri::command]
 async fn verify_google_session(id_token: String) -> Result<UserSession, String> {
-    // Check local cryptographic session first if valid
     if let Ok(sec_session) = verify_secure_session(None).await {
         return Ok(sec_session);
     }
@@ -814,7 +804,6 @@ async fn verify_google_session(id_token: String) -> Result<UserSession, String> 
             expires_at: exp,
         };
 
-        // Create cryptographic 7-day token
         let payload = SessionPayload {
             email: session.email.clone(),
             name: session.name.clone(),

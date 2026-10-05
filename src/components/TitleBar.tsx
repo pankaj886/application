@@ -50,7 +50,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
     return () => window.removeEventListener('resize', checkMaximized);
   }, []);
 
-  // Subscribe to background auto-updater and perform startup check
   useEffect(() => {
     const unsubscribe = updateService.subscribe((status, info, progress) => {
       setUpdateStatus(status);
@@ -58,12 +57,10 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
       if (progress !== undefined) setDownloadProgress(progress);
     });
 
-    // Check remote release server on startup
     const timer = setTimeout(() => {
       updateService.checkForUpdates(true);
     }, 3000);
 
-    // Periodic check every 1 minute (rapid update detection)
     const interval = setInterval(() => {
       updateService.checkForUpdates(true);
     }, 1 * 60 * 1000);
@@ -125,7 +122,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
     }
   };
 
-  // Render the Update action pill (Restart to update / Downloading / Restarting)
   const renderUpdateAction = () => {
     if (updateStatus === 'ready') {
       return (
@@ -225,7 +221,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
         </div>
       ) : (
         <div className="titlebar-controls" data-tauri-drag-region="false">
-          {/* Top UI corner: Action button placed immediately before Minimize button */}
+
           {renderUpdateAction()}
 
           <button

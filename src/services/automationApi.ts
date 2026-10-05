@@ -1,9 +1,3 @@
-/**
- * automationApi.ts - Autonomous High-Speed Gateway Client
- * Seamlessly and silently discovers the active Cloudflare tunnel or local automation server in the background.
- * Requires 0 user configuration or manual URL management.
- */
-
 const GITHUB_API_GATEWAY_URL = 'https://api.github.com/repos/pankaj886/foreigners-studio-releases/contents/gateway_config.json';
 const CLOUD_GATEWAY_RAW_URL = 'https://raw.githubusercontent.com/pankaj886/foreigners-studio-releases/main/gateway_config.json';
 const LOCAL_FALLBACK_URL = 'http://127.0.0.1:8001';
@@ -66,7 +60,6 @@ class AutomationApiService {
     if (cached) {
       this.activeBaseUrl = cached.replace(/\/+$/, '');
     }
-    // Eagerly resolve gateway in background
     this.resolveGateway().catch(() => {});
   }
 
@@ -74,17 +67,12 @@ class AutomationApiService {
     return this.activeBaseUrl || LOCAL_FALLBACK_URL;
   }
 
-  /**
-   * Autonomously discovers and verifies the live Cloudflare Tunnel or local server.
-   * Completely transparent to the user.
-   */
   public async resolveGateway(forceRefresh = false): Promise<string> {
     if (this.isResolving && !forceRefresh) {
       return this.isResolving;
     }
 
     this.isResolving = (async () => {
-      // 1. If we have an active URL and not forcing refresh, verify it quickly
       if (this.activeBaseUrl && !forceRefresh) {
         if (await this.pingHealth(this.activeBaseUrl, 3000)) {
           return this.activeBaseUrl;
@@ -93,7 +81,6 @@ class AutomationApiService {
 
       let candidatePublicUrl = '';
 
-      // 2A. Instant Cloud Registry lookup via GitHub Contents API (bypasses raw CDN 5-min cache)
       try {
         const ghRes = await fetch(`${GITHUB_API_GATEWAY_URL}?_t=${Date.now()}`, {
           headers: { 'Accept': 'application/vnd.github.v3+json' },
@@ -112,7 +99,6 @@ class AutomationApiService {
         }
       } catch (_) {}
 
-      // 2B. Fallback Cloud Registry lookup via raw.githubusercontent.com
       if (!candidatePublicUrl) {
         try {
           const rawRes = await fetch(`${CLOUD_GATEWAY_RAW_URL}?_t=${Date.now()}`, { cache: 'no-store' });
@@ -126,7 +112,6 @@ class AutomationApiService {
         } catch (_) {}
       }
 
-      // If discovered candidate from remote cloud registry, verify health
       if (candidatePublicUrl) {
         if (await this.pingHealth(candidatePublicUrl, 7000)) {
           this.activeBaseUrl = candidatePublicUrl;
@@ -135,7 +120,6 @@ class AutomationApiService {
         }
       }
 
-      // 3. Check bundled or local runtime config
       try {
         const localCfgRes = await fetch(`/tunnel_config.json?_t=${Date.now()}`, { cache: 'no-store' });
         if (localCfgRes.ok) {
@@ -149,14 +133,12 @@ class AutomationApiService {
         }
       } catch (_) {}
 
-      // 4. Check localhost (developer workstation)
       if (await this.pingHealth(LOCAL_FALLBACK_URL, 1500)) {
         this.activeBaseUrl = LOCAL_FALLBACK_URL;
         localStorage.setItem('fs_automation_api_url', LOCAL_FALLBACK_URL);
         return LOCAL_FALLBACK_URL;
       }
 
-      // If candidate was found from cloud registry but ping timed out, still use it over localhost on remote clients
       if (candidatePublicUrl) {
         this.activeBaseUrl = candidatePublicUrl;
         return candidatePublicUrl;
@@ -183,9 +165,6 @@ class AutomationApiService {
     }
   }
 
-  /**
-   * Executes fetch with automatic gateway resolution and single auto-retry.
-   */
   private async fetchWithAutoRetry(
     path: string,
     options: RequestInit = {}
@@ -201,7 +180,6 @@ class AutomationApiService {
       }
       return res;
     } catch (_) {
-      // Re-resolve active gateway and retry once
       baseUrl = await this.resolveGateway(true);
       url = `${baseUrl}${cleanPath}`;
       try {
@@ -223,7 +201,6 @@ class AutomationApiService {
     files: File[],
     userEmail?: string
   ): Promise<{ success: boolean; folder_name: string; message: string }> {
-    // Ensure gateway is resolved prior to constructing payload
     let baseUrl = await this.resolveGateway();
 
     const buildFormData = () => {
@@ -251,7 +228,6 @@ class AutomationApiService {
         throw new Error('Error Connecting to Server');
       }
     } catch (_) {
-      // Retry once with refreshed gateway
       baseUrl = await this.resolveGateway(true);
       url = `${baseUrl}/api/upload`;
       try {
@@ -348,6 +324,40 @@ class AutomationApiService {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: 'Failed to submit corrected details' }));
       throw new Error(err.detail || 'Failed to submit corrected details');
+    }
+
+    return await res.json();
+  }
+
+  public async dismissApplication(
+    clientEmail: string,
+    folderName: string
+  ): Promise<{ success: boolean; message: string }> {
+    let res: Response;
+    try {
+      res = await this.fetchWithAutoRetry(
+        `/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}`,
+        { method: 'DELETE' }
+      );
+    } catch (_) {
+      res = await this.fetchWithAutoRetry(
+        `/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/dismiss`,
+        { method: 'POST' }
+      );
+    }
+
+    if (!res.ok) {
+      try {
+        res = await this.fetchWithAutoRetry(
+          `/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/dismiss`,
+          { method: 'POST' }
+        );
+      } catch (_) {}
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to dismiss application' }));
+      throw new Error(err.detail || 'Failed to dismiss application');
     }
 
     return await res.json();

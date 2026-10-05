@@ -5,7 +5,7 @@
   --bg-surface: #ffffff;
   --bg-surface-subtle: #f1f5f9;
   --bg-surface-hover: #f8fafc;
-  
+
   --border-subtle: #e2e8f0;
   --border-medium: #cbd5e1;
   --border-focus: #3b82f6;
@@ -50,7 +50,7 @@
   --card-padding: max(16px, calc(26px * var(--app-scale)));
   --container-padding: max(16px, calc(28px * var(--app-scale)));
   --btn-height: max(36px, calc(44px * var(--app-scale)));
-  
+
   --gap-xs: max(4px, calc(6px * var(--app-scale)));
   --gap-sm: max(8px, calc(10px * var(--app-scale)));
   --gap-md: max(12px, calc(16px * var(--app-scale)));
@@ -239,7 +239,6 @@ body {
   object-fit: contain;
   display: block;
 }
-
 
 .brand-meta {
   display: flex;
@@ -774,10 +773,6 @@ svg.arrow-icon,
   padding: 14px 16px;
 }
 
-/* ==========================================================================
-   AUTHENTICATION & GOOGLE LOGIN STYLES (PURE MINIMAL WHITE SCREEN)
-   ========================================================================== */
-
 .app-root.auth-mode {
   background: #ffffff !important;
 }
@@ -852,7 +847,6 @@ svg.arrow-icon,
   letter-spacing: 0.2px;
 }
 
-/* Pure Minimal Login Container */
 .login-pure-wrapper {
   display: flex;
   align-items: center;
@@ -871,7 +865,6 @@ svg.arrow-icon,
   gap: 14px;
 }
 
-/* Official Clean Google Sign-In Button */
 .google-pure-btn {
   display: inline-flex;
   align-items: center;
@@ -928,7 +921,6 @@ svg.arrow-icon,
   animation: fadeIn 200ms ease;
 }
 
-/* Minimal Pure Success Welcome */
 .login-pure-success {
   display: flex;
   flex-direction: column;
@@ -976,11 +968,6 @@ svg.arrow-icon,
   margin: 0;
 }
 
-/* ==========================================================================
-   SIDEBAR USER PROFILE, COLLAPSED STATE & LOGOUT MODAL
-   ========================================================================== */
-
-/* Expanded Footer Container */
 .sidebar-expanded-footer {
   display: flex;
   flex-direction: column;
@@ -989,7 +976,6 @@ svg.arrow-icon,
   gap: 6px;
 }
 
-/* User Card in Expanded State */
 .sidebar-user-card {
   display: flex;
   align-items: center;
@@ -1092,7 +1078,6 @@ svg.arrow-icon,
   height: 16px;
 }
 
-/* Version Row in Expanded State */
 .sidebar-version-row {
   display: flex;
   align-items: center;
@@ -1109,7 +1094,6 @@ svg.arrow-icon,
   letter-spacing: 0.3px;
 }
 
-/* Collapsed Footer Layout */
 .sidebar-collapsed-footer {
   display: flex;
   flex-direction: column;
@@ -1158,10 +1142,6 @@ svg.arrow-icon,
   font-weight: 600;
   text-align: center;
 }
-
-/* ==========================================================================
-   MINIMALIST LOGOUT CONFIRMATION MODAL (PURE WHITE & BLUE/RED)
-   ========================================================================== */
 
 .logout-modal-overlay {
   position: fixed;
@@ -1266,7 +1246,6 @@ svg.arrow-icon,
   box-sizing: border-box;
 }
 
-/* Cancel button: Pure Blue */
 .logout-modal-btn.cancel-btn {
   background: #2563eb;
   color: #ffffff;
@@ -1284,7 +1263,6 @@ svg.arrow-icon,
   background: #1e40af;
 }
 
-/* Confirm button: Pure Red */
 .logout-modal-btn.confirm-btn {
   background: #dc2626;
   color: #ffffff;
@@ -1301,10 +1279,6 @@ svg.arrow-icon,
   transform: translateY(0);
   background: #991b1b;
 }
-
-/* ============================================================
-   FRESH / REISSUE SERVICE STYLES (White & Blue Minimalist UI)
-   ============================================================ */
 
 .fresh-reissue-container {
   display: flex;
@@ -1409,7 +1383,6 @@ svg.arrow-icon,
   height: 17px;
 }
 
-/* Sidebar Subnav for Fresh / Reissue */
 .sidebar-service-subnav {
   display: flex;
   flex-direction: column;
@@ -1515,7 +1488,6 @@ svg.arrow-icon,
   margin-left: auto;
 }
 
-/* Fresh / Reissue Content View */
 .fresh-reissue-content {
   display: flex;
   flex-direction: column;
@@ -1640,7 +1612,6 @@ svg.arrow-icon,
   padding-right: 42px;
 }
 
-/* Hide native Edge/WebView2/browser password reveal & clear buttons to keep only one clean eye toggle */
 input::-ms-reveal,
 input::-ms-clear,
 input[type="password"]::-ms-reveal,
@@ -1681,7 +1652,6 @@ input::-webkit-credentials-auto-fill-button {
   height: 17px;
 }
 
-/* Upload Dropzone */
 .file-dropzone {
   display: flex;
   flex-direction: column;
@@ -1843,7 +1813,6 @@ input::-webkit-credentials-auto-fill-button {
   height: 18px;
 }
 
-/* Correction Card & Missing Data Prompt */
 .correction-card {
   background: #ffffff;
   border: 1px solid var(--border-subtle);
@@ -1999,7 +1968,6 @@ input::-webkit-credentials-auto-fill-button {
   background: var(--blue-hover);
 }
 
-/* Tracker Card */
 .tracker-card {
   background: #ffffff;
   border: 1px solid var(--border-subtle);
@@ -2157,7 +2125,6 @@ input::-webkit-credentials-auto-fill-button {
   border: 1px solid var(--green-border);
 }
 
-/* Empty State Card */
 .empty-state-card {
   display: flex;
   flex-direction: column;
@@ -2220,7 +2187,6 @@ input::-webkit-credentials-auto-fill-button {
   background: var(--blue-hover);
 }
 
-/* Previews Grid & Cards */
 .previews-grid {
   display: flex;
   flex-direction: column;
@@ -2436,7 +2402,6 @@ input::-webkit-credentials-auto-fill-button {
   cursor: not-allowed;
 }
 
-/* Completed Grid & Cards */
 .completed-grid {
   display: flex;
   flex-direction: column;
@@ -2540,7 +2505,6 @@ input::-webkit-credentials-auto-fill-button {
   height: 15px;
 }
 
-/* PDF Modal Backdrop & Body */
 .pdf-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -2662,7 +2626,6 @@ input::-webkit-credentials-auto-fill-button {
   border: none;
 }
 
-/* PDF Viewer Loading & Error States */
 .pdf-loading-state,
 .pdf-error-state {
   display: flex;
@@ -2708,7 +2671,6 @@ input::-webkit-credentials-auto-fill-button {
   background: var(--blue-hover);
 }
 
-/* Wrong Credentials High-Visibility Warning Banner */
 .wrong-creds-banner {
   display: flex;
   align-items: flex-start;
@@ -2749,7 +2711,31 @@ input::-webkit-credentials-auto-fill-button {
   line-height: 1.5;
 }
 
-/* Navigation Right Tools & Gateway Status Pill */
+.dismiss-banner-btn {
+  margin-left: auto;
+  align-self: center;
+  padding: 6px 14px;
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-md);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.dismiss-banner-btn:hover {
+  background: #fecaca;
+  color: #7f1d1d;
+}
+
+.dismiss-banner-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .nav-right-tools {
   display: flex;
   align-items: center;
@@ -2808,7 +2794,6 @@ input::-webkit-credentials-auto-fill-button {
   background: #10b981 !important;
 }
 
-/* Gateway Config Modal */
 .config-modal-box {
   width: 100%;
   max-width: 480px;
@@ -2906,6 +2891,4 @@ input::-webkit-credentials-auto-fill-button {
 .config-btn-secondary:hover {
   background: #f1f5f9;
 }
-
-
 

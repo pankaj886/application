@@ -19,7 +19,6 @@ const tempDir = path.join(nsisDir, 'temp_extract');
 if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
 execSync(`powershell.exe -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${tempDir}' -Force"`);
 
-// Copy all files from temp_extract/nsis-3.11 into nsisDir
 const extractedRoot = path.join(tempDir, 'nsis-3.11');
 function copyRecursive(src, dest) {
   if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
@@ -36,7 +35,6 @@ function copyRecursive(src, dest) {
 copyRecursive(extractedRoot, nsisDir);
 fs.rmSync(tempDir, { recursive: true, force: true });
 
-// Setup Plugins/x86-unicode/additional/nsis_tauri_utils.dll
 const addDir = path.join(nsisDir, 'Plugins', 'x86-unicode', 'additional');
 if (!fs.existsSync(addDir)) fs.mkdirSync(addDir, { recursive: true });
 
@@ -44,7 +42,6 @@ const dllPath = path.join(addDir, 'nsis_tauri_utils.dll');
 console.log('Downloading nsis_tauri_utils.dll...');
 execSync(`curl.exe -s -L "https://github.com/tauri-apps/nsis-tauri-utils/releases/download/nsis_tauri_utils-v0.5.3/nsis_tauri_utils.dll" -o "${dllPath}"`);
 
-// Verify all 12 items
 const files = [
   'Bin/makensis.exe',
   'Stubs/lzma-x86-unicode',

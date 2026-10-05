@@ -38,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   previewCount = 0,
   completedCount = 0,
 }) => {
-  const [appVersion, setAppVersion] = useState<string>('1.0.25');
+  const [appVersion, setAppVersion] = useState<string>('1.0.26');
 
   useEffect(() => {
     getVersion()
@@ -46,7 +46,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         if (ver) setAppVersion(ver);
       })
       .catch(() => {
-        // Fallback default
       });
   }, []);
 
@@ -74,7 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <nav className="sidebar-nav">
-        {/* Main Services Navigation Tab */}
+
         <button
           type="button"
           onClick={() => onTabChange('services')}
@@ -96,7 +95,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </button>
 
-        {/* Dynamic Fresh / Reissue Sub-Sections (ONLY visible when inside fresh/reissue service) */}
         {isInsideFreshReissue && (
           <div className="sidebar-service-subnav">
             {!collapsed && (
@@ -106,7 +104,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
 
-            {/* 1. New Application / Form Section */}
             <button
               type="button"
               onClick={() => onFreshReissueSectionChange && onFreshReissueSectionChange('form')}
@@ -121,7 +118,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </button>
 
-            {/* 2. Preview Section */}
             <button
               type="button"
               onClick={() => onFreshReissueSectionChange && onFreshReissueSectionChange('preview')}
@@ -144,7 +140,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </button>
 
-            {/* 3. Submitted Section */}
             <button
               type="button"
               onClick={() => onFreshReissueSectionChange && onFreshReissueSectionChange('submitted')}

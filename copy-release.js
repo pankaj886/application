@@ -14,7 +14,6 @@ if (!fs.existsSync(releaseOutDir)) {
 
 console.log('[Release Bundler] Scanning for build artifacts in:', targetBase);
 
-// 1. WINDOWS BINARIES & DLL
 const winTargetDirs = [
   path.join(targetBase, 'release'),
   path.join(targetBase, 'x86_64-pc-windows-gnu', 'release'),
@@ -36,7 +35,6 @@ for (const targetDir of winTargetDirs) {
   }
 }
 
-// 2. WINDOWS NSIS / MSI INSTALLERS
 const winBundleDirs = [
   path.join(targetBase, 'release', 'bundle'),
   path.join(targetBase, 'x86_64-pc-windows-msvc', 'release', 'bundle'),
@@ -71,7 +69,6 @@ for (const bDir of winBundleDirs) {
   }
 }
 
-// 3. MACOS BUNDLES (.dmg & .app)
 const macBundleDirs = [
   path.join(targetBase, 'universal-apple-darwin', 'release', 'bundle'),
   path.join(targetBase, 'release', 'bundle'),

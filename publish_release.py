@@ -72,7 +72,7 @@ def get_or_create_release():
     except urllib.error.HTTPError as e:
         if e.code != 404:
             raise
-    
+
     print(f"Creating new release {TAG}...")
     payload = json.dumps({
         "tag_name": TAG,
@@ -87,20 +87,19 @@ def get_or_create_release():
     return rel
 
 def upload_asset(upload_url_template, file_path, asset_name):
-    # upload_url_template is like 'https://uploads.github.com/repos/.../releases/123/assets{?name,label}'
     base_url = upload_url_template.split("{")[0]
     upload_url = f"{base_url}?name={asset_name}"
-    
+
     print(f"Uploading {asset_name} ({os.path.getsize(file_path)} bytes)...")
     with open(file_path, "rb") as f:
         file_bytes = f.read()
-    
+
     content_type = "application/octet-stream"
     if asset_name.endswith(".json"):
         content_type = "application/json"
     elif asset_name.endswith(".zip"):
         content_type = "application/zip"
-        
+
     req = urllib.request.Request(
         upload_url,
         data=file_bytes,
@@ -120,8 +119,7 @@ def main():
     rel = get_or_create_release()
     upload_url = rel["upload_url"]
     existing_assets = {a["name"]: a["id"] for a in rel.get("assets", [])}
-    
-    # Check assets to upload
+
     assets = [
         f"Foreigners_Studio_{VERSION}_universal.dmg",
         f"Foreigners_Studio_{VERSION}_x64-setup.exe",
@@ -129,20 +127,20 @@ def main():
         "Foreigners_Studio_Windows_x64.zip",
         "latest.json"
     ]
-    
+
     for asset_name in assets:
         path = os.path.join(DIST_DIR, asset_name)
         if not os.path.exists(path):
             print(f"WARNING: File not found: {path}")
             continue
-            
+
         if asset_name in existing_assets:
             print(f"Asset {asset_name} already exists (ID {existing_assets[asset_name]}). Deleting old asset...")
             api_request(f"https://api.github.com/repos/{REPO}/releases/assets/{existing_assets[asset_name]}", method="DELETE", content_type=None)
             print(f"Deleted old {asset_name}.")
-            
+
         upload_asset(upload_url, path, asset_name)
-        
+
     print("\nAll release assets uploaded successfully to GitHub!")
 
 if __name__ == "__main__":

@@ -17,7 +17,6 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    // Focus cancel button on open for safe keyboard default
     cancelBtnRef.current?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {

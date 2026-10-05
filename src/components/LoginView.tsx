@@ -17,13 +17,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       setLoading(true);
       setError(null);
 
-      // Invoke Tauri Rust backend loopback OAuth
       const session = await invoke<UserProfile>('start_google_login');
 
       setSuccessUser(session);
       setLoading(false);
 
-      // Smooth brief transition into app
       setTimeout(() => {
         onLoginSuccess(session);
       }, 1000);

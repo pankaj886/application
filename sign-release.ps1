@@ -1,4 +1,3 @@
-# Script to sign release binaries with Authenticode and DigiCert timestamping
 [CmdletBinding()]
 param(
     [string]$DistDir = "",
@@ -21,7 +20,6 @@ Write-Host "      Foreigners Studio - Windows Authenticode Signer     " -Foregro
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "Target directory: $DistDir"
 
-# Find or import certificate
 $cert = Get-ChildItem -Path Cert:\CurrentUser\My -CodeSigningCert -ErrorAction SilentlyContinue | Where-Object { $_.Subject -match "Foreigners Studio" } | Select-Object -First 1
 
 if (-not $cert) {
@@ -64,7 +62,6 @@ foreach ($fileItem in $targets) {
     }
 }
 
-# Update zip bundle if present
 $zipPath = Join-Path $DistDir "Foreigners_Studio_Windows_x64.zip"
 $signedExe = Join-Path $DistDir "foreigners_studio.exe"
 if ((Test-Path $zipPath) -and (Test-Path $signedExe)) {
@@ -106,7 +103,6 @@ if ((Test-Path $zipPath) -and (Test-Path $signedExe)) {
     }
 }
 
-# Copy installer scripts and certificate into dist-release for distribution
 Write-Host "`nDeploying installer helper scripts to $DistDir..."
 $auxFiles = @(
     @{ Src = (Join-Path $PSScriptRoot "certs\ForeignersStudio.cer"); Dest = (Join-Path $DistDir "ForeignersStudio.cer") },
