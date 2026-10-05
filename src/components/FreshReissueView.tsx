@@ -19,7 +19,9 @@ import {
   Camera,
   PenTool,
   BookOpen,
-  X
+  X,
+  Mic,
+  Sparkles
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -160,6 +162,127 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       console.warn('Error fetching automation data:', err);
     } finally {
       setIsLoadingData(false);
+    }
+  };
+
+  // Manual refresh spinner state
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    setIsManualRefreshing(true);
+    try {
+      await automationApi.resolveGateway(true);
+      await refreshAllData();
+    } catch (err) {
+      console.warn('Manual refresh error:', err);
+    } finally {
+      setTimeout(() => {
+        setIsManualRefreshing(false);
+      }, 800);
+    }
+  };
+
+  // AI Voice Agent States
+  const [recordingFolder, setRecordingFolder] = useState<string | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState<number>(0);
+  const [voiceProcessingFolder, setVoiceProcessingFolder] = useState<string | null>(null);
+  const [voiceResults, setVoiceResults] = useState<Record<string, { transcription: string; summary: string; success: boolean }>>({});
+  const [voiceTextInputs, setVoiceTextInputs] = useState<Record<string, string>>({});
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerIntervalRef = useRef<any>(null);
+
+  const startVoiceRecording = async (folderName: string) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        if (MediaRecorder.isTypeSupported('audio/webm')) {
+          mimeType = 'audio/webm';
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        } else {
+          mimeType = '';
+        }
+      }
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        await handleSendVoiceAction(folderName, blob);
+      };
+
+      recorder.start(250);
+      setRecordingFolder(folderName);
+      setRecordingDuration(0);
+
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Microphone error:', err);
+      alert('Microphone access is required to record voice notes. Please allow microphone permissions or type your instructions in the text box.');
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setRecordingFolder(null);
+  };
+
+  const handleSendVoiceAction = async (folderName: string, audioBlob?: Blob | null, textPrompt?: string) => {
+    try {
+      setVoiceProcessingFolder(folderName);
+      const text = textPrompt !== undefined ? textPrompt : (voiceTextInputs[folderName] || '');
+      const email = user?.email || portalEmail || activeClientEmail;
+
+      const res = await automationApi.sendVoiceInstruction(email, folderName, audioBlob, text);
+
+      setVoiceResults((prev) => ({
+        ...prev,
+        [folderName]: {
+          transcription: res.transcription || 'Voice note processed',
+          summary: res.summary || 'Draft preview updated with your instructions.',
+          success: true,
+        },
+      }));
+
+      // Clear text input
+      setVoiceTextInputs((prev) => ({ ...prev, [folderName]: '' }));
+
+      // Refresh all applications and previews
+      await refreshAllData();
+    } catch (err: any) {
+      const msg = sanitizeErrorMessage(err);
+      setVoiceResults((prev) => ({
+        ...prev,
+        [folderName]: {
+          transcription: '',
+          summary: `Voice Agent could not apply changes: ${msg}`,
+          success: false,
+        },
+      }));
+    } finally {
+      setVoiceProcessingFolder(null);
     }
   };
 
@@ -1109,11 +1232,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         <div className="nav-right-tools">
           <button
             type="button"
-            onClick={() => refreshAllData()}
+            onClick={handleManualRefresh}
             className="refresh-btn"
-            title="Refresh Data"
+            title="Refresh All Applications and Previews"
+            disabled={isManualRefreshing}
           >
-            <RefreshCw className={`refresh-icon ${isLoadingData ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`refresh-icon ${isManualRefreshing || isLoadingData ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -2291,6 +2415,110 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         <span className="preview-client-name" style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>{item.applicant_name}</span>
                         <span className="status-tag-pending">Awaiting Verification</span>
                       </div>
+                    </div>
+
+                    {/* Enterprise AI Voice Agent & Preview Editor */}
+                    <div className="preview-voice-agent-container">
+                      <div className="voice-agent-header">
+                        <div className="voice-agent-title-row">
+                          <span className="voice-agent-badge">
+                            <Sparkles className="voice-agent-badge-icon" />
+                            AI Voice Agent
+                          </span>
+                          <span className="voice-agent-subtitle">Smart Crop &amp; Details Editor</span>
+                        </div>
+                        {recordingFolder === folderKey && (
+                          <div className="recording-timer-pill">
+                            <span className="recording-dot-pulse" />
+                            <span>REC {String(Math.floor(recordingDuration / 60)).padStart(2, '0')}:{String(recordingDuration % 60).padStart(2, '0')}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="voice-agent-instructions">
+                        Speak or type any adjustment (e.g. <b>"Photo crop is too close, show more shoulders"</b>, <b>"Signature cut off, recrop wider"</b>, <b>"Applicant is single, remove spouse name"</b>, <b>"Change date of birth to 15/08/1995"</b>). The agent re-crops from source uploads, clears old data, and regenerates fresh previews.
+                      </div>
+
+                      <div className="voice-agent-main-row">
+                        {recordingFolder === folderKey ? (
+                          <button
+                            type="button"
+                            onClick={stopVoiceRecording}
+                            className="voice-recording-active-btn"
+                            title="Click red square button to stop recording and send voice note"
+                          >
+                            <span className="stop-square-icon" />
+                            <span>Stop &amp; Apply Changes</span>
+                            <div className="voice-waves-visualizer">
+                              <span className="voice-wave-bar" />
+                              <span className="voice-wave-bar" />
+                              <span className="voice-wave-bar" />
+                              <span className="voice-wave-bar" />
+                              <span className="voice-wave-bar" />
+                            </div>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={voiceProcessingFolder === folderKey}
+                            onClick={() => startVoiceRecording(folderKey)}
+                            className="voice-record-btn"
+                            title="Record voice note for AI Agent"
+                          >
+                            <Mic style={{ width: '15px', height: '15px' }} />
+                            <span>Record Voice Note</span>
+                          </button>
+                        )}
+
+                        <div className="voice-text-input-wrap">
+                          <input
+                            type="text"
+                            disabled={voiceProcessingFolder === folderKey || recordingFolder === folderKey}
+                            placeholder="Or type instructions here..."
+                            value={voiceTextInputs[folderKey] || ''}
+                            onChange={(e) => setVoiceTextInputs({ ...voiceTextInputs, [folderKey]: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && (voiceTextInputs[folderKey] || '').trim()) {
+                                handleSendVoiceAction(folderKey, null, voiceTextInputs[folderKey]);
+                              }
+                            }}
+                            className="voice-text-input"
+                          />
+                          <button
+                            type="button"
+                            disabled={voiceProcessingFolder === folderKey || recordingFolder === folderKey || !(voiceTextInputs[folderKey] || '').trim()}
+                            onClick={() => handleSendVoiceAction(folderKey, null, voiceTextInputs[folderKey])}
+                            className="voice-text-send-btn"
+                            title="Send text instruction"
+                          >
+                            <Send style={{ width: '13px', height: '13px' }} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {voiceProcessingFolder === folderKey && (
+                        <div className="voice-processing-banner">
+                          <RefreshCw style={{ width: '16px', height: '16px' }} className="animate-spin" />
+                          <span>AI Agent is analyzing changes, re-cropping source documents &amp; generating new previews...</span>
+                        </div>
+                      )}
+
+                      {voiceResults[folderKey] && voiceProcessingFolder !== folderKey && (
+                        <div className="voice-result-banner">
+                          <div className="voice-result-title">
+                            <CheckCircle2 style={{ width: '14px', height: '14px' }} />
+                            <span>Updates Applied &amp; Fresh Previews Ready</span>
+                          </div>
+                          {voiceResults[folderKey].transcription && (
+                            <div className="voice-result-transcription">
+                              &ldquo;{voiceResults[folderKey].transcription}&rdquo;
+                            </div>
+                          )}
+                          <div className="voice-result-summary">
+                            {voiceResults[folderKey].summary}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Photo & Signature Crop Verification Section */}

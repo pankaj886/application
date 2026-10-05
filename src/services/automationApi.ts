@@ -431,6 +431,63 @@ class AutomationApiService {
 
     return await res.json();
   }
+
+  public async sendVoiceInstruction(
+    clientEmail: string,
+    folderName: string,
+    audioBlob?: Blob | null,
+    textInstruction?: string
+  ): Promise<VoiceInstructionResult> {
+    const baseUrl = await this.resolveGateway();
+    const fd = new FormData();
+    if (audioBlob) {
+      fd.append('audio', audioBlob, 'recording.webm');
+    }
+    if (textInstruction && textInstruction.trim()) {
+      fd.append('text_instruction', textInstruction.trim());
+    }
+
+    const cleanPath = `/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/voice-instruction`;
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}${cleanPath}`, {
+        method: 'POST',
+        body: fd,
+      });
+      if (res.status >= 500) {
+        throw new Error('Error Connecting to Server');
+      }
+    } catch (_) {
+      const retryUrl = await this.resolveGateway(true);
+      res = await fetch(`${retryUrl}${cleanPath}`, {
+        method: 'POST',
+        body: fd,
+      });
+    }
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => null);
+      throw new Error(parseErrorDetail(errJson, 'Voice instruction processing failed'));
+    }
+
+    return await res.json();
+  }
+}
+
+export interface VoiceInstructionResult {
+  success: boolean;
+  folder_name: string;
+  transcription: string;
+  summary: string;
+  field_updates: Record<string, any>;
+  field_clears: string[];
+  photo_updated: boolean;
+  signature_updated: boolean;
+  passport_preview_url?: string;
+  declaration_preview_url?: string;
+  photo_preview_url?: string;
+  signature_preview_url?: string;
+  updated_at: string;
 }
 
 export const automationApi = new AutomationApiService();
