@@ -43,10 +43,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 }) => {
   const initialEmail = (localStorage.getItem('fs_active_client_email') || user.email || '').toUpperCase();
   const initialPassword = localStorage.getItem('fs_portal_password') || '';
+  const initialPlace = (localStorage.getItem('fs_declaration_place') || 'ROME').toUpperCase();
   const [portalEmail, setPortalEmail] = useState(initialEmail);
   const [activeClientEmail, setActiveClientEmail] = useState(initialEmail || 'CLIENT@FOREIGNERSSTUDIO.COM');
   const [portalPassword, setPortalPassword] = useState(initialPassword);
   const [showPassword, setShowPassword] = useState(false);
+  const [declarationPlace, setDeclarationPlace] = useState(initialPlace);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -54,6 +56,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
+  const [cancellingFolder, setCancellingFolder] = useState<string | null>(null);
   const [correctionFormData, setCorrectionFormData] = useState<Record<string, string>>({});
   const [dismissedCorrectionFolder, setDismissedCorrectionFolder] = useState<string | null>(null);
 
@@ -393,6 +396,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setIsUploading(true);
       localStorage.setItem('fs_active_client_email', targetClientEmail);
       localStorage.setItem('fs_portal_password', cleanPassword);
+      if (declarationPlace) {
+        localStorage.setItem('fs_declaration_place', declarationPlace.trim().toUpperCase());
+      }
       setActiveClientEmail(targetClientEmail);
 
       await automationApi.uploadApplication(
@@ -400,7 +406,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         targetClientEmail,
         cleanPassword,
         selectedFiles,
-        user?.email
+        user?.email,
+        declarationPlace.trim() || 'ROME'
       );
 
       setUploadMessage({
@@ -562,6 +569,36 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       await refreshAllData();
     } finally {
       setIsDismissing(false);
+    }
+  };
+
+  const handleCancelPreview = async (folderName: string, applicantName?: string) => {
+    const displayName = applicantName || folderName;
+    if (!window.confirm(`Are you sure you want to cancel the application for ${displayName}?\n\nThis will cancel the application and permanently delete both preview files and all applicant data from your PC.`)) {
+      return;
+    }
+
+    try {
+      setCancellingFolder(folderName);
+      const email = user?.email || activeClientEmail;
+      await automationApi.dismissApplication(email, folderName);
+
+      setPreviews(prev => prev.filter(p => p.folder_name !== folderName));
+      setApplications(prev => prev.filter(a => a.folder_name !== folderName));
+      setPreviewSelections(prev => {
+        const copy = { ...prev };
+        delete copy[folderName];
+        return copy;
+      });
+
+      await refreshAllData();
+    } catch (err: any) {
+      console.warn("Failed to delete application files from server:", err);
+      setPreviews(prev => prev.filter(p => p.folder_name !== folderName));
+      setApplications(prev => prev.filter(a => a.folder_name !== folderName));
+      await refreshAllData();
+    } finally {
+      setCancellingFolder(null);
     }
   };
 
@@ -1538,6 +1575,32 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 </div>
 
                 <div className="input-group">
+                  <label htmlFor="declarationPlace" className="input-label">
+                    Declaration Place (Application Place) <span className="required-star">*</span>
+                  </label>
+                  <input
+                    id="declarationPlace"
+                    type="text"
+                    required
+                    value={declarationPlace}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase();
+                      setDeclarationPlace(val);
+                      localStorage.setItem('fs_declaration_place', val);
+                    }}
+                    placeholder="e.g. ROME, MILANO, NAPOLI"
+                    className="form-input"
+                    style={{ textTransform: 'uppercase' }}
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck="false"
+                  />
+                  <span className="input-hint" style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                    City where application is signed and submitted from. This exact place will be filled in the Self-Declaration PDF under Place &amp; Date.
+                  </span>
+                </div>
+
+                <div className="input-group">
                   <label className="input-label">
                     Supporting Documents <span className="required-star">*</span>
                   </label>
@@ -1660,8 +1723,38 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             Portal: {item.portal_email}
                           </span>
                         )}
+                        {item.declaration_place && (
+                          <span className="preview-portal-badge" style={{ fontSize: '11px', color: '#38bdf8', background: 'rgba(56,189,248,0.1)', padding: '2px 8px', borderRadius: '4px' }}>
+                            Place: {item.declaration_place}
+                          </span>
+                        )}
                       </div>
-                      <span className="status-tag-pending">Awaiting Verification</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span className="status-tag-pending">Awaiting Verification</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCancelPreview(folderKey, item.applicant_name)}
+                          disabled={cancellingFolder === folderKey || isSubmittingThis}
+                          className="cancel-preview-btn-top"
+                          title="Cancel application and delete both preview files from PC"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 10px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            color: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            borderRadius: '6px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Trash2 style={{ width: '13px', height: '13px' }} />
+                          <span>{cancellingFolder === folderKey ? 'Deleting...' : 'Cancel Application'}</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="preview-docs-container">
@@ -1746,24 +1839,59 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         )}
                       </div>
 
-                      <button
-                        type="button"
-                        disabled={!canSubmit || isSubmittingThis}
-                        onClick={() => handleConfirmFinalSubmit(folderKey, item.arn)}
-                        className={`final-submit-btn ${canSubmit ? 'enabled' : 'disabled'}`}
-                      >
-                        {isSubmittingThis ? (
-                          <>
-                            <RefreshCw className="submit-icon animate-spin" />
-                            <span>Submitting to Portal (Stage 10)...</span>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="submit-icon" />
-                            <span>Submit Application</span>
-                          </>
-                        )}
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <button
+                          type="button"
+                          disabled={cancellingFolder === folderKey || isSubmittingThis}
+                          onClick={() => handleCancelPreview(folderKey, item.applicant_name)}
+                          className="cancel-preview-btn-footer"
+                          title="Cancel application and delete both preview files from PC"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '10px 16px',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            color: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            borderRadius: '8px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {cancellingFolder === folderKey ? (
+                            <>
+                              <RefreshCw style={{ width: '14px', height: '14px' }} className="animate-spin" />
+                              <span>Canceling...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 style={{ width: '14px', height: '14px' }} />
+                              <span>Cancel Application</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={!canSubmit || isSubmittingThis || cancellingFolder === folderKey}
+                          onClick={() => handleConfirmFinalSubmit(folderKey, item.arn)}
+                          className={`final-submit-btn ${canSubmit ? 'enabled' : 'disabled'}`}
+                        >
+                          {isSubmittingThis ? (
+                            <>
+                              <RefreshCw className="submit-icon animate-spin" />
+                              <span>Submitting to Portal (Stage 10)...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="submit-icon" />
+                              <span>Submit Application</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

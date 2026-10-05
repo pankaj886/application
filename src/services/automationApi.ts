@@ -10,6 +10,7 @@ export interface ApplicationItem {
   applicant_name?: string;
   portal_email?: string;
   google_email?: string;
+  declaration_place?: string;
   error_type?: string;
   error_message?: string;
   missing_fields?: string[];
@@ -35,6 +36,7 @@ export interface PreviewItem {
   status: string;
   portal_email?: string;
   google_email?: string;
+  declaration_place?: string;
   passport_preview_url: string;
   declaration_preview_url: string;
   updated_at?: string;
@@ -199,7 +201,8 @@ class AutomationApiService {
     portalUsername: string,
     portalPassword: string,
     files: File[],
-    userEmail?: string
+    userEmail?: string,
+    declarationPlace?: string
   ): Promise<{ success: boolean; folder_name: string; message: string }> {
     let baseUrl = await this.resolveGateway();
 
@@ -210,6 +213,9 @@ class AutomationApiService {
       fd.append('portal_password', portalPassword);
       if (userEmail) {
         fd.append('user_email', userEmail);
+      }
+      if (declarationPlace && declarationPlace.trim()) {
+        fd.append('declaration_place', declarationPlace.trim().toUpperCase());
       }
       for (const file of files) {
         fd.append('files', file);
