@@ -41,7 +41,7 @@ for latest_json_path in latest_paths:
         with open(latest_json_path, 'r', encoding='utf-8') as f:
             latest = json.load(f)
         latest['version'] = NEW_VERSION
-        latest['notes'] = f"Foreigners Studio v{NEW_VERSION} release update."
+        latest['notes'] = "Download the new update below."
         latest['pub_date'] = now_str
         latest['platforms'] = {
             "windows-x86_64": {

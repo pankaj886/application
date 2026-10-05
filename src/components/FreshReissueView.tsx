@@ -48,7 +48,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [activeClientEmail, setActiveClientEmail] = useState(initialEmail || 'CLIENT@FOREIGNERSSTUDIO.COM');
   const [portalPassword, setPortalPassword] = useState(initialPassword);
   const [showPassword, setShowPassword] = useState(false);
-  const [declarationPlace, setDeclarationPlace] = useState(initialPlace);
+  const [declarationPlace] = useState(initialPlace);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -400,18 +400,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setIsUploading(true);
       localStorage.setItem('fs_active_client_email', targetClientEmail);
       localStorage.setItem('fs_portal_password', cleanPassword);
-      if (declarationPlace) {
-        localStorage.setItem('fs_declaration_place', declarationPlace.trim().toUpperCase());
-      }
       setActiveClientEmail(targetClientEmail);
 
+      const placeToSend = declarationPlace?.trim() || localStorage.getItem('fs_declaration_place') || 'ROME';
       await automationApi.uploadApplication(
         targetClientEmail,
         targetClientEmail,
         cleanPassword,
         selectedFiles,
         user?.email,
-        declarationPlace.trim() || 'ROME'
+        placeToSend
       );
 
       setUploadMessage({
@@ -419,8 +417,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         type: 'success',
       });
       setSelectedFiles([]);
-      setDeclarationPlace('');
-      localStorage.removeItem('fs_declaration_place');
       if (fileInputRef.current) fileInputRef.current.value = '';
       refreshAllData(user?.email || targetClientEmail);
     } catch (err: any) {
@@ -1581,32 +1577,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       </button>
                     </div>
                   </div>
-                </div>
-
-                <div className="input-group">
-                  <label htmlFor="declarationPlace" className="input-label">
-                    Declaration Place (Application Place) <span className="required-star">*</span>
-                  </label>
-                  <input
-                    id="declarationPlace"
-                    type="text"
-                    required
-                    value={declarationPlace}
-                    onChange={(e) => {
-                      const val = e.target.value.toUpperCase();
-                      setDeclarationPlace(val);
-                      localStorage.setItem('fs_declaration_place', val);
-                    }}
-                    placeholder="e.g. ROME, MILANO, NAPOLI"
-                    className="form-input"
-                    style={{ textTransform: 'uppercase' }}
-                    autoCapitalize="characters"
-                    autoCorrect="off"
-                    spellCheck="false"
-                  />
-                  <span className="input-hint" style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                    City where application is signed and submitted from. This exact place will be filled in the Self-Declaration PDF under Place &amp; Date.
-                  </span>
                 </div>
 
                 <div className="input-group">

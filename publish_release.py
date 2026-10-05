@@ -34,15 +34,7 @@ with open(pkg_file, "r", encoding="utf-8") as f:
 
 TAG = f"v{VERSION}"
 NAME = f"Foreigners Studio {TAG}"
-BODY = f"""Foreigners Studio {TAG} release update.
-
-### Release Notes:
-- **Clean Preview Header**: Removed clutter from application preview headers. Header now displays exclusively the Client Name, ARN, and 'Awaiting Verification' status.
-- **Dedicated Cancel Application Action**: Single, clearly situated 'Cancel Application' button placed directly to the left of 'Submit Application'.
-- **Cancel Confirmation Dialog**: Safe confirmation prompt asking for confirmation before cancelling to prevent accidental deletions.
-- **Complete File Cleanup**: Confirmed cancellation immediately and permanently deletes both preview draft documents and applicant files from the computer and database.
-- **Auto-Reset Declaration Place**: Clears Declaration Place upon application submission so new uploads start fresh.
-"""
+BODY = "Download the new update below."
 
 DIST_DIR = os.path.join(os.path.dirname(__file__), "dist-release")
 
