@@ -106,7 +106,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [applications, setApplications] = useState<ApplicationItem[]>([]);
   const [previews, setPreviews] = useState<PreviewItem[]>([]);
   const [completed, setCompleted] = useState<CompletedItem[]>([]);
-  const [isLoadingData, setIsLoadingData] = useState(false);
 
   const [previewSelections, setPreviewSelections] = useState<{
     [key: string]: { passport: boolean; declaration: boolean };
@@ -145,7 +144,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const refreshAllData = async (targetEmailOverride?: string) => {
     const targetEmail = targetEmailOverride || queryAccountEmail;
     try {
-      setIsLoadingData(true);
       const [apps, prevs, comps] = await Promise.all([
         automationApi.getClientStatus(targetEmail).catch(() => []),
         automationApi.getPendingPreviews(targetEmail).catch(() => []),
@@ -160,8 +158,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
     } catch (err) {
       console.warn('Error fetching automation data:', err);
-    } finally {
-      setIsLoadingData(false);
     }
   };
 
@@ -171,14 +167,20 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const handleManualRefresh = async () => {
     setIsManualRefreshing(true);
     try {
-      await automationApi.resolveGateway(true);
       await refreshAllData();
+      automationApi.resolveGateway(false).catch(() => {});
     } catch (err) {
       console.warn('Manual refresh error:', err);
+      try {
+        await automationApi.resolveGateway(true);
+        await refreshAllData();
+      } catch (e) {
+        console.warn('Fallback gateway resolution failed:', e);
+      }
     } finally {
       setTimeout(() => {
         setIsManualRefreshing(false);
-      }, 800);
+      }, 600);
     }
   };
 
@@ -192,6 +194,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerIntervalRef = useRef<any>(null);
+  const recordingStartTimeRef = useRef<number>(0);
 
   const startVoiceRecording = async (folderName: string) => {
     try {
@@ -220,10 +223,20 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
       recorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop());
+        const elapsed = Date.now() - recordingStartTimeRef.current;
+        if (elapsed < 500 || audioChunksRef.current.length === 0) {
+          console.warn('Recording discarded: shorter than 500ms or empty');
+          return;
+        }
         const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        if (blob.size < 100) {
+          console.warn('Recording discarded: blob size too small');
+          return;
+        }
         await handleSendVoiceAction(folderName, blob);
       };
 
+      recordingStartTimeRef.current = Date.now();
       recorder.start(250);
       setRecordingFolder(folderName);
       setRecordingDuration(0);
@@ -232,9 +245,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       timerIntervalRef.current = setInterval(() => {
         setRecordingDuration((prev) => prev + 1);
       }, 1000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Microphone error:', err);
-      alert('Microphone access is required to record voice notes. Please allow microphone permissions or type your instructions in the text box.');
+      setVoiceResults((prev) => ({
+        ...prev,
+        [folderName]: {
+          transcription: '',
+          summary: 'Microphone access is unavailable or denied. Please enable microphone permissions or type your instructions in the input box below.',
+          success: false,
+        },
+      }));
     }
   };
 
@@ -1237,7 +1257,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             title="Refresh All Applications and Previews"
             disabled={isManualRefreshing}
           >
-            <RefreshCw className={`refresh-icon ${isManualRefreshing || isLoadingData ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`refresh-icon ${isManualRefreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -2371,11 +2391,38 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
       {currentSection === 'preview' && (
         <div className="fresh-reissue-content">
-          <div className="view-header">
-            <h2 className="view-main-title">Application Previews</h2>
-            <p className="card-subtitle">
-              Review both generated preview documents carefully before submitting to the portal.
-            </p>
+          <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h2 className="view-main-title">Application Previews</h2>
+              <p className="card-subtitle">
+                Review both generated preview documents carefully before submitting to the portal.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleManualRefresh}
+              className="preview-refresh-action-btn"
+              disabled={isManualRefreshing}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 600,
+                color: '#334155',
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                transition: 'all 0.2s ease',
+              }}
+              title="Refresh Previews and Status"
+            >
+              <RefreshCw className={`refresh-icon ${isManualRefreshing ? 'animate-spin' : ''}`} style={{ width: '14px', height: '14px' }} />
+              <span>Refresh Previews</span>
+            </button>
           </div>
 
           {previews.length === 0 ? (
@@ -2447,7 +2494,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             className="voice-recording-active-btn"
                             title="Click red square button to stop recording and send voice note"
                           >
-                            <span className="stop-square-icon" />
+                            <Square className="stop-square-icon" fill="#ffffff" style={{ width: '13px', height: '13px', background: 'transparent' }} />
                             <span>Stop &amp; Apply Changes</span>
                             <div className="voice-waves-visualizer">
                               <span className="voice-wave-bar" />
