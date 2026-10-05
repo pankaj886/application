@@ -2892,3 +2892,224 @@ input::-webkit-credentials-auto-fill-button {
   background: #f1f5f9;
 }
 
+/* Guided Document Upload 5-Slot Architecture */
+.guided-upload-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+  margin-bottom: 20px;
+}
+
+.guided-slots-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.guided-slots-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.guided-slots-subtitle {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.guided-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.guided-slot-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 140px;
+  padding: 14px;
+  background: #ffffff;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.guided-slot-card:hover {
+  border-color: #3b82f6;
+  background: #f8fafc;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08);
+}
+
+.guided-slot-card.drag-target {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  transform: translateY(-1px);
+}
+
+.guided-slot-card.has-file {
+  border: 1.5px solid #10b981;
+  background: #f0fdf4;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08);
+}
+
+.guided-slot-card.has-file:hover {
+  border-color: #059669;
+  background: #ecfdf5;
+}
+
+.slot-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.slot-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slot-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  transition: all 0.2s;
+}
+
+.guided-slot-card.has-file .slot-icon-wrapper {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.slot-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.slot-spec-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.guided-slot-card.has-file .slot-spec-badge {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.slot-card-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1;
+}
+
+.slot-empty-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.slot-file-details {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.slot-thumb-preview {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid #a7f3d0;
+  background: #ffffff;
+}
+
+.slot-file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.slot-file-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #065f46;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slot-file-size {
+  font-size: 11px;
+  color: #059669;
+  font-weight: 500;
+}
+
+.slot-remove-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #ef4444;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.slot-remove-btn:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #dc2626;
+}
+
+.batch-drop-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 20px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.batch-drop-row:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.batch-drop-row.drag-active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+

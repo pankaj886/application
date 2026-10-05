@@ -29,6 +29,15 @@ export interface ApplicationItem {
   updated_at?: string;
 }
 
+export interface CategorizedUploadFiles {
+  photo?: File | null;
+  signature?: File | null;
+  passport?: File | null;
+  residence?: File | null;
+  supporting?: File | null;
+  files?: File[];
+}
+
 export interface PreviewItem {
   folder_name: string;
   applicant_name: string;
@@ -200,7 +209,7 @@ class AutomationApiService {
     clientEmail: string,
     portalUsername: string,
     portalPassword: string,
-    files: File[],
+    files: File[] | CategorizedUploadFiles,
     userEmail?: string,
     declarationPlace?: string
   ): Promise<{ success: boolean; folder_name: string; message: string }> {
@@ -217,8 +226,21 @@ class AutomationApiService {
       if (declarationPlace && declarationPlace.trim()) {
         fd.append('declaration_place', declarationPlace.trim().toUpperCase());
       }
-      for (const file of files) {
-        fd.append('files', file);
+      if (Array.isArray(files)) {
+        for (const file of files) {
+          fd.append('files', file);
+        }
+      } else if (files && typeof files === 'object') {
+        if (files.photo) fd.append('photo', files.photo);
+        if (files.signature) fd.append('signature', files.signature);
+        if (files.passport) fd.append('passport', files.passport);
+        if (files.residence) fd.append('residence', files.residence);
+        if (files.supporting) fd.append('supporting', files.supporting);
+        if (files.files && Array.isArray(files.files)) {
+          for (const f of files.files) {
+            fd.append('files', f);
+          }
+        }
       }
       return fd;
     };
