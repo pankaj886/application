@@ -193,9 +193,43 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   };
 
   const sanitizeErrorMessage = (err: any): string => {
-    const raw = typeof err === 'string' ? err : (err?.message || '');
-    if (!raw) return 'Error Connecting to Server';
+    let raw = '';
+    if (typeof err === 'string') {
+      raw = err;
+    } else if (err?.message && typeof err.message === 'string') {
+      raw = err.message;
+    } else if (err?.detail) {
+      if (typeof err.detail === 'string') {
+        raw = err.detail;
+      } else if (Array.isArray(err.detail)) {
+        raw = err.detail
+          .map((d: any) => (typeof d === 'string' ? d : d?.msg || JSON.stringify(d)))
+          .filter(Boolean)
+          .join(', ');
+      } else {
+        raw = JSON.stringify(err.detail);
+      }
+    } else {
+      raw = String(err || '');
+    }
+
+    if (!raw || raw === '[object Object]') return 'Error Connecting to Server';
+
     const lower = raw.toLowerCase();
+
+    // Catch any internal JS engine error strings so technical syntax/type errors never leak to the user
+    if (
+      lower.includes('is not a function') ||
+      lower.includes('cannot read property') ||
+      lower.includes('is not defined') ||
+      lower.includes('null is not') ||
+      lower.includes('undefined is not') ||
+      lower.includes('typeerror') ||
+      lower.includes('syntaxerror')
+    ) {
+      return 'Unexpected application error. Please try again.';
+    }
+
     if (
       lower.includes('connect') ||
       lower.includes('fetch') ||
@@ -516,6 +550,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       if (fileInputRef.current) fileInputRef.current.value = '';
       refreshAllData(user?.email || targetClientEmail);
     } catch (err: any) {
+      setIsPlaceSubmitted(false);
       const friendlyMsg = sanitizeErrorMessage(err);
       setUploadMessage({
         text: friendlyMsg,

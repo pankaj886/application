@@ -64,6 +64,45 @@ export interface CompletedItem {
   receipt_url?: string;
 }
 
+function parseErrorDetail(errData: any, fallback = 'Operation failed'): string {
+  if (!errData) return fallback;
+  if (typeof errData === 'string') return errData;
+  if (typeof errData.detail === 'string') return errData.detail;
+  if (Array.isArray(errData.detail)) {
+    const msgs = errData.detail
+      .map((item: any) => {
+        if (typeof item === 'string') return item;
+        if (item && item.msg) {
+          const field = Array.isArray(item.loc) ? item.loc.slice(1).join(' -> ') : '';
+          return field ? `${field}: ${item.msg}` : item.msg;
+        }
+        return JSON.stringify(item);
+      })
+      .filter(Boolean);
+    if (msgs.length > 0) return msgs.join(', ');
+  }
+  if (errData.detail && typeof errData.detail === 'object') {
+    return JSON.stringify(errData.detail);
+  }
+  if (typeof errData.message === 'string') return errData.message;
+  return fallback;
+}
+
+function isServerError(msg: any): boolean {
+  if (typeof msg !== 'string') return false;
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes('cloudflare') ||
+    lower.includes('trycloudflare') ||
+    lower.includes('connect') ||
+    lower.includes('gateway') ||
+    lower.includes('502') ||
+    lower.includes('503') ||
+    lower.includes('504') ||
+    lower.includes('network')
+  );
+}
+
 class AutomationApiService {
   private activeBaseUrl: string = '';
   private isResolving: Promise<string> | null = null;
@@ -243,6 +282,13 @@ class AutomationApiService {
             fd.append('files', f);
           }
         }
+        // Backward compatibility fallback for servers that require 'files' field
+        if (!files.files || files.files.length === 0) {
+          const allDocs = [files.photo, files.signature, files.passport, files.residence, files.supporting].filter(Boolean) as File[];
+          for (const doc of allDocs) {
+            fd.append('files', doc);
+          }
+        }
       }
       return fd;
     };
@@ -277,9 +323,9 @@ class AutomationApiService {
       if (res.status >= 500) {
         throw new Error('Error Connecting to Server');
       }
-      const err = await res.json().catch(() => ({ detail: 'Upload failed' }));
-      const msg = err.detail || 'Upload failed';
-      if (msg.toLowerCase().includes('cloudflare') || msg.toLowerCase().includes('connect') || msg.toLowerCase().includes('gateway')) {
+      const errJson = await res.json().catch(() => null);
+      const msg = parseErrorDetail(errJson, 'Upload failed');
+      if (isServerError(msg)) {
         throw new Error('Error Connecting to Server');
       }
       throw new Error(msg);
@@ -331,8 +377,8 @@ class AutomationApiService {
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Submission failed' }));
-      throw new Error(err.detail || 'Final submission failed');
+      const errJson = await res.json().catch(() => null);
+      throw new Error(parseErrorDetail(errJson, 'Final submission failed'));
     }
 
     return await res.json();
@@ -352,8 +398,8 @@ class AutomationApiService {
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Failed to submit corrected details' }));
-      throw new Error(err.detail || 'Failed to submit corrected details');
+      const errJson = await res.json().catch(() => null);
+      throw new Error(parseErrorDetail(errJson, 'Failed to submit corrected details'));
     }
 
     return await res.json();
@@ -386,8 +432,8 @@ class AutomationApiService {
     }
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Failed to dismiss application' }));
-      throw new Error(err.detail || 'Failed to dismiss application');
+      const errJson = await res.json().catch(() => null);
+      throw new Error(parseErrorDetail(errJson, 'Failed to dismiss application'));
     }
 
     return await res.json();
