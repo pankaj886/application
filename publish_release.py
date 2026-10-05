@@ -37,12 +37,10 @@ NAME = f"Foreigners Studio {TAG}"
 BODY = f"""Foreigners Studio {TAG} release update.
 
 ### Release Notes:
-- **Address Line Decomposition & Invariant**: Deterministic top-line extraction invariant for House No. & Street Name across all extraction, submission, and preview engines.
-- **Village/Town/City Resolution**: Intelligent component extraction stripping district, state, PIN, prefixes, and noise.
-- **Cross-Platform Window Dragging**: Synchronous native window dragging across Windows and macOS desktop builds.
-- **macOS Window Controls**: Native traffic lights (close, minimize, maximize) on the top left.
-- **Account Isolation**: Client applications isolated by logged-in Google Account ID.
-- **Single-Pass Validation**: All missing mandatory application fields prompted in a single step upon upload.
+- **Cancel & Delete Application at Final Preview**: Cancel application directly from the final preview screen, permanently deleting both preview documents and applicant files from the computer and database.
+- **Dynamic Declaration Place Input**: Added Application Place textbox on the initial document upload form, dynamically populating the statutory Place field on the Self-Declaration PDF.
+- **Single-Pass Mandatory Data Prompts**: All missing mandatory fields prompted upfront with full auto-population.
+- **Employment Type Support**: Added 'OTHERS' option in Employment Type selection.
 - **Official Portal Accuracy**: Official portal preview and self-declaration fidelity matching official DOM elements.
 """
 
