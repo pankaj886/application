@@ -48,7 +48,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [activeClientEmail, setActiveClientEmail] = useState(initialEmail || 'CLIENT@FOREIGNERSSTUDIO.COM');
   const [portalPassword, setPortalPassword] = useState(initialPassword);
   const [showPassword, setShowPassword] = useState(false);
-  const [declarationPlace] = useState(initialPlace);
+  const [declarationPlace, setDeclarationPlace] = useState(initialPlace);
+  const [isPlaceSubmitted, setIsPlaceSubmitted] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -238,6 +239,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const added = Array.from(e.dataTransfer.files);
       setSelectedFiles(prev => [...prev, ...added]);
+      setIsPlaceSubmitted(false);
     }
   };
 
@@ -257,6 +259,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (e.target.files && e.target.files.length > 0) {
       const added = Array.from(e.target.files);
       setSelectedFiles(prev => [...prev, ...added]);
+      setIsPlaceSubmitted(false);
     }
   };
 
@@ -398,8 +401,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
     try {
       setIsUploading(true);
+      setIsPlaceSubmitted(true);
       localStorage.setItem('fs_active_client_email', targetClientEmail);
       localStorage.setItem('fs_portal_password', cleanPassword);
+      if (declarationPlace?.trim()) {
+        localStorage.setItem('fs_declaration_place', declarationPlace.trim().toUpperCase());
+      }
       setActiveClientEmail(targetClientEmail);
 
       const placeToSend = declarationPlace?.trim() || localStorage.getItem('fs_declaration_place') || 'ROME';
@@ -1579,6 +1586,34 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   </div>
                 </div>
 
+                {!isPlaceSubmitted && (
+                  <div className="input-group">
+                    <label htmlFor="declarationPlace" className="input-label">
+                      Declaration Place (Application Place) <span className="required-star">*</span>
+                    </label>
+                    <input
+                      id="declarationPlace"
+                      type="text"
+                      required
+                      value={declarationPlace}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        setDeclarationPlace(val);
+                        localStorage.setItem('fs_declaration_place', val);
+                      }}
+                      placeholder="e.g. ROME, MILANO, NAPOLI"
+                      className="form-input"
+                      style={{ textTransform: 'uppercase' }}
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck="false"
+                    />
+                    <span className="input-hint" style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                      City where application is signed and submitted from. This exact place will be filled in the Self-Declaration PDF under Place &amp; Date.
+                    </span>
+                  </div>
+                )}
+
                 <div className="input-group">
                   <label className="input-label">
                     Supporting Documents <span className="required-star">*</span>
@@ -1677,7 +1712,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               </p>
               <button
                 type="button"
-                onClick={() => onSectionChange('form')}
+                onClick={() => {
+                  setIsPlaceSubmitted(false);
+                  onSectionChange('form');
+                }}
                 className="empty-action-btn"
               >
                 Create New Application
