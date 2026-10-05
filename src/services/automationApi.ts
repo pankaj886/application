@@ -282,13 +282,6 @@ class AutomationApiService {
             fd.append('files', f);
           }
         }
-        // Backward compatibility fallback for servers that require 'files' field
-        if (!files.files || files.files.length === 0) {
-          const allDocs = [files.photo, files.signature, files.passport, files.residence, files.supporting].filter(Boolean) as File[];
-          for (const doc of allDocs) {
-            fd.append('files', doc);
-          }
-        }
       }
       return fd;
     };

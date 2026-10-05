@@ -55,7 +55,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [portalPassword, setPortalPassword] = useState(initialPassword);
   const [showPassword, setShowPassword] = useState(false);
   const [declarationPlace, setDeclarationPlace] = useState(initialPlace);
-  const [isPlaceSubmitted, setIsPlaceSubmitted] = useState(false);
 
   // 5 Guided Upload Slots + Extras
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -347,7 +346,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         return [...prev, ...toAdd];
       });
     }
-    setIsPlaceSubmitted(false);
   };
 
   const handleFileDrop = (e: React.DragEvent) => {
@@ -507,7 +505,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
     try {
       setIsUploading(true);
-      setIsPlaceSubmitted(true);
       localStorage.setItem('fs_active_client_email', targetClientEmail);
       localStorage.setItem('fs_portal_password', cleanPassword);
       if (declarationPlace?.trim()) {
@@ -550,7 +547,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       if (fileInputRef.current) fileInputRef.current.value = '';
       refreshAllData(user?.email || targetClientEmail);
     } catch (err: any) {
-      setIsPlaceSubmitted(false);
       const friendlyMsg = sanitizeErrorMessage(err);
       setUploadMessage({
         text: friendlyMsg,
@@ -1718,30 +1714,28 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   </div>
                 </div>
 
-                {!isPlaceSubmitted && (
-                  <div className="input-group">
-                    <label htmlFor="declarationPlace" className="input-label">
-                      Declaration Place <span className="required-star">*</span>
-                    </label>
-                    <input
-                      id="declarationPlace"
-                      type="text"
-                      required
-                      value={declarationPlace}
-                      onChange={(e) => {
-                        const val = e.target.value.toUpperCase();
-                        setDeclarationPlace(val);
-                        localStorage.setItem('fs_declaration_place', val);
-                      }}
-                      placeholder="e.g. ROME, MILANO, NAPOLI"
-                      className="form-input"
-                      style={{ textTransform: 'uppercase' }}
-                      autoCapitalize="characters"
-                      autoCorrect="off"
-                      spellCheck="false"
-                    />
-                  </div>
-                )}
+                <div className="input-group">
+                  <label htmlFor="declarationPlace" className="input-label">
+                    Declaration Place <span className="required-star">*</span>
+                  </label>
+                  <input
+                    id="declarationPlace"
+                    type="text"
+                    required
+                    value={declarationPlace}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase();
+                      setDeclarationPlace(val);
+                      localStorage.setItem('fs_declaration_place', val);
+                    }}
+                    placeholder="e.g. ROME, MILANO, NAPOLI"
+                    className="form-input"
+                    style={{ textTransform: 'uppercase' }}
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck="false"
+                  />
+                </div>
 
                 <div className="compact-docs-section">
                   <div className="compact-docs-header">
@@ -2093,7 +2087,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setIsPlaceSubmitted(false);
                   onSectionChange('form');
                 }}
                 className="empty-action-btn"
