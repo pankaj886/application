@@ -43,7 +43,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 }) => {
   const initialEmail = (localStorage.getItem('fs_active_client_email') || user.email || '').toUpperCase();
   const initialPassword = localStorage.getItem('fs_portal_password') || '';
-  const initialPlace = (localStorage.getItem('fs_declaration_place') || 'ROME').toUpperCase();
+  const initialPlace = (localStorage.getItem('fs_declaration_place') || '').toUpperCase();
   const [portalEmail, setPortalEmail] = useState(initialEmail);
   const [activeClientEmail, setActiveClientEmail] = useState(initialEmail || 'CLIENT@FOREIGNERSSTUDIO.COM');
   const [portalPassword, setPortalPassword] = useState(initialPassword);
@@ -57,6 +57,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
   const [cancellingFolder, setCancellingFolder] = useState<string | null>(null);
+  const [cancelModalTarget, setCancelModalTarget] = useState<{
+    folderName: string;
+    applicantName: string;
+  } | null>(null);
   const [correctionFormData, setCorrectionFormData] = useState<Record<string, string>>({});
   const [dismissedCorrectionFolder, setDismissedCorrectionFolder] = useState<string | null>(null);
 
@@ -415,6 +419,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         type: 'success',
       });
       setSelectedFiles([]);
+      setDeclarationPlace('');
+      localStorage.removeItem('fs_declaration_place');
       if (fileInputRef.current) fileInputRef.current.value = '';
       refreshAllData(user?.email || targetClientEmail);
     } catch (err: any) {
@@ -572,12 +578,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   };
 
-  const handleCancelPreview = async (folderName: string, applicantName?: string) => {
-    const displayName = applicantName || folderName;
-    if (!window.confirm(`Are you sure you want to cancel the application for ${displayName}?\n\nThis will cancel the application and permanently delete both preview files and all applicant data from your PC.`)) {
-      return;
-    }
+  const handleCancelPreview = (folderName: string, applicantName?: string) => {
+    setCancelModalTarget({
+      folderName,
+      applicantName: applicantName || folderName,
+    });
+  };
 
+  const executeCancelApplication = async (folderName: string) => {
     try {
       setCancellingFolder(folderName);
       const email = user?.email || activeClientEmail;
@@ -590,12 +598,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         delete copy[folderName];
         return copy;
       });
-
+      setCancelModalTarget(null);
       await refreshAllData();
     } catch (err: any) {
       console.warn("Failed to delete application files from server:", err);
       setPreviews(prev => prev.filter(p => p.folder_name !== folderName));
       setApplications(prev => prev.filter(a => a.folder_name !== folderName));
+      setCancelModalTarget(null);
       await refreshAllData();
     } finally {
       setCancellingFolder(null);
@@ -1718,43 +1727,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       <div className="preview-client-badge">
                         <span className="preview-client-name">{item.applicant_name}</span>
                         <span className="preview-client-arn">ARN: {item.arn}</span>
-                        {item.portal_email && (
-                          <span className="preview-portal-badge" style={{ fontSize: '11px', color: '#94a3b8', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '4px' }}>
-                            Portal: {item.portal_email}
-                          </span>
-                        )}
-                        {item.declaration_place && (
-                          <span className="preview-portal-badge" style={{ fontSize: '11px', color: '#38bdf8', background: 'rgba(56,189,248,0.1)', padding: '2px 8px', borderRadius: '4px' }}>
-                            Place: {item.declaration_place}
-                          </span>
-                        )}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span className="status-tag-pending">Awaiting Verification</span>
-                        <button
-                          type="button"
-                          onClick={() => handleCancelPreview(folderKey, item.applicant_name)}
-                          disabled={cancellingFolder === folderKey || isSubmittingThis}
-                          className="cancel-preview-btn-top"
-                          title="Cancel application and delete both preview files from PC"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '4px 10px',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            color: '#ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                            border: '1px solid rgba(239, 68, 68, 0.25)',
-                            borderRadius: '6px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Trash2 style={{ width: '13px', height: '13px' }} />
-                          <span>{cancellingFolder === folderKey ? 'Deleting...' : 'Cancel Application'}</span>
-                        </button>
-                      </div>
+                      <span className="status-tag-pending">Awaiting Verification</span>
                     </div>
 
                     <div className="preview-docs-container">
@@ -1959,6 +1933,59 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {cancelModalTarget && (
+        <div
+          className="logout-modal-overlay"
+          onClick={() => !cancellingFolder && setCancelModalTarget(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="logout-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="logout-modal-icon-wrapper">
+              <Trash2 className="logout-modal-icon" />
+            </div>
+
+            <h3 className="logout-modal-title">
+              Cancel Application?
+            </h3>
+
+            <p className="logout-modal-subtitle">
+              Are you sure you want to cancel the application for <strong>{cancelModalTarget.applicantName}</strong>? Both preview files and all associated documents will be permanently deleted from your computer and database.
+            </p>
+
+            <div className="logout-modal-actions">
+              <button
+                type="button"
+                className="logout-modal-btn cancel-btn"
+                style={{ background: '#f1f5f9', color: '#475569', boxShadow: 'none' }}
+                disabled={Boolean(cancellingFolder)}
+                onClick={() => setCancelModalTarget(null)}
+              >
+                Keep Application
+              </button>
+              <button
+                type="button"
+                className="logout-modal-btn confirm-btn"
+                disabled={Boolean(cancellingFolder)}
+                onClick={() => executeCancelApplication(cancelModalTarget.folderName)}
+              >
+                {cancellingFolder ? (
+                  <>
+                    <RefreshCw className="animate-spin" style={{ width: '15px', height: '15px', marginRight: '6px' }} />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Yes, Cancel Application</span>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

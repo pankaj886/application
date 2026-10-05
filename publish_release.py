@@ -37,11 +37,11 @@ NAME = f"Foreigners Studio {TAG}"
 BODY = f"""Foreigners Studio {TAG} release update.
 
 ### Release Notes:
-- **Cancel & Delete Application at Final Preview**: Cancel application directly from the final preview screen, permanently deleting both preview documents and applicant files from the computer and database.
-- **Dynamic Declaration Place Input**: Added Application Place textbox on the initial document upload form, dynamically populating the statutory Place field on the Self-Declaration PDF.
-- **Single-Pass Mandatory Data Prompts**: All missing mandatory fields prompted upfront with full auto-population.
-- **Employment Type Support**: Added 'OTHERS' option in Employment Type selection.
-- **Official Portal Accuracy**: Official portal preview and self-declaration fidelity matching official DOM elements.
+- **Clean Preview Header**: Removed clutter from application preview headers. Header now displays exclusively the Client Name, ARN, and 'Awaiting Verification' status.
+- **Dedicated Cancel Application Action**: Single, clearly situated 'Cancel Application' button placed directly to the left of 'Submit Application'.
+- **Cancel Confirmation Dialog**: Safe confirmation prompt asking for confirmation before cancelling to prevent accidental deletions.
+- **Complete File Cleanup**: Confirmed cancellation immediately and permanently deletes both preview draft documents and applicant files from the computer and database.
+- **Auto-Reset Declaration Place**: Clears Declaration Place upon application submission so new uploads start fresh.
 """
 
 DIST_DIR = os.path.join(os.path.dirname(__file__), "dist-release")
