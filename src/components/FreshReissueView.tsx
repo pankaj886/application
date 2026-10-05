@@ -19,7 +19,6 @@ import {
   Camera,
   PenTool,
   BookOpen,
-  Home,
   X
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -49,23 +48,44 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 }) => {
   const initialEmail = (localStorage.getItem('fs_active_client_email') || user.email || '').toUpperCase();
   const initialPassword = localStorage.getItem('fs_portal_password') || '';
-  const initialPlace = (localStorage.getItem('fs_declaration_place') || '').toUpperCase();
   const [portalEmail, setPortalEmail] = useState(initialEmail);
   const [activeClientEmail, setActiveClientEmail] = useState(initialEmail || 'CLIENT@FOREIGNERSSTUDIO.COM');
   const [portalPassword, setPortalPassword] = useState(initialPassword);
   const [showPassword, setShowPassword] = useState(false);
-  const [declarationPlace, setDeclarationPlace] = useState(initialPlace);
+  const declarationPlace = 'ROME';
 
-  // 5 Guided Upload Slots + Extras
+  // 5 Distinct Document Upload Boxes + Extras
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [signFile, setSignFile] = useState<File | null>(null);
   const [passportFile, setPassportFile] = useState<File | null>(null);
   const [residenceFile, setResidenceFile] = useState<File | null>(null);
-  const [supportingFile, setSupportingFile] = useState<File | null>(null);
+  const [infoFile, setInfoFile] = useState<File | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
-  // Slot Drag Over states
+  // Box Drag Over states & tracking refs
   const [dragSlot, setDragSlot] = useState<string | null>(null);
+  const dragSlotRef = useRef<string | null>(null);
+  const lastDropTimeRef = useRef<number>(0);
+
+  const filesStateRef = useRef({
+    photo: photoFile,
+    sign: signFile,
+    passport: passportFile,
+    residence: residenceFile,
+    info: infoFile,
+    selected: selectedFiles,
+  });
+
+  useEffect(() => {
+    filesStateRef.current = {
+      photo: photoFile,
+      sign: signFile,
+      passport: passportFile,
+      residence: residenceFile,
+      info: infoFile,
+      selected: selectedFiles,
+    };
+  }, [photoFile, signFile, passportFile, residenceFile, infoFile, selectedFiles]);
 
   const [isUploading, setIsUploading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -115,7 +135,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const signInputRef = useRef<HTMLInputElement>(null);
   const passportInputRef = useRef<HTMLInputElement>(null);
   const residenceInputRef = useRef<HTMLInputElement>(null);
-  const supportingInputRef = useRef<HTMLInputElement>(null);
+  const infoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const queryAccountEmail = user?.email ? user.email.trim().toLowerCase() : activeClientEmail;
@@ -297,12 +317,34 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   }, [correctionApp?.folder_name, correctionApp?.updated_at]);
 
+  const updateSlotFile = (slot: 'photo' | 'sign' | 'passport' | 'residence' | 'info', file: File | null) => {
+    if (slot === 'photo') {
+      setPhotoFile(file);
+      if (!file && photoInputRef.current) photoInputRef.current.value = '';
+    } else if (slot === 'sign') {
+      setSignFile(file);
+      if (!file && signInputRef.current) signInputRef.current.value = '';
+    } else if (slot === 'passport') {
+      setPassportFile(file);
+      if (!file && passportInputRef.current) passportInputRef.current.value = '';
+    } else if (slot === 'residence') {
+      setResidenceFile(file);
+      if (!file && residenceInputRef.current) residenceInputRef.current.value = '';
+    } else if (slot === 'info') {
+      setInfoFile(file);
+      if (!file && infoInputRef.current) infoInputRef.current.value = '';
+    }
+  };
+
   const autoCategorizeFiles = (incoming: File[]) => {
-    let p = photoFile;
-    let s = signFile;
-    let pass = passportFile;
-    let res = residenceFile;
-    let supp = supportingFile;
+    if (!incoming || incoming.length === 0) return;
+
+    const current = filesStateRef.current;
+    let p = current.photo;
+    let s = current.sign;
+    let pass = current.passport;
+    let res = current.residence;
+    let inf = current.info;
     const extras: File[] = [];
 
     for (const f of incoming) {
@@ -315,8 +357,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         pass = f;
       } else if (!res && (lower.includes('pds') || lower.includes('cie') || lower.includes('carta') || lower.includes('soggiorno') || lower.includes('residen'))) {
         res = f;
-      } else if (!supp && (lower.includes('ospiti') || lower.includes('support') || lower.includes('fabbricato') || lower.includes('affitto') || lower.includes('annexure') || lower.includes('necessity') || lower.includes('bolletta'))) {
-        supp = f;
+      } else if (!inf && (lower.includes('info') || lower.includes('detail') || lower.includes('dettagli') || lower.endsWith('.docx') || lower.endsWith('.doc') || lower.includes('ospiti') || lower.includes('support') || lower.includes('fabbricato') || lower.includes('affitto') || lower.includes('annexure') || lower.includes('necessity') || lower.includes('bolletta'))) {
+        inf = f;
       } else {
         if (!pass && lower.endsWith('.pdf')) {
           pass = f;
@@ -326,19 +368,20 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           res = f;
         } else if (!s && lower.match(/\.(jpg|jpeg|png)$/)) {
           s = f;
-        } else if (!supp) {
-          supp = f;
+        } else if (!inf) {
+          inf = f;
         } else {
           extras.push(f);
         }
       }
     }
 
-    setPhotoFile(p);
-    setSignFile(s);
-    setPassportFile(pass);
-    setResidenceFile(res);
-    setSupportingFile(supp);
+    if (p !== current.photo) setPhotoFile(p);
+    if (s !== current.sign) setSignFile(s);
+    if (pass !== current.passport) setPassportFile(pass);
+    if (res !== current.residence) setResidenceFile(res);
+    if (inf !== current.info) setInfoFile(inf);
+
     if (extras.length > 0) {
       setSelectedFiles(prev => {
         const existingKeys = new Set(prev.map(item => `${item.name}_${item.size}`));
@@ -352,6 +395,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(false);
+    if (Date.now() - lastDropTimeRef.current < 400) return;
+    lastDropTimeRef.current = Date.now();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       autoCategorizeFiles(Array.from(e.dataTransfer.files));
     }
@@ -403,10 +448,31 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
         if (event.payload.type === 'over' || event.payload.type === 'enter') {
           setIsDragActive(true);
+          const pos = (event.payload as any).position;
+          if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+            const el = document.elementFromPoint(pos.x, pos.y);
+            const targetSlot = el?.closest('[data-drop-slot]')?.getAttribute('data-drop-slot');
+            if (targetSlot) {
+              dragSlotRef.current = targetSlot;
+              setDragSlot(targetSlot);
+            }
+          }
         } else if (event.payload.type === 'leave') {
           setIsDragActive(false);
+          dragSlotRef.current = null;
+          setDragSlot(null);
         } else if (event.payload.type === 'drop') {
           setIsDragActive(false);
+          if (Date.now() - lastDropTimeRef.current < 400) {
+            dragSlotRef.current = null;
+            setDragSlot(null);
+            return;
+          }
+          lastDropTimeRef.current = Date.now();
+          const targetSlot = dragSlotRef.current;
+          dragSlotRef.current = null;
+          setDragSlot(null);
+
           const paths = event.payload.paths || [];
           if (paths.length > 0) {
             const loadedFiles: File[] = [];
@@ -423,6 +489,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   ? 'image/png'
                   : ext.match(/\.docx$/)
                   ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                  : ext.match(/\.doc$/)
+                  ? 'application/msword'
                   : 'application/octet-stream';
                 loadedFiles.push(new File([bytes], info.name, { type: mime }));
               } catch (readErr) {
@@ -430,7 +498,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               }
             }
             if (loadedFiles.length > 0) {
-              autoCategorizeFiles(loadedFiles);
+              if (targetSlot && ['photo', 'sign', 'passport', 'residence', 'info'].includes(targetSlot)) {
+                updateSlotFile(targetSlot as any, loadedFiles[0]);
+                if (loadedFiles.length > 1) {
+                  autoCategorizeFiles(loadedFiles.slice(1));
+                }
+              } else {
+                autoCategorizeFiles(loadedFiles);
+              }
             }
           }
         }
@@ -467,8 +542,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       e.preventDefault();
       e.stopPropagation();
       setIsDragActive(false);
+      if (Date.now() - lastDropTimeRef.current < 400) return;
+      lastDropTimeRef.current = Date.now();
+      const targetSlot = dragSlotRef.current;
+      dragSlotRef.current = null;
+      setDragSlot(null);
+
       if (currentSection === 'form' && !correctionApp && e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        autoCategorizeFiles(Array.from(e.dataTransfer.files));
+        const droppedFiles = Array.from(e.dataTransfer.files);
+        if (targetSlot && ['photo', 'sign', 'passport', 'residence', 'info'].includes(targetSlot)) {
+          updateSlotFile(targetSlot as any, droppedFiles[0]);
+          if (droppedFiles.length > 1) {
+            autoCategorizeFiles(droppedFiles.slice(1));
+          }
+        } else {
+          autoCategorizeFiles(droppedFiles);
+        }
       }
     };
 
@@ -497,22 +586,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setUploadMessage({ text: 'Please enter portal Email ID and Password.', type: 'error' });
       return;
     }
-    const hasAnyDocs = photoFile || signFile || passportFile || residenceFile || supportingFile || selectedFiles.length > 0;
-    if (!hasAnyDocs) {
-      setUploadMessage({ text: 'Please upload client documents (Photo, Signature, Passport, etc.).', type: 'error' });
-      return;
-    }
 
     try {
       setIsUploading(true);
       localStorage.setItem('fs_active_client_email', targetClientEmail);
       localStorage.setItem('fs_portal_password', cleanPassword);
-      if (declarationPlace?.trim()) {
-        localStorage.setItem('fs_declaration_place', declarationPlace.trim().toUpperCase());
-      }
+      localStorage.setItem('fs_declaration_place', declarationPlace);
       setActiveClientEmail(targetClientEmail);
 
-      const placeToSend = declarationPlace?.trim() || localStorage.getItem('fs_declaration_place') || 'ROME';
       await automationApi.uploadApplication(
         targetClientEmail,
         targetClientEmail,
@@ -522,11 +603,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           signature: signFile,
           passport: passportFile,
           residence: residenceFile,
-          supporting: supportingFile,
+          supporting: infoFile,
           files: selectedFiles,
         },
         user?.email,
-        placeToSend
+        declarationPlace
       );
 
       setUploadMessage({
@@ -537,13 +618,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setSignFile(null);
       setPassportFile(null);
       setResidenceFile(null);
-      setSupportingFile(null);
+      setInfoFile(null);
       setSelectedFiles([]);
       if (photoInputRef.current) photoInputRef.current.value = '';
       if (signInputRef.current) signInputRef.current.value = '';
       if (passportInputRef.current) passportInputRef.current.value = '';
       if (residenceInputRef.current) residenceInputRef.current.value = '';
-      if (supportingInputRef.current) supportingInputRef.current.value = '';
+      if (infoInputRef.current) infoInputRef.current.value = '';
       if (fileInputRef.current) fileInputRef.current.value = '';
       refreshAllData(user?.email || targetClientEmail);
     } catch (err: any) {
@@ -1714,45 +1795,28 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   </div>
                 </div>
 
-                <div className="input-group">
-                  <label htmlFor="declarationPlace" className="input-label">
-                    Declaration Place <span className="required-star">*</span>
-                  </label>
-                  <input
-                    id="declarationPlace"
-                    type="text"
-                    required
-                    value={declarationPlace}
-                    onChange={(e) => {
-                      const val = e.target.value.toUpperCase();
-                      setDeclarationPlace(val);
-                      localStorage.setItem('fs_declaration_place', val);
-                    }}
-                    placeholder="e.g. ROME, MILANO, NAPOLI"
-                    className="form-input"
-                    style={{ textTransform: 'uppercase' }}
-                    autoCapitalize="characters"
-                    autoCorrect="off"
-                    spellCheck="false"
-                  />
-                </div>
-
                 <div className="compact-docs-section">
                   <div className="compact-docs-header">
-                    <span className="compact-docs-title">Required Documents <span className="required-star">*</span></span>
-                    <span className="compact-docs-hint">Photos &amp; signatures to JPG, documents to PDF (&le;1 MB)</span>
+                    <span className="compact-docs-title">Document Uploads</span>
+                    <span className="compact-docs-hint">Select or drop documents into boxes</span>
                   </div>
 
-                  <div className="compact-slots-list">
-                    {/* 1. Photograph */}
+                  <div className="docs-boxes-grid">
+                    {/* 1. Photograph Box */}
                     <div
-                      className={`compact-slot-row ${photoFile ? 'has-file' : ''} ${dragSlot === 'photo' ? 'drag-target' : ''}`}
+                      className={`doc-upload-box ${photoFile ? 'has-file' : ''} ${dragSlot === 'photo' ? 'drag-target' : ''}`}
+                      data-drop-slot="photo"
                       onClick={() => photoInputRef.current?.click()}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot('photo'); }}
-                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot(null); }}
+                      onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'photo'; setDragSlot('photo'); }}
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = 'photo'; }}
+                      onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === 'photo') { dragSlotRef.current = null; setDragSlot(null); } }}
                       onDrop={(e) => {
-                        e.preventDefault(); e.stopPropagation(); setDragSlot(null);
-                        if (e.dataTransfer.files?.[0]) setPhotoFile(e.dataTransfer.files[0]);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        lastDropTimeRef.current = Date.now();
+                        dragSlotRef.current = null;
+                        setDragSlot(null);
+                        if (e.dataTransfer.files?.[0]) updateSlotFile('photo', e.dataTransfer.files[0]);
                       }}
                     >
                       <input
@@ -1760,50 +1824,59 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         type="file"
                         accept="image/jpeg,image/png,image/webp,image/jpg"
                         style={{ display: 'none' }}
-                        onChange={(e) => { if (e.target.files?.[0]) setPhotoFile(e.target.files[0]); }}
+                        onChange={(e) => { if (e.target.files?.[0]) updateSlotFile('photo', e.target.files[0]); }}
                       />
-                      <div className="compact-slot-label">
-                        <Camera className="compact-slot-icon" />
-                        <span className="compact-slot-name">Photograph <span className="required-star">*</span></span>
-                        <span className="compact-slot-spec">630×810 JPG</span>
+                      <div className="doc-box-header">
+                        <Camera className="doc-box-icon" />
+                        <span className="doc-box-title">Photograph</span>
                       </div>
-                      <div className="compact-slot-action">
+                      <div className="doc-box-content">
                         {photoFile ? (
-                          <div className="compact-file-badge">
-                            <img src={URL.createObjectURL(photoFile)} alt="Photo" className="compact-thumb" />
-                            <span className="compact-file-name" title={photoFile.name}>{photoFile.name}</span>
-                            <span className="compact-file-size">({(photoFile.size / 1024).toFixed(0)} KB)</span>
+                          <div className="doc-box-file-info">
+                            <img src={URL.createObjectURL(photoFile)} alt="Photo" className="doc-box-thumb" />
+                            <div className="doc-box-text-info">
+                              <span className="doc-box-filename" title={photoFile.name}>{photoFile.name}</span>
+                              <span className="doc-box-filesize">{(photoFile.size / 1024).toFixed(0)} KB</span>
+                            </div>
                             <button
                               type="button"
-                              className="compact-remove-btn"
-                              title="Remove photo"
+                              className="doc-box-remove-btn"
+                              title="Remove photograph"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setPhotoFile(null);
-                                if (photoInputRef.current) photoInputRef.current.value = '';
+                                updateSlotFile('photo', null);
                               }}
                             >
                               <X style={{ width: '13px', height: '13px' }} />
                             </button>
                           </div>
                         ) : (
-                          <div className="compact-upload-btn">
-                            <Upload style={{ width: '13px', height: '13px' }} />
-                            <span>Choose Photo</span>
+                          <div className="doc-box-empty">
+                            <span className="doc-box-badge">630×810 JPG</span>
+                            <div className="doc-box-action-hint">
+                              <Upload style={{ width: '12px', height: '12px' }} />
+                              <span>Upload</span>
+                            </div>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* 2. Signature */}
+                    {/* 2. Signature Box */}
                     <div
-                      className={`compact-slot-row ${signFile ? 'has-file' : ''} ${dragSlot === 'sign' ? 'drag-target' : ''}`}
+                      className={`doc-upload-box ${signFile ? 'has-file' : ''} ${dragSlot === 'sign' ? 'drag-target' : ''}`}
+                      data-drop-slot="sign"
                       onClick={() => signInputRef.current?.click()}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot('sign'); }}
-                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot(null); }}
+                      onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'sign'; setDragSlot('sign'); }}
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = 'sign'; }}
+                      onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === 'sign') { dragSlotRef.current = null; setDragSlot(null); } }}
                       onDrop={(e) => {
-                        e.preventDefault(); e.stopPropagation(); setDragSlot(null);
-                        if (e.dataTransfer.files?.[0]) setSignFile(e.dataTransfer.files[0]);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        lastDropTimeRef.current = Date.now();
+                        dragSlotRef.current = null;
+                        setDragSlot(null);
+                        if (e.dataTransfer.files?.[0]) updateSlotFile('sign', e.dataTransfer.files[0]);
                       }}
                     >
                       <input
@@ -1811,50 +1884,59 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         type="file"
                         accept="image/jpeg,image/png,image/jpg"
                         style={{ display: 'none' }}
-                        onChange={(e) => { if (e.target.files?.[0]) setSignFile(e.target.files[0]); }}
+                        onChange={(e) => { if (e.target.files?.[0]) updateSlotFile('sign', e.target.files[0]); }}
                       />
-                      <div className="compact-slot-label">
-                        <PenTool className="compact-slot-icon" />
-                        <span className="compact-slot-name">Signature <span className="required-star">*</span></span>
-                        <span className="compact-slot-spec">&le;100 KB</span>
+                      <div className="doc-box-header">
+                        <PenTool className="doc-box-icon" />
+                        <span className="doc-box-title">Signature</span>
                       </div>
-                      <div className="compact-slot-action">
+                      <div className="doc-box-content">
                         {signFile ? (
-                          <div className="compact-file-badge">
-                            <img src={URL.createObjectURL(signFile)} alt="Sign" className="compact-thumb" />
-                            <span className="compact-file-name" title={signFile.name}>{signFile.name}</span>
-                            <span className="compact-file-size">({(signFile.size / 1024).toFixed(0)} KB)</span>
+                          <div className="doc-box-file-info">
+                            <img src={URL.createObjectURL(signFile)} alt="Signature" className="doc-box-thumb" />
+                            <div className="doc-box-text-info">
+                              <span className="doc-box-filename" title={signFile.name}>{signFile.name}</span>
+                              <span className="doc-box-filesize">{(signFile.size / 1024).toFixed(0)} KB</span>
+                            </div>
                             <button
                               type="button"
-                              className="compact-remove-btn"
+                              className="doc-box-remove-btn"
                               title="Remove signature"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSignFile(null);
-                                if (signInputRef.current) signInputRef.current.value = '';
+                                updateSlotFile('sign', null);
                               }}
                             >
                               <X style={{ width: '13px', height: '13px' }} />
                             </button>
                           </div>
                         ) : (
-                          <div className="compact-upload-btn">
-                            <Upload style={{ width: '13px', height: '13px' }} />
-                            <span>Choose Signature</span>
+                          <div className="doc-box-empty">
+                            <span className="doc-box-badge">≤100 KB JPG</span>
+                            <div className="doc-box-action-hint">
+                              <Upload style={{ width: '12px', height: '12px' }} />
+                              <span>Upload</span>
+                            </div>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* 3. Passport Copy */}
+                    {/* 3. Passport Copy Box */}
                     <div
-                      className={`compact-slot-row ${passportFile ? 'has-file' : ''} ${dragSlot === 'passport' ? 'drag-target' : ''}`}
+                      className={`doc-upload-box ${passportFile ? 'has-file' : ''} ${dragSlot === 'passport' ? 'drag-target' : ''}`}
+                      data-drop-slot="passport"
                       onClick={() => passportInputRef.current?.click()}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot('passport'); }}
-                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot(null); }}
+                      onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'passport'; setDragSlot('passport'); }}
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = 'passport'; }}
+                      onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === 'passport') { dragSlotRef.current = null; setDragSlot(null); } }}
                       onDrop={(e) => {
-                        e.preventDefault(); e.stopPropagation(); setDragSlot(null);
-                        if (e.dataTransfer.files?.[0]) setPassportFile(e.dataTransfer.files[0]);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        lastDropTimeRef.current = Date.now();
+                        dragSlotRef.current = null;
+                        setDragSlot(null);
+                        if (e.dataTransfer.files?.[0]) updateSlotFile('passport', e.dataTransfer.files[0]);
                       }}
                     >
                       <input
@@ -1862,50 +1944,59 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         type="file"
                         accept=".pdf,image/jpeg,image/png,image/jpg"
                         style={{ display: 'none' }}
-                        onChange={(e) => { if (e.target.files?.[0]) setPassportFile(e.target.files[0]); }}
+                        onChange={(e) => { if (e.target.files?.[0]) updateSlotFile('passport', e.target.files[0]); }}
                       />
-                      <div className="compact-slot-label">
-                        <BookOpen className="compact-slot-icon" />
-                        <span className="compact-slot-name">Passport Copy <span className="required-star">*</span></span>
-                        <span className="compact-slot-spec">PDF &le;1 MB</span>
+                      <div className="doc-box-header">
+                        <BookOpen className="doc-box-icon" />
+                        <span className="doc-box-title">Passport Copy</span>
                       </div>
-                      <div className="compact-slot-action">
+                      <div className="doc-box-content">
                         {passportFile ? (
-                          <div className="compact-file-badge">
-                            <FileText style={{ width: '16px', height: '16px', color: '#059669', flexShrink: 0 }} />
-                            <span className="compact-file-name" title={passportFile.name}>{passportFile.name}</span>
-                            <span className="compact-file-size">({(passportFile.size / 1024).toFixed(0)} KB)</span>
+                          <div className="doc-box-file-info">
+                            <FileText style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
+                            <div className="doc-box-text-info">
+                              <span className="doc-box-filename" title={passportFile.name}>{passportFile.name}</span>
+                              <span className="doc-box-filesize">{(passportFile.size / 1024).toFixed(0)} KB</span>
+                            </div>
                             <button
                               type="button"
-                              className="compact-remove-btn"
-                              title="Remove passport"
+                              className="doc-box-remove-btn"
+                              title="Remove passport copy"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setPassportFile(null);
-                                if (passportInputRef.current) passportInputRef.current.value = '';
+                                updateSlotFile('passport', null);
                               }}
                             >
                               <X style={{ width: '13px', height: '13px' }} />
                             </button>
                           </div>
                         ) : (
-                          <div className="compact-upload-btn">
-                            <Upload style={{ width: '13px', height: '13px' }} />
-                            <span>Choose Passport</span>
+                          <div className="doc-box-empty">
+                            <span className="doc-box-badge">PDF ≤1 MB</span>
+                            <div className="doc-box-action-hint">
+                              <Upload style={{ width: '12px', height: '12px' }} />
+                              <span>Upload</span>
+                            </div>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* 4. Residence Card / Proof */}
+                    {/* 4. Residence Proof Box */}
                     <div
-                      className={`compact-slot-row ${residenceFile ? 'has-file' : ''} ${dragSlot === 'residence' ? 'drag-target' : ''}`}
+                      className={`doc-upload-box ${residenceFile ? 'has-file' : ''} ${dragSlot === 'residence' ? 'drag-target' : ''}`}
+                      data-drop-slot="residence"
                       onClick={() => residenceInputRef.current?.click()}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot('residence'); }}
-                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot(null); }}
+                      onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'residence'; setDragSlot('residence'); }}
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = 'residence'; }}
+                      onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === 'residence') { dragSlotRef.current = null; setDragSlot(null); } }}
                       onDrop={(e) => {
-                        e.preventDefault(); e.stopPropagation(); setDragSlot(null);
-                        if (e.dataTransfer.files?.[0]) setResidenceFile(e.dataTransfer.files[0]);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        lastDropTimeRef.current = Date.now();
+                        dragSlotRef.current = null;
+                        setDragSlot(null);
+                        if (e.dataTransfer.files?.[0]) updateSlotFile('residence', e.dataTransfer.files[0]);
                       }}
                     >
                       <input
@@ -1913,87 +2004,99 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         type="file"
                         accept=".pdf,image/jpeg,image/png,image/jpg"
                         style={{ display: 'none' }}
-                        onChange={(e) => { if (e.target.files?.[0]) setResidenceFile(e.target.files[0]); }}
+                        onChange={(e) => { if (e.target.files?.[0]) updateSlotFile('residence', e.target.files[0]); }}
                       />
-                      <div className="compact-slot-label">
-                        <ShieldCheck className="compact-slot-icon" />
-                        <span className="compact-slot-name">Residence Card / Proof <span className="required-star">*</span></span>
-                        <span className="compact-slot-spec">PDF &le;1 MB</span>
+                      <div className="doc-box-header">
+                        <ShieldCheck className="doc-box-icon" />
+                        <span className="doc-box-title">Residence Proof</span>
                       </div>
-                      <div className="compact-slot-action">
+                      <div className="doc-box-content">
                         {residenceFile ? (
-                          <div className="compact-file-badge">
-                            <FileText style={{ width: '16px', height: '16px', color: '#059669', flexShrink: 0 }} />
-                            <span className="compact-file-name" title={residenceFile.name}>{residenceFile.name}</span>
-                            <span className="compact-file-size">({(residenceFile.size / 1024).toFixed(0)} KB)</span>
+                          <div className="doc-box-file-info">
+                            <FileText style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
+                            <div className="doc-box-text-info">
+                              <span className="doc-box-filename" title={residenceFile.name}>{residenceFile.name}</span>
+                              <span className="doc-box-filesize">{(residenceFile.size / 1024).toFixed(0)} KB</span>
+                            </div>
                             <button
                               type="button"
-                              className="compact-remove-btn"
-                              title="Remove residence card"
+                              className="doc-box-remove-btn"
+                              title="Remove residence proof"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setResidenceFile(null);
-                                if (residenceInputRef.current) residenceInputRef.current.value = '';
+                                updateSlotFile('residence', null);
                               }}
                             >
                               <X style={{ width: '13px', height: '13px' }} />
                             </button>
                           </div>
                         ) : (
-                          <div className="compact-upload-btn">
-                            <Upload style={{ width: '13px', height: '13px' }} />
-                            <span>Choose Residence Card</span>
+                          <div className="doc-box-empty">
+                            <span className="doc-box-badge">Permesso / CIE</span>
+                            <div className="doc-box-action-hint">
+                              <Upload style={{ width: '12px', height: '12px' }} />
+                              <span>Upload</span>
+                            </div>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* 5. Supporting Document / Necessity */}
+                    {/* 5. Info Box */}
                     <div
-                      className={`compact-slot-row ${supportingFile ? 'has-file' : ''} ${dragSlot === 'supporting' ? 'drag-target' : ''}`}
-                      onClick={() => supportingInputRef.current?.click()}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot('supporting'); }}
-                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragSlot(null); }}
+                      className={`doc-upload-box ${infoFile ? 'has-file' : ''} ${dragSlot === 'info' ? 'drag-target' : ''}`}
+                      data-drop-slot="info"
+                      onClick={() => infoInputRef.current?.click()}
+                      onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'info'; setDragSlot('info'); }}
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = 'info'; }}
+                      onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === 'info') { dragSlotRef.current = null; setDragSlot(null); } }}
                       onDrop={(e) => {
-                        e.preventDefault(); e.stopPropagation(); setDragSlot(null);
-                        if (e.dataTransfer.files?.[0]) setSupportingFile(e.dataTransfer.files[0]);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        lastDropTimeRef.current = Date.now();
+                        dragSlotRef.current = null;
+                        setDragSlot(null);
+                        if (e.dataTransfer.files?.[0]) updateSlotFile('info', e.dataTransfer.files[0]);
                       }}
                     >
                       <input
-                        ref={supportingInputRef}
+                        ref={infoInputRef}
                         type="file"
-                        accept=".pdf,image/jpeg,image/png,image/jpg,.doc,.docx"
+                        accept=".docx,.doc,.pdf,.txt,image/*"
                         style={{ display: 'none' }}
-                        onChange={(e) => { if (e.target.files?.[0]) setSupportingFile(e.target.files[0]); }}
+                        onChange={(e) => { if (e.target.files?.[0]) updateSlotFile('info', e.target.files[0]); }}
                       />
-                      <div className="compact-slot-label">
-                        <Home className="compact-slot-icon" />
-                        <span className="compact-slot-name">Supporting / Necessity</span>
-                        <span className="compact-slot-spec">PDF &le;1 MB</span>
+                      <div className="doc-box-header">
+                        <FileText className="doc-box-icon" />
+                        <span className="doc-box-title">Info</span>
                       </div>
-                      <div className="compact-slot-action">
-                        {supportingFile ? (
-                          <div className="compact-file-badge">
-                            <FileText style={{ width: '16px', height: '16px', color: '#059669', flexShrink: 0 }} />
-                            <span className="compact-file-name" title={supportingFile.name}>{supportingFile.name}</span>
-                            <span className="compact-file-size">({(supportingFile.size / 1024).toFixed(0)} KB)</span>
+                      <div className="doc-box-content">
+                        {infoFile ? (
+                          <div className="doc-box-file-info">
+                            <FileText style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
+                            <div className="doc-box-text-info">
+                              <span className="doc-box-filename" title={infoFile.name}>{infoFile.name}</span>
+                              <span className="doc-box-filesize">{(infoFile.size / 1024).toFixed(0)} KB</span>
+                            </div>
                             <button
                               type="button"
-                              className="compact-remove-btn"
-                              title="Remove supporting doc"
+                              className="doc-box-remove-btn"
+                              title="Remove info document"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSupportingFile(null);
-                                if (supportingInputRef.current) supportingInputRef.current.value = '';
+                                updateSlotFile('info', null);
                               }}
                             >
                               <X style={{ width: '13px', height: '13px' }} />
                             </button>
                           </div>
                         ) : (
-                          <div className="compact-upload-btn">
-                            <Upload style={{ width: '13px', height: '13px' }} />
-                            <span>Choose Supporting Doc</span>
+                          <div className="doc-box-empty">
+                            <span className="doc-box-badge">Word / PDF / Any</span>
+                            <div className="doc-box-action-hint">
+                              <Upload style={{ width: '12px', height: '12px' }} />
+                              <span>Upload</span>
+                            </div>
                           </div>
                         )}
                       </div>
