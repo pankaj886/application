@@ -6,6 +6,7 @@ export interface ApplicationItem {
   folder_name: string;
   status: 'UPLOADED' | 'EXTRACTING' | 'EXTRACTED' | 'NEEDS_CORRECTION' | 'FILLING_PORTAL' | 'PENDING_CONFIRMATION' | 'SUBMITTING_PORTAL' | 'COMPLETED' | 'ERROR' | string;
   stage: string;
+  progress?: number;
   arn?: string;
   applicant_name?: string;
   portal_email?: string;

@@ -91,6 +91,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [submissionTracker, setSubmissionTracker] = useState<{
+    active: boolean;
+    ready: boolean;
+    percent: number;
+    stageText: string;
+    applicantName?: string;
+    startedAt: number;
+  } | null>(null);
+  const prevPreviewFoldersRef = useRef<Set<string>>(new Set());
 
   const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
@@ -152,8 +161,65 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setPreviews(prevs);
       setCompleted(comps);
 
-      if (prevs && prevs.length > 0) {
-        setUploadMessage(prev => (prev?.type === 'success' ? null : prev));
+      const activeProcessingApp = apps.find(a =>
+        ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status)
+      );
+
+      const currentPreviewFolders = new Set((prevs || []).map(p => p.folder_name));
+      let newlyReadyPreview: PreviewItem | undefined;
+      for (const p of (prevs || [])) {
+        if (!prevPreviewFoldersRef.current.has(p.folder_name)) {
+          newlyReadyPreview = p;
+          break;
+        }
+      }
+      prevPreviewFoldersRef.current = currentPreviewFolders;
+
+      if (activeProcessingApp) {
+        let serverPct = activeProcessingApp.progress || 25;
+        if (activeProcessingApp.status === 'UPLOADED') serverPct = Math.max(serverPct, 18);
+        else if (activeProcessingApp.status === 'EXTRACTING') serverPct = Math.max(serverPct, 38);
+        else if (activeProcessingApp.status === 'EXTRACTED') serverPct = Math.max(serverPct, 55);
+        else if (activeProcessingApp.status === 'FILLING_PORTAL') {
+          if ((activeProcessingApp.stage || '').includes('Generating PDF')) serverPct = Math.max(serverPct, 90);
+          else if ((activeProcessingApp.stage || '').includes('Submitting Stages')) serverPct = Math.max(serverPct, 76);
+          else serverPct = Math.max(serverPct, 64);
+        }
+        setSubmissionTracker(prev => {
+          const nextPct = prev && prev.active && !prev.ready ? Math.max(prev.percent, serverPct) : serverPct;
+          return {
+            active: true,
+            ready: false,
+            percent: Math.min(96, nextPct),
+            stageText: activeProcessingApp.stage || 'File submitted, waiting for preview...',
+            applicantName: activeProcessingApp.applicant_name || activeProcessingApp.folder_name,
+            startedAt: prev?.startedAt || Date.now(),
+          };
+        });
+      } else if (apps.some(a => a.status === 'NEEDS_CORRECTION' || a.status === 'ERROR')) {
+        setSubmissionTracker(null);
+      } else if (newlyReadyPreview || (prevs && prevs.length > 0)) {
+        setSubmissionTracker(prev => {
+          if (prev && prev.active) {
+            const latestPrev = newlyReadyPreview || prevs[0];
+            return {
+              active: true,
+              ready: true,
+              percent: 100,
+              stageText: 'Preview Ready!',
+              applicantName: latestPrev?.applicant_name || prev.applicantName,
+              startedAt: prev.startedAt,
+            };
+          }
+          return prev;
+        });
+      } else {
+        setSubmissionTracker(prev => {
+          if (prev && Date.now() - prev.startedAt > 6000) {
+            return null;
+          }
+          return prev;
+        });
       }
     } catch (err) {
       console.warn('Error fetching automation data:', err);
@@ -379,14 +445,24 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   };
 
   useEffect(() => {
-    if (previews.length > 0) {
-      setUploadMessage(prev => (prev?.type === 'success' ? null : prev));
-    }
-  }, [previews]);
+    if (!submissionTracker?.active || submissionTracker.ready) return;
+    const progInterval = setInterval(() => {
+      setSubmissionTracker(prev => {
+        if (!prev || !prev.active || prev.ready) return prev;
+        if (prev.percent >= 95) return prev;
+        const step = prev.percent < 45 ? 3 : prev.percent < 75 ? 2 : 1;
+        return {
+          ...prev,
+          percent: Math.min(95, prev.percent + step),
+        };
+      });
+    }, 1200);
+    return () => clearInterval(progInterval);
+  }, [submissionTracker?.active, submissionTracker?.ready]);
 
   useEffect(() => {
     refreshAllData();
-    const interval = setInterval(() => refreshAllData(), 4000);
+    const interval = setInterval(() => refreshAllData(), 2500);
     return () => clearInterval(interval);
   }, [user?.email, activeClientEmail]);
 
@@ -394,12 +470,44 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     app => (app.status === 'NEEDS_CORRECTION' || (app.status === 'ERROR' && (app.error_type === 'PORTAL_FORM_ERROR' || app.error_type === 'STAGE1_7_FAILED'))) && app.folder_name !== dismissedCorrectionFolder
   );
 
+  const formatMissingFieldLabel = (fieldName: string): string => {
+    const clean = (fieldName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const friendlyMap: Record<string, string> = {
+      applicantpreviouspassportfilenumber: 'File number',
+      previouspassportfilenumber: 'File number',
+      filenumber: 'File number',
+      fileno: 'File number',
+      applicantpreviouspassportno: 'Current passport number',
+      currentpassportnumber: 'Current passport number',
+      passportnumber: 'Current passport number',
+      applicantpreviouspassportissuedate: 'Date of issue',
+      applicantpreviousdateofissue: 'Date of issue',
+      applicantpreviouspassportexpirydate: 'Date of expiry',
+      applicantpreviousdateofexpiry: 'Date of expiry',
+      applicantpreviouspassportissueplace: 'Place of issue',
+      applicantpreviousplaceofissue: 'Place of issue',
+      presentaddresshnostreetname: 'House No. and Street Name',
+      presentaddressvillagetowncityindia: 'Village or Town or City',
+      presentaddresspolicestation: 'Police Station',
+      presentaddresspin: 'PIN Code',
+      presentaddressstate: 'State',
+      presentaddressdistrict: 'District',
+      presentaddressemail: 'Email id',
+      presentaddressmobileno: 'Indian mobile number',
+      permanentaddresshnostreetname: 'Italian address line 1',
+      permanentaddressvillagetowncity: 'Italian address line 2',
+      permanentaddressmobileno: 'Italian mobile number',
+    };
+    return friendlyMap[clean] || fieldName;
+  };
+
   const classifyMissingField = (fieldName: string) => {
-    const lower = fieldName.toLowerCase();
+    const lower = formatMissingFieldLabel(fieldName).toLowerCase();
     if (
       lower.includes('passport') ||
       lower.includes('issue') ||
-      lower.includes('expiry')
+      lower.includes('expiry') ||
+      lower.includes('file')
     ) {
       return { type: 'gen', label: 'Passport', badgeClass: 'tag-badge-gen', tagClass: 'missing-tag-gen' };
     }
@@ -495,6 +603,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (correctionApp && correctionApp.extracted_data) {
       const ed = correctionApp.extracted_data;
       setCorrectionFormData({
+        ...ed,
         "Educational qualification": ed["Educational qualification"] || "10TH PASS AND ABOVE",
         "Employment type": ed["Employment type"] || "PRIVATE",
         "PIN Code": ed["PIN Code"] || "",
@@ -504,30 +613,25 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         "Village or Town or City": ed["Village or Town or City"] || ed["address_line2"] || "",
         "Indian mobile number": ed["Indian mobile number"] || "",
         "Email id": ed["Email id"] || ed["presentAddressEmail"] || ed["Email"] || "",
-        "presentAddressEmail": ed["presentAddressEmail"] || ed["Email id"] || ed["Email"] || "",
         "Italian address line 1": ed["Italian address line 1"] || "",
         "Italian address line 2": ed["Italian address line 2"] || "",
         "Italian mobile number": ed["Italian mobile number"] || "",
         "Marital status": ed["Marital status"] || "SINGLE",
         "Spouse name": ed["Spouse name"] || ed["Spouse given name"] || "",
-        "Spouse given name": ed["Spouse given name"] || ed["Spouse name"] || "",
         "Given NAME": ed["Given NAME"] || ed["given_name"] || "",
         "SURNAME": ed["SURNAME"] || ed["surname"] || "",
         "Date of birth": ed["Date of birth"] || ed["dob"] || "",
         "Place of birth": ed["Place of birth"] || ed["pob"] || "",
-        "GENDER": ed["GENDER"] || ed["gender"] || "M",
+        "GENDER": ed["GENDER"] || ed["gender"] || "MALE",
         "Father's name": ed["Father's name"] || ed["father"] || "",
         "Mother's name": ed["Mother's name"] || ed["mother"] || "",
         "Police Station": ed["Police Station"] || ed["police"] || "",
-        "Passport number": ed["Passport number"] || ed["passport_number"] || ed["old_passport_number"] || "",
-        "passport_number": ed["passport_number"] || ed["Passport number"] || ed["old_passport_number"] || "",
+        "Current passport number": ed["Current passport number"] || ed["Passport number"] || ed["passport_number"] || ed["old_passport_number"] || "",
+        "Passport number": ed["Current passport number"] || ed["Passport number"] || ed["passport_number"] || ed["old_passport_number"] || "",
         "Date of issue": ed["Date of issue"] || ed["issue_date"] || ed["date_of_issue"] || "",
-        "issue_date": ed["issue_date"] || ed["Date of issue"] || ed["date_of_issue"] || "",
         "Date of expiry": ed["Date of expiry"] || ed["expiry_date"] || ed["date_of_expiry"] || "",
-        "expiry_date": ed["expiry_date"] || ed["Date of expiry"] || ed["date_of_expiry"] || "",
         "Place of issue": ed["Place of issue"] || ed["issue_place"] || ed["place_of_issue"] || "",
-        "issue_place": ed["issue_place"] || ed["Place of issue"] || ed["place_of_issue"] || "",
-        ...ed,
+        "File number": ed["File number"] || ed["File Number"] || ed["file_number"] || ed["applicantPreviousPassportFileNumber"] || "",
       });
     }
   }, [correctionApp?.folder_name, correctionApp?.updated_at]);
@@ -901,6 +1005,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
     try {
       setIsUploading(true);
+      setUploadMessage(null);
+      setSubmissionTracker({
+        active: true,
+        ready: false,
+        percent: 10,
+        stageText: 'Uploading documents to server...',
+        startedAt: Date.now(),
+      });
       localStorage.setItem('fs_active_client_email', targetClientEmail);
       localStorage.setItem('fs_portal_password', cleanPassword);
       localStorage.setItem('fs_declaration_place', declarationPlace);
@@ -922,6 +1034,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         declarationPlace
       );
 
+      setSubmissionTracker({
+        active: true,
+        ready: false,
+        percent: 20,
+        stageText: 'File submitted, waiting for preview...',
+        startedAt: Date.now(),
+      });
       setUploadMessage({
         text: 'File submitted, waiting for preview...',
         type: 'success',
@@ -941,6 +1060,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       refreshAllData(user?.email || targetClientEmail);
     } catch (err: any) {
       const friendlyMsg = sanitizeErrorMessage(err);
+      setSubmissionTracker(null);
       setUploadMessage({
         text: friendlyMsg,
         type: 'error',
@@ -1019,14 +1139,25 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
       if (em) {
         finalData["Email id"] = em;
-        finalData["presentAddressEmail"] = em;
       }
+      delete finalData["presentAddressEmail"];
+      delete finalData["mrz_line1"];
+      delete finalData["mrz_line2"];
 
-      if (correctionFormData["Passport number"] !== undefined || correctionFormData["passport_number"] !== undefined) {
-        const pno = (correctionFormData["Passport number"] || correctionFormData["passport_number"] || "").trim().toUpperCase();
+      if (correctionFormData["Current passport number"] !== undefined || correctionFormData["Passport number"] !== undefined || correctionFormData["passport_number"] !== undefined) {
+        const pno = (correctionFormData["Current passport number"] || correctionFormData["Passport number"] || correctionFormData["passport_number"] || "").trim().toUpperCase();
         if (pno) {
+          finalData["Current passport number"] = pno;
           finalData["Passport number"] = pno;
           finalData["passport_number"] = pno;
+        }
+      }
+      if (correctionFormData["File number"] !== undefined || correctionFormData["file_number"] !== undefined || correctionFormData["applicantPreviousPassportFileNumber"] !== undefined) {
+        const fno = (correctionFormData["File number"] || correctionFormData["file_number"] || correctionFormData["applicantPreviousPassportFileNumber"] || "").trim().toUpperCase();
+        if (fno) {
+          finalData["File number"] = fno;
+          finalData["file_number"] = fno;
+          delete finalData["applicantPreviousPassportFileNumber"];
         }
       }
       if (correctionFormData["Date of issue"] !== undefined || correctionFormData["issue_date"] !== undefined) {
@@ -1057,8 +1188,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         finalData
       );
 
+      setSubmissionTracker({
+        active: true,
+        ready: false,
+        percent: 60,
+        stageText: 'Details saved! Resuming portal form filling...',
+        applicantName: correctionApp.applicant_name || correctionApp.folder_name,
+        startedAt: Date.now(),
+      });
       setUploadMessage({
-        text: 'Details saved! Resuming portal form filling...',
+        text: 'File submitted, waiting for preview...',
         type: 'success',
       });
       refreshAllData();
@@ -1192,21 +1331,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     employment: ['employmenttype', 'employment'],
     marital: ['maritalstatus', 'marital'],
     spouse: ['spousename', 'spouse', 'spousesname', 'spousesgivenname', 'spousegivenname'],
-    house: ['housenoandstreetname', 'houseno', 'streetname', 'house', 'housenumber', 'street'],
-    village: ['villageortownorcity', 'village', 'city', 'town', 'villagetowncity'],
-    state: ['state', 'stateut', 'addrstate'],
-    district: ['district', 'addrdist'],
-    pin: ['pincode', 'pin', 'postalcode'],
-    police: ['policestation', 'police'],
-    indian_mobile: ['indianmobilenumber', 'indianmobile', 'mobile', 'mobilenumber'],
+    house: ['housenoandstreetname', 'houseno', 'streetname', 'house', 'housenumber', 'street', 'presentaddresshnostreetname'],
+    village: ['villageortownorcity', 'village', 'city', 'town', 'villagetowncity', 'presentaddressvillagetowncityindia'],
+    state: ['state', 'stateut', 'addrstate', 'presentaddressstate'],
+    district: ['district', 'addrdist', 'presentaddressdistrict'],
+    pin: ['pincode', 'pin', 'postalcode', 'presentaddresspin'],
+    police: ['policestation', 'police', 'presentaddresspolicestation'],
+    indian_mobile: ['indianmobilenumber', 'indianmobile', 'mobile', 'mobilenumber', 'presentaddressmobileno'],
     email: ['emailid', 'email', 'presentaddressemail', 'mail', 'emailaddress'],
-    italian_l1: ['italianaddressline1', 'addr_l1', 'addrl1', 'italianaddress1', 'italianaddress'],
-    italian_l2: ['italianaddressline2', 'addr_l2', 'addrl2', 'italianaddress2'],
-    italian_mobile: ['italianmobilenumber', 'italianmobile', 'em_mobile', 'emmobile', 'overseasmobile'],
-    passport_number: ['passportnumber', 'passportno', 'oldpassportnumber', 'oldpassportno'],
-    issue_date: ['dateofissue', 'issuedate', 'doi', 'passportissuedate', 'dateofissuance'],
-    expiry_date: ['dateofexpiry', 'expirydate', 'doe', 'passportexpirydate', 'dateofexpiration'],
-    issue_place: ['placeofissue', 'issueplace', 'passportplaceofissue'],
+    italian_l1: ['italianaddressline1', 'addr_l1', 'addrl1', 'italianaddress1', 'italianaddress', 'permanentaddresshnostreetname'],
+    italian_l2: ['italianaddressline2', 'addr_l2', 'addrl2', 'italianaddress2', 'permanentaddressvillagetowncity'],
+    italian_mobile: ['italianmobilenumber', 'italianmobile', 'em_mobile', 'emmobile', 'overseasmobile', 'permanentaddressmobileno'],
+    passport_number: ['currentpassportnumber', 'passportnumber', 'passportno', 'oldpassportnumber', 'oldpassportno', 'applicantpreviouspassportno'],
+    file_number: ['filenumber', 'fileno', 'applicantpreviouspassportfilenumber', 'previouspassportfilenumber'],
+    issue_date: ['dateofissue', 'issuedate', 'doi', 'passportissuedate', 'dateofissuance', 'applicantpreviouspassportissuedate', 'applicantpreviousdateofissue'],
+    expiry_date: ['dateofexpiry', 'expirydate', 'doe', 'passportexpirydate', 'dateofexpiration', 'applicantpreviouspassportexpirydate', 'applicantpreviousdateofexpiry'],
+    issue_place: ['placeofissue', 'issueplace', 'passportplaceofissue', 'applicantpreviouspassportissueplace', 'applicantpreviousplaceofissue'],
   };
 
   const allKnownCleanAliases = new Set(
@@ -1262,10 +1402,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     isFieldMissing(["Italian mobile number", "em_mobile", "italian mobile"]);
 
   const hasPassportMissing =
-    isFieldMissing(["Passport number", "passport_number", "passportno", "old_passport_number"]) ||
-    isFieldMissing(["Date of issue", "issue_date", "date_of_issue"]) ||
-    isFieldMissing(["Date of expiry", "expiry_date", "date_of_expiry"]) ||
-    isFieldMissing(["Place of issue", "issue_place", "place_of_issue"]);
+    isFieldMissing(["Current passport number", "Passport number", "passport_number", "passportno", "old_passport_number", "applicantPreviousPassportNo"]) ||
+    isFieldMissing(["File number", "file_number", "fileno", "applicantPreviousPassportFileNumber"]) ||
+    isFieldMissing(["Date of issue", "issue_date", "date_of_issue", "applicantPreviousPassportIssueDate"]) ||
+    isFieldMissing(["Date of expiry", "expiry_date", "date_of_expiry", "applicantPreviousPassportExpiryDate"]) ||
+    isFieldMissing(["Place of issue", "issue_place", "place_of_issue", "applicantPreviousPassportIssuePlace"]);
 
   const otherMissingFields = (correctionApp?.missing_fields || []).filter(mf => {
     const cleanMf = mf.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1290,14 +1431,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       if (isFieldMissing(["Indian mobile number", "mobile"])) updated["Indian mobile number"] = "";
       if (isFieldMissing(["Email id", "email", "presentaddressemail", "mail"])) {
         updated["Email id"] = "";
-        updated["presentAddressEmail"] = "";
       }
       if (isFieldMissing(["Italian address line 1", "addr_l1", "italian address"])) updated["Italian address line 1"] = "";
       if (isFieldMissing(["Italian address line 2", "addr_l2"])) updated["Italian address line 2"] = "";
       if (isFieldMissing(["Italian mobile number", "em_mobile", "italian mobile"])) updated["Italian mobile number"] = "";
-      if (isFieldMissing(["Passport number", "passport_number", "passportno", "old_passport_number"])) {
+      if (isFieldMissing(["Current passport number", "Passport number", "passport_number", "passportno", "old_passport_number", "applicantPreviousPassportNo"])) {
+        updated["Current passport number"] = "";
         updated["Passport number"] = "";
         updated["passport_number"] = "";
+      }
+      if (isFieldMissing(["File number", "file_number", "fileno", "applicantPreviousPassportFileNumber"])) {
+        updated["File number"] = "";
+        updated["file_number"] = "";
       }
       if (isFieldMissing(["Date of issue", "issue_date", "date_of_issue"])) {
         updated["Date of issue"] = "";
@@ -1436,7 +1581,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         return (
                           <span key={i} className={`missing-tag ${meta.tagClass}`}>
                             <span className={`tag-badge ${meta.badgeClass}`}>{meta.label}</span>
-                            {f}
+                            {formatMissingFieldLabel(f)}
                           </span>
                         );
                       })}
@@ -1819,8 +1964,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                               const val = e.target.value.trim();
                               setCorrectionFormData(prev => ({
                                 ...prev,
-                                "Email id": val,
-                                "presentAddressEmail": val
+                                "Email id": val
                               }));
                             }}
                             required
@@ -1890,7 +2034,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   <>
                     <h3 className="form-section-title">Passport Details (Previous Passport)</h3>
                     <div className="form-grid-2">
-                      {isFieldMissing(["Passport number", "passport_number", "passportno", "old_passport_number"]) && (
+                      {isFieldMissing(["Current passport number", "Passport number", "passport_number", "passportno", "old_passport_number", "applicantPreviousPassportNo"]) && (
                         <div className="input-group">
                           <label htmlFor="corrPassportNumber" className="input-label">
                             Passport Number <span className="required-star">*</span>
@@ -1901,10 +2045,31 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             maxLength={9}
                             className="form-input"
                             placeholder="e.g. Z1234567"
-                            value={correctionFormData["Passport number"] || correctionFormData["passport_number"] || ""}
+                            value={correctionFormData["Current passport number"] || correctionFormData["Passport number"] || correctionFormData["passport_number"] || ""}
                             onChange={(e) => {
                               const val = e.target.value.toUpperCase().replace(/\s/g, '');
-                              setCorrectionFormData(prev => ({ ...prev, "Passport number": val, "passport_number": val }));
+                              setCorrectionFormData(prev => ({ ...prev, "Current passport number": val, "Passport number": val, "passport_number": val }));
+                            }}
+                            required
+                          />
+                        </div>
+                      )}
+
+                      {isFieldMissing(["File number", "file_number", "fileno", "applicantPreviousPassportFileNumber"]) && (
+                        <div className="input-group">
+                          <label htmlFor="corrFileNumber" className="input-label">
+                            File Number <span className="required-star">*</span>
+                          </label>
+                          <input
+                            id="corrFileNumber"
+                            type="text"
+                            maxLength={20}
+                            className="form-input"
+                            placeholder="e.g. ITAR00444516"
+                            value={correctionFormData["File number"] || correctionFormData["file_number"] || correctionFormData["applicantPreviousPassportFileNumber"] || ""}
+                            onChange={(e) => {
+                              const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                              setCorrectionFormData(prev => ({ ...prev, "File number": val, "file_number": val }));
                             }}
                             required
                           />
@@ -1981,13 +2146,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       {otherMissingFields.map((fieldKey) => (
                         <div className="input-group" key={fieldKey}>
                           <label htmlFor={`corr_${fieldKey}`} className="input-label">
-                            {fieldKey} <span className="required-star">*</span>
+                            {formatMissingFieldLabel(fieldKey)} <span className="required-star">*</span>
                           </label>
                           <input
                             id={`corr_${fieldKey}`}
                             type="text"
                             className="form-input"
-                            placeholder={`Enter ${fieldKey}`}
+                            placeholder={`Enter ${formatMissingFieldLabel(fieldKey)}`}
                             value={correctionFormData[fieldKey] || ""}
                             onChange={(e) => setCorrectionFormData(prev => ({ ...prev, [fieldKey]: e.target.value }))}
                             required
@@ -2049,7 +2214,104 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 </p>
               </div>
 
-              {uploadMessage && (
+              {submissionTracker?.active ? (
+                <div
+                  className="voice-progress-container"
+                  style={{
+                    marginBottom: '20px',
+                    padding: '14px 18px',
+                    borderRadius: '12px',
+                    border: submissionTracker.ready
+                      ? '1px solid rgba(16, 185, 129, 0.35)'
+                      : '1px solid rgba(37, 99, 235, 0.28)',
+                    background: submissionTracker.ready
+                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%)'
+                      : 'linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%)',
+                  }}
+                >
+                  <div className="voice-progress-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '12px' }}>
+                    <div className="voice-progress-status" style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600, fontSize: '14px', color: submissionTracker.ready ? '#059669' : '#1e40af' }}>
+                      {submissionTracker.ready ? (
+                        <CheckCircle2 style={{ width: '18px', height: '18px', color: '#10b981', flexShrink: 0 }} />
+                      ) : (
+                        <RefreshCw style={{ width: '16px', height: '16px', color: '#2563eb', flexShrink: 0 }} className="animate-spin" />
+                      )}
+                      <div>
+                        <div>
+                          {submissionTracker.ready
+                            ? `Preview Ready!${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                            : `File submitted, waiting for preview...${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`}
+                        </div>
+                        {!submissionTracker.ready && submissionTracker.stageText && submissionTracker.stageText !== 'File submitted, waiting for preview...' && (
+                          <div style={{ fontSize: '12px', fontWeight: 500, color: '#475569', marginTop: '2px' }}>
+                            {submissionTracker.stageText}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span
+                        className="voice-progress-percent"
+                        style={{
+                          fontWeight: 700,
+                          fontSize: '14px',
+                          color: submissionTracker.ready ? '#059669' : '#2563eb',
+                          background: submissionTracker.ready ? 'rgba(16, 185, 129, 0.15)' : 'rgba(37, 99, 235, 0.12)',
+                          padding: '3px 10px',
+                          borderRadius: '999px',
+                        }}
+                      >
+                        {submissionTracker.ready ? '100%' : `${submissionTracker.percent}%`}
+                      </span>
+                      {submissionTracker.ready && (
+                        <button
+                          type="button"
+                          onClick={() => onSectionChange('preview')}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 14px',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: '#ffffff',
+                            background: '#10b981',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Eye style={{ width: '14px', height: '14px' }} />
+                          <span>Open Preview</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div
+                    className="voice-progress-track"
+                    style={{
+                      width: '100%',
+                      height: '8px',
+                      borderRadius: '999px',
+                      background: 'rgba(148, 163, 184, 0.25)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      className="voice-progress-fill"
+                      style={{
+                        width: `${submissionTracker.ready ? 100 : submissionTracker.percent}%`,
+                        height: '100%',
+                        borderRadius: '999px',
+                        background: submissionTracker.ready
+                          ? 'linear-gradient(90deg, #10b981 0%, #059669 100%)'
+                          : 'linear-gradient(90deg, #2563eb 0%, #3b82f6 100%)',
+                        transition: 'width 0.45s ease',
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : uploadMessage ? (
                 <div className={`form-alert ${uploadMessage.type === 'success' ? 'alert-success' : 'alert-error'}`}>
                   {uploadMessage.type === 'success' ? (
                     <Clock className="alert-icon animate-pulse" />
@@ -2058,7 +2320,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   )}
                   <span>{uploadMessage.text}</span>
                 </div>
-              )}
+              ) : null}
 
               <form onSubmit={handleSubmitApplication} className="fresh-form">
                 <div className="form-grid-2">
