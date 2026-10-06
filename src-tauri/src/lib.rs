@@ -827,6 +827,8 @@ pub struct LocalFileInfo {
     pub data: Vec<u8>,
 }
 
+const MAX_UPLOAD_FILE_BYTES: u64 = 10 * 1024 * 1024;
+
 #[tauri::command]
 async fn read_local_file(path: String) -> Result<LocalFileInfo, String> {
     let p = std::path::Path::new(&path);
@@ -836,6 +838,10 @@ async fn read_local_file(path: String) -> Result<LocalFileInfo, String> {
     let name = p.file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "file".to_string());
+    let meta = std::fs::metadata(p).map_err(|e| format!("Failed to inspect file {}: {}", path, e))?;
+    if meta.len() > MAX_UPLOAD_FILE_BYTES {
+        return Err(format!("File \"{}\" exceeds the 10 MB maximum size limit.", name));
+    }
     let data = std::fs::read(p).map_err(|e| format!("Failed to read file {}: {}", path, e))?;
     Ok(LocalFileInfo { name, data })
 }

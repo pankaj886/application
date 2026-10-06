@@ -350,6 +350,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
       // Automatically refresh all applications and previews
       await refreshAllData();
+      await new Promise((resolve) => setTimeout(resolve, 250));
     } catch (err: any) {
       if (progressTimer) {
         clearInterval(progressTimer);
@@ -780,8 +781,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   ? 'application/msword'
                   : 'application/octet-stream';
                 loadedFiles.push(new File([bytes], info.name, { type: mime }));
-              } catch (readErr) {
-                console.warn('Native drag drop read failed for:', p, readErr);
+              } catch (readErr: any) {
+                const errStr = String(readErr || '');
+                if (errStr.includes('10 MB')) {
+                  setUploadMessage({
+                    text: errStr,
+                    type: 'error',
+                  });
+                } else {
+                  console.warn('Native drag drop read failed for:', p, readErr);
+                }
               }
             }
             if (loadedFiles.length > 0) {
@@ -1369,7 +1378,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             type="button"
             onClick={handleManualRefresh}
             className="refresh-btn"
-            title="Refresh All Applications and Previews"
+            aria-label="Refresh"
             disabled={isManualRefreshing}
           >
             <RefreshCw className={`refresh-icon ${isManualRefreshing ? 'animate-spin' : ''}`} />
@@ -2654,8 +2663,17 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       {voiceResults[folderKey] && voiceProcessingFolder !== folderKey && (
                         <div className="voice-result-banner">
                           <div className="voice-result-title">
-                            <CheckCircle2 style={{ width: '14px', height: '14px', color: '#2563eb' }} />
-                            <span>Updates Applied &amp; Fresh Previews Ready</span>
+                            {voiceResults[folderKey].success ? (
+                              <>
+                                <CheckCircle2 style={{ width: '14px', height: '14px', color: '#2563eb' }} />
+                                <span>Updates Applied &amp; Fresh Previews Ready</span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle style={{ width: '14px', height: '14px', color: '#2563eb' }} />
+                                <span>Update Notice</span>
+                              </>
+                            )}
                           </div>
                           {voiceResults[folderKey].transcription && (
                             <div className="voice-result-transcription">
