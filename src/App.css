@@ -3258,16 +3258,16 @@ input::-webkit-credentials-auto-fill-button {
 }
 
 /* ========================================================
-   ENTERPRISE AI VOICE AGENT RECORDER (PREVIEW SCREEN)
+   SMART VOICE AGENT RECORDER (PREVIEW SCREEN - WHITE & BLUE)
    ======================================================== */
 .preview-voice-agent-container {
   margin: 12px 0 16px 0;
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.85) 100%);
-  border: 1px solid rgba(59, 130, 246, 0.28);
+  background: #ffffff;
+  border: 1.5px solid #2563eb;
   border-radius: 12px;
   padding: 14px 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.08);
+  color: #000000;
   position: relative;
   overflow: hidden;
 }
@@ -3278,15 +3278,8 @@ input::-webkit-credentials-auto-fill-button {
   top: 0;
   left: 0;
   right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #06b6d4, #3b82f6);
-  background-size: 200% 100%;
-  animation: shimmer-line 4s linear infinite;
-}
-
-@keyframes shimmer-line {
-  0% { background-position: 0% 0%; }
-  100% { background-position: 200% 0%; }
+  height: 3px;
+  background: #2563eb;
 }
 
 .voice-agent-header {
@@ -3308,38 +3301,27 @@ input::-webkit-credentials-auto-fill-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 10px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.25));
-  border: 1px solid rgba(96, 165, 250, 0.35);
+  padding: 4px 12px;
+  background: #eff6ff;
+  border: 1px solid #2563eb;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 700;
-  color: #93c5fd;
+  color: #000000;
   letter-spacing: 0.3px;
   text-transform: uppercase;
 }
 
-.voice-agent-badge-icon {
-  width: 14px;
-  height: 14px;
-  color: #60a5fa;
-}
-
-.voice-agent-subtitle {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
 .voice-agent-instructions {
-  font-size: 11.5px;
-  color: #64748b;
+  font-size: 12px;
+  color: #000000;
   margin-bottom: 12px;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .voice-agent-instructions b {
-  color: #93c5fd;
-  font-weight: 600;
+  color: #000000;
+  font-weight: 700;
 }
 
 .voice-agent-main-row {
@@ -3355,21 +3337,21 @@ input::-webkit-credentials-auto-fill-button {
   align-items: center;
   gap: 8px;
   padding: 9px 18px;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  background: #2563eb;
   color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid #1d4ed8;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
 }
 
 .voice-record-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  background: #1d4ed8;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.45);
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.35);
 }
 
 .voice-record-btn:disabled {
@@ -3377,39 +3359,39 @@ input::-webkit-credentials-auto-fill-button {
   cursor: not-allowed;
 }
 
-/* Recording State (Red pulsating button with square stop) */
+/* Recording State */
 .voice-recording-active-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 9px 18px;
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  background: #1d4ed8;
   color: #ffffff;
-  border: 1px solid rgba(254, 202, 202, 0.4);
+  border: 1px solid #2563eb;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  animation: pulse-red-border 1.5s infinite;
-  box-shadow: 0 0 16px rgba(220, 38, 38, 0.5);
+  animation: pulse-blue-border 1.5s infinite;
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
 }
 
-@keyframes pulse-red-border {
+@keyframes pulse-blue-border {
   0% {
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.6);
   }
   70% {
-    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
   }
 }
 
 .recording-dot-pulse {
   width: 10px;
   height: 10px;
-  background-color: #ef4444;
+  background-color: #2563eb;
   border-radius: 50%;
   animation: record-dot-anim 1s infinite alternate;
 }
@@ -3431,13 +3413,13 @@ input::-webkit-credentials-auto-fill-button {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: #eff6ff;
+  border: 1px solid #2563eb;
   border-radius: 6px;
   font-size: 12px;
   font-family: monospace;
   font-weight: 700;
-  color: #f87171;
+  color: #000000;
 }
 
 /* Audio wave animation bars */
@@ -3451,7 +3433,7 @@ input::-webkit-credentials-auto-fill-button {
 
 .voice-wave-bar {
   width: 3px;
-  background: #f87171;
+  background: #ffffff;
   border-radius: 2px;
   animation: wave-bar-anim 1.2s ease-in-out infinite;
 }
@@ -3473,16 +3455,16 @@ input::-webkit-credentials-auto-fill-button {
   min-width: 260px;
   display: flex;
   align-items: center;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid #334155;
+  background: #ffffff;
+  border: 1.5px solid #2563eb;
   border-radius: 8px;
   padding: 2px 4px 2px 12px;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .voice-text-input-wrap:focus-within {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
 }
 
 .voice-text-input {
@@ -3490,13 +3472,15 @@ input::-webkit-credentials-auto-fill-button {
   background: transparent;
   border: none;
   outline: none;
-  color: #f1f5f9;
+  color: #000000;
   font-size: 12.5px;
+  font-weight: 500;
   padding: 7px 0;
 }
 
 .voice-text-input::placeholder {
-  color: #64748b;
+  color: #000000;
+  opacity: 0.6;
 }
 
 .voice-text-send-btn {
@@ -3523,29 +3507,66 @@ input::-webkit-credentials-auto-fill-button {
   cursor: not-allowed;
 }
 
-/* Processing indicator banner */
-.voice-processing-banner {
-  margin-top: 10px;
+/* Progress bar container during update */
+.voice-progress-container {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #eff6ff;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.voice-progress-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  padding: 10px 14px;
-  background: rgba(37, 99, 235, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 8px;
   font-size: 12.5px;
-  color: #93c5fd;
+  font-weight: 600;
+  color: #000000;
+}
+
+.voice-progress-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #000000;
+}
+
+.voice-progress-percent {
+  font-size: 12px;
+  font-weight: 700;
+  color: #000000;
+}
+
+.voice-progress-track {
+  width: 100%;
+  height: 8px;
+  background: #ffffff;
+  border: 1px solid #2563eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.voice-progress-fill {
+  height: 100%;
+  background: #2563eb;
+  border-radius: 999px;
+  transition: width 0.35s ease;
 }
 
 /* Result announcement banner */
 .voice-result-banner {
   margin-top: 12px;
   padding: 10px 14px;
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: #eff6ff;
+  border: 1px solid #2563eb;
   border-radius: 8px;
   font-size: 12px;
-  color: #d1fae5;
+  color: #000000;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -3556,19 +3577,17 @@ input::-webkit-credentials-auto-fill-button {
   align-items: center;
   gap: 6px;
   font-weight: 700;
-  color: #34d399;
+  color: #000000;
   font-size: 12.5px;
 }
 
 .voice-result-transcription {
-  color: #94a3b8;
+  color: #000000;
   font-style: italic;
   font-size: 11.5px;
 }
 
 .voice-result-summary {
-  color: #e2e8f0;
+  color: #000000;
   font-weight: 500;
 }
-
-

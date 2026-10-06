@@ -20,8 +20,7 @@ import {
   PenTool,
   BookOpen,
   X,
-  Mic,
-  Sparkles
+  Mic
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -184,10 +183,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   };
 
-  // AI Voice Agent States
+  // Smart Voice Agent States
   const [recordingFolder, setRecordingFolder] = useState<string | null>(null);
   const [recordingDuration, setRecordingDuration] = useState<number>(0);
   const [voiceProcessingFolder, setVoiceProcessingFolder] = useState<string | null>(null);
+  const [voiceProgress, setVoiceProgress] = useState<Record<string, { percent: number; stage: string }>>({});
   const [voiceResults, setVoiceResults] = useState<Record<string, { transcription: string; summary: string; success: boolean }>>({});
   const [voiceTextInputs, setVoiceTextInputs] = useState<Record<string, string>>({});
 
@@ -270,17 +270,76 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   };
 
   const handleSendVoiceAction = async (folderName: string, audioBlob?: Blob | null, textPrompt?: string) => {
+    let progressTimer: any = null;
     try {
       setVoiceProcessingFolder(folderName);
       const text = textPrompt !== undefined ? textPrompt : (voiceTextInputs[folderName] || '');
+      const lowText = text.toLowerCase();
       const email = user?.email || portalEmail || activeClientEmail;
 
+      const detectedActionLabel = lowText.includes('sign') || lowText.includes('firma')
+        ? 'Re-cropping signature & isolating strokes on white background...'
+        : lowText.includes('photo') || lowText.includes('shoulder') || lowText.includes('face') || lowText.includes('foto')
+        ? 'Re-cropping photograph from source document...'
+        : audioBlob
+        ? 'Decoding voice note & applying document/field updates...'
+        : 'Applying requested updates to application fields & documents...';
+
+      setVoiceProgress((prev) => ({
+        ...prev,
+        [folderName]: { percent: 15, stage: 'Analyzing update request...' },
+      }));
+
+      let currentTick = 0;
+      progressTimer = setInterval(() => {
+        currentTick += 1;
+        setVoiceProgress((prev) => {
+          const cur = prev[folderName]?.percent || 15;
+          if (currentTick === 1) {
+            return { ...prev, [folderName]: { percent: 42, stage: detectedActionLabel } };
+          }
+          if (currentTick === 2) {
+            return { ...prev, [folderName]: { percent: 68, stage: 'Regenerating official PDF previews...' } };
+          }
+          if (currentTick >= 3) {
+            const nextPct = Math.min(92, cur + 6);
+            return { ...prev, [folderName]: { percent: nextPct, stage: 'Finalizing updated previews...' } };
+          }
+          return prev;
+        });
+      }, 900);
+
       const res = await automationApi.sendVoiceInstruction(email, folderName, audioBlob, text);
+
+      if (progressTimer) {
+        clearInterval(progressTimer);
+        progressTimer = null;
+      }
+
+      setVoiceProgress((prev) => ({
+        ...prev,
+        [folderName]: { percent: 100, stage: 'Update complete! Refreshing previews...' },
+      }));
+
+      // Immediately update preview URLs with fresh cache-busters
+      setPreviews((prev) =>
+        prev.map((p) =>
+          p.folder_name === folderName
+            ? {
+                ...p,
+                passport_preview_url: res.passport_preview_url || p.passport_preview_url,
+                declaration_preview_url: res.declaration_preview_url || p.declaration_preview_url,
+                photo_preview_url: res.photo_preview_url || p.photo_preview_url,
+                signature_preview_url: res.signature_preview_url || p.signature_preview_url,
+              }
+            : p
+        )
+      );
 
       setVoiceResults((prev) => ({
         ...prev,
         [folderName]: {
-          transcription: res.transcription || 'Voice note processed',
+          transcription: res.transcription || 'Instruction processed',
           summary: res.summary || 'Draft preview updated with your instructions.',
           success: true,
         },
@@ -289,20 +348,32 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       // Clear text input
       setVoiceTextInputs((prev) => ({ ...prev, [folderName]: '' }));
 
-      // Refresh all applications and previews
+      // Automatically refresh all applications and previews
       await refreshAllData();
     } catch (err: any) {
+      if (progressTimer) {
+        clearInterval(progressTimer);
+        progressTimer = null;
+      }
       const msg = sanitizeErrorMessage(err);
       setVoiceResults((prev) => ({
         ...prev,
         [folderName]: {
           transcription: '',
-          summary: `Voice Agent could not apply changes: ${msg}`,
+          summary: `Smart Voice Agent could not apply changes: ${msg}`,
           success: false,
         },
       }));
     } finally {
+      if (progressTimer) {
+        clearInterval(progressTimer);
+      }
       setVoiceProcessingFolder(null);
+      setVoiceProgress((prev) => {
+        const copy = { ...prev };
+        delete copy[folderName];
+        return copy;
+      });
     }
   };
 
@@ -460,7 +531,21 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   }, [correctionApp?.folder_name, correctionApp?.updated_at]);
 
+  const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB strict limit per file
+
   const updateSlotFile = (slot: 'photo' | 'sign' | 'passport' | 'residence' | 'info', file: File | null) => {
+    if (file && file.size > MAX_FILE_SIZE_BYTES) {
+      setUploadMessage({
+        text: `File "${file.name}" exceeds the 10 MB maximum size limit.`,
+        type: 'error',
+      });
+      if (slot === 'photo' && photoInputRef.current) photoInputRef.current.value = '';
+      if (slot === 'sign' && signInputRef.current) signInputRef.current.value = '';
+      if (slot === 'passport' && passportInputRef.current) passportInputRef.current.value = '';
+      if (slot === 'residence' && residenceInputRef.current) residenceInputRef.current.value = '';
+      if (slot === 'info' && infoInputRef.current) infoInputRef.current.value = '';
+      return;
+    }
     filesStateRef.current[slot] = file;
     if (slot === 'photo') {
       setPhotoFile(file);
@@ -483,6 +568,17 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const autoCategorizeFiles = (incoming: File[]) => {
     if (!incoming || incoming.length === 0) return;
 
+    const oversized = incoming.filter(f => f.size > MAX_FILE_SIZE_BYTES);
+    if (oversized.length > 0) {
+      setUploadMessage({
+        text: `File "${oversized[0].name}" exceeds the 10 MB maximum size limit.`,
+        type: 'error',
+      });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+    const validIncoming = incoming.filter(f => f.size <= MAX_FILE_SIZE_BYTES);
+    if (validIncoming.length === 0) return;
+
     const current = filesStateRef.current;
     let p = current.photo;
     let s = current.sign;
@@ -491,7 +587,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     let inf = current.info;
     const extras: File[] = [];
 
-    for (const f of incoming) {
+    for (const f of validIncoming) {
       const lower = f.name.toLowerCase();
       if (!p && (lower.includes('photo') || lower.includes('fototessera') || lower.includes('picture') || lower.includes('portrait'))) {
         p = f;
@@ -776,6 +872,24 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       return;
     }
 
+    const allCandidateFiles = [
+      photoFile,
+      signFile,
+      passportFile,
+      residenceFile,
+      infoFile,
+      ...selectedFiles,
+    ].filter((f): f is File => Boolean(f));
+
+    const oversized = allCandidateFiles.find(f => f.size > MAX_FILE_SIZE_BYTES);
+    if (oversized) {
+      setUploadMessage({
+        text: `File "${oversized.name}" exceeds the 10 MB maximum size limit.`,
+        type: 'error',
+      });
+      return;
+    }
+
     try {
       setIsUploading(true);
       localStorage.setItem('fs_active_client_email', targetClientEmail);
@@ -1018,6 +1132,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   };
 
   const handleConfirmFinalSubmit = async (folderName: string, arn: string) => {
+    if (voiceProcessingFolder) return;
     try {
       setSubmittingArn(arn);
       await automationApi.confirmSubmission(user?.email || activeClientEmail, folderName, arn);
@@ -2398,31 +2513,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 Review both generated preview documents carefully before submitting to the portal.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleManualRefresh}
-              className="preview-refresh-action-btn"
-              disabled={isManualRefreshing}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '8px 16px',
-                background: '#ffffff',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                fontSize: '13px',
-                fontWeight: 600,
-                color: '#334155',
-                cursor: 'pointer',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                transition: 'all 0.2s ease',
-              }}
-              title="Refresh Previews and Status"
-            >
-              <RefreshCw className={`refresh-icon ${isManualRefreshing ? 'animate-spin' : ''}`} style={{ width: '14px', height: '14px' }} />
-              <span>Refresh Previews</span>
-            </button>
           </div>
 
           {previews.length === 0 ? (
@@ -2449,7 +2539,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               {previews.map((item) => {
                 const folderKey = item.folder_name;
                 const selection = previewSelections[folderKey] || { passport: false, declaration: false };
-                const canSubmit = selection.passport && selection.declaration;
+                const isUpdatingThis = voiceProcessingFolder === folderKey;
+                const isAnyUpdating = Boolean(voiceProcessingFolder);
+                const canSubmit = selection.passport && selection.declaration && !isUpdatingThis && !isAnyUpdating;
                 const isSubmittingThis = submittingArn === item.arn;
 
                 return (
@@ -2464,15 +2556,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Enterprise AI Voice Agent & Preview Editor */}
+                    {/* Smart Voice Agent & Preview Editor */}
                     <div className="preview-voice-agent-container">
                       <div className="voice-agent-header">
                         <div className="voice-agent-title-row">
                           <span className="voice-agent-badge">
-                            <Sparkles className="voice-agent-badge-icon" />
-                            AI Voice Agent
+                            Smart Voice Agent
                           </span>
-                          <span className="voice-agent-subtitle">Smart Crop &amp; Details Editor</span>
                         </div>
                         {recordingFolder === folderKey && (
                           <div className="recording-timer-pill">
@@ -2510,7 +2600,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             disabled={voiceProcessingFolder === folderKey}
                             onClick={() => startVoiceRecording(folderKey)}
                             className="voice-record-btn"
-                            title="Record voice note for AI Agent"
+                            title="Record voice note for Smart Voice Agent"
                           >
                             <Mic style={{ width: '15px', height: '15px' }} />
                             <span>Record Voice Note</span>
@@ -2544,16 +2634,27 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       </div>
 
                       {voiceProcessingFolder === folderKey && (
-                        <div className="voice-processing-banner">
-                          <RefreshCw style={{ width: '16px', height: '16px' }} className="animate-spin" />
-                          <span>AI Agent is analyzing changes, re-cropping source documents &amp; generating new previews...</span>
+                        <div className="voice-progress-container">
+                          <div className="voice-progress-header">
+                            <div className="voice-progress-status">
+                              <RefreshCw style={{ width: '15px', height: '15px', color: '#2563eb' }} className="animate-spin" />
+                              <span>{voiceProgress[folderKey]?.stage || 'Applying updates and regenerating fresh previews...'}</span>
+                            </div>
+                            <span className="voice-progress-percent">{voiceProgress[folderKey]?.percent ?? 20}%</span>
+                          </div>
+                          <div className="voice-progress-track">
+                            <div
+                              className="voice-progress-fill"
+                              style={{ width: `${voiceProgress[folderKey]?.percent ?? 20}%` }}
+                            />
+                          </div>
                         </div>
                       )}
 
                       {voiceResults[folderKey] && voiceProcessingFolder !== folderKey && (
                         <div className="voice-result-banner">
                           <div className="voice-result-title">
-                            <CheckCircle2 style={{ width: '14px', height: '14px' }} />
+                            <CheckCircle2 style={{ width: '14px', height: '14px', color: '#2563eb' }} />
                             <span>Updates Applied &amp; Fresh Previews Ready</span>
                           </div>
                           {voiceResults[folderKey].transcription && (
@@ -2662,6 +2763,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </button>
                           <button
                             type="button"
+                            disabled={isUpdatingThis}
                             onClick={() => togglePreviewCheckbox(folderKey, 'passport')}
                             className="doc-checkbox-btn"
                             title="Confirm review"
@@ -2695,6 +2797,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </button>
                           <button
                             type="button"
+                            disabled={isUpdatingThis}
                             onClick={() => togglePreviewCheckbox(folderKey, 'declaration')}
                             className="doc-checkbox-btn"
                             title="Confirm review"
@@ -2712,7 +2815,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
                     <div className="preview-card-footer">
                       <div className="review-instruction">
-                        {!canSubmit ? (
+                        {isUpdatingThis ? (
+                          <span className="instruction-text" style={{ color: '#2563eb', fontWeight: 600 }}>
+                            Update in progress — Submit Application is locked until updates finish.
+                          </span>
+                        ) : !canSubmit ? (
                           <span className="instruction-text">
                             Please review and select <b>both PDFs</b> above to enable final submission.
                           </span>
@@ -2726,7 +2833,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <button
                           type="button"
-                          disabled={cancellingFolder === folderKey || isSubmittingThis}
+                          disabled={cancellingFolder === folderKey || isSubmittingThis || isUpdatingThis}
                           onClick={() => handleCancelPreview(folderKey, item.applicant_name)}
                           className="cancel-preview-btn-footer"
                           title="Cancel application and delete both preview files from PC"
@@ -2741,7 +2848,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             backgroundColor: 'rgba(239, 68, 68, 0.08)',
                             border: '1px solid rgba(239, 68, 68, 0.25)',
                             borderRadius: '8px',
-                            cursor: 'pointer'
+                            cursor: isUpdatingThis ? 'not-allowed' : 'pointer',
+                            opacity: isUpdatingThis ? 0.5 : 1,
                           }}
                         >
                           {cancellingFolder === folderKey ? (
@@ -2759,11 +2867,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
                         <button
                           type="button"
-                          disabled={!canSubmit || isSubmittingThis || cancellingFolder === folderKey}
+                          disabled={!canSubmit || isSubmittingThis || cancellingFolder === folderKey || isUpdatingThis || isAnyUpdating}
                           onClick={() => handleConfirmFinalSubmit(folderKey, item.arn)}
                           className={`final-submit-btn ${canSubmit ? 'enabled' : 'disabled'}`}
                         >
-                          {isSubmittingThis ? (
+                          {isUpdatingThis ? (
+                            <>
+                              <RefreshCw className="submit-icon animate-spin" />
+                              <span>Updating Previews...</span>
+                            </>
+                          ) : isSubmittingThis ? (
                             <>
                               <RefreshCw className="submit-icon animate-spin" />
                               <span>Submitting to Portal (Stage 10)...</span>
