@@ -21,7 +21,9 @@ import {
   BookOpen,
   X,
   Mic,
-  Users
+  Users,
+  Sparkles,
+  Edit3
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -35,12 +37,15 @@ import {
 import { FreshReissueSection, UserProfile } from '../types';
 import { PdfViewerModal } from './PdfViewerModal';
 import { ImageViewerModal } from './ImageViewerModal';
+import { InAppInfoModal } from './InAppInfoModal';
 
 interface FreshReissueViewProps {
   user: UserProfile;
   currentSection: FreshReissueSection;
   onSectionChange: (sec: FreshReissueSection) => void;
   onBackToPassport: () => void;
+  serviceType?: 'reissue' | 'fresh';
+  onServiceTypeChange?: (service: 'reissue' | 'fresh') => void;
 }
 
 export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
@@ -48,7 +53,27 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   currentSection,
   onSectionChange,
   onBackToPassport,
+  serviceType,
+  onServiceTypeChange,
 }) => {
+  const [activeServiceType, setActiveServiceType] = useState<'reissue' | 'fresh'>(serviceType || 'reissue');
+
+  useEffect(() => {
+    if (serviceType) {
+      setActiveServiceType(serviceType);
+    }
+  }, [serviceType]);
+
+  const handleSwitchServiceType = (t: 'reissue' | 'fresh') => {
+    setActiveServiceType(t);
+    onServiceTypeChange?.(t);
+  };
+
+  const [showInAppInfoModal, setShowInAppInfoModal] = useState(false);
+  const [inAppInfoData, setInAppInfoData] = useState<Record<string, any>>({});
+  const [previewFilter, setPreviewFilter] = useState<'all' | 'reissue' | 'fresh'>('all');
+  const [submittedFilter, setSubmittedFilter] = useState<'all' | 'reissue' | 'fresh'>('all');
+
   const initialEmail = (localStorage.getItem('fs_active_client_email') || user.email || '').toUpperCase();
   const initialPassword = localStorage.getItem('fs_portal_password') || '';
   const [portalEmail, setPortalEmail] = useState(initialEmail);
@@ -96,6 +121,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [submissionTracker, setSubmissionTracker] = useState<{
     active: boolean;
     ready: boolean;
+    folderName?: string;
     isError?: boolean;
     errorType?: string;
     percent: number;
@@ -170,9 +196,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setPreviews(prevs);
       setCompleted(comps);
 
-      const activeProcessingApp = apps.find(a =>
-        ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status)
-      );
+      const targetFolder = submissionTracker?.folderName;
+
+      const activeProcessingApp = targetFolder
+        ? apps.find(a => a.folder_name === targetFolder && ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status))
+        : apps.find(a => ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status));
 
       const currentPreviewFolders = new Set((prevs || []).map(p => p.folder_name));
       let newlyReadyPreview: PreviewItem | undefined;
@@ -183,6 +211,19 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         }
       }
       prevPreviewFoldersRef.current = currentPreviewFolders;
+
+      // Match the preview specifically for the active submission tracker folder
+      const matchingPreview = targetFolder
+        ? (prevs || []).find(p => p.folder_name === targetFolder)
+        : newlyReadyPreview;
+
+      const matchingErrorApp = targetFolder
+        ? apps.find(a => a.folder_name === targetFolder && a.status === 'ERROR')
+        : apps.find(a => a.status === 'ERROR');
+
+      const matchingNeedsCorrection = targetFolder
+        ? apps.some(a => a.folder_name === targetFolder && a.status === 'NEEDS_CORRECTION')
+        : apps.some(a => a.status === 'NEEDS_CORRECTION');
 
       if (activeProcessingApp) {
         let serverPct = activeProcessingApp.progress || 25;
@@ -199,6 +240,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           return {
             active: true,
             ready: false,
+            folderName: activeProcessingApp.folder_name || prev?.folderName,
             isError: false,
             percent: Math.min(96, nextPct),
             stageText: activeProcessingApp.stage || 'File submitted, waiting for preview...',
@@ -206,43 +248,43 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             startedAt: prev?.startedAt || Date.now(),
           };
         });
-      } else if (apps.some(a => a.status === 'ERROR') && submissionTracker?.active && !submissionTracker.ready) {
-        const activeErrorApp = apps.find(a => a.status === 'ERROR')!;
+      } else if (matchingErrorApp && submissionTracker?.active && !submissionTracker.ready) {
         let errTitle = 'Portal Error';
-        if (activeErrorApp.error_type === 'PORTAL_DOWNTIME') {
+        if (matchingErrorApp.error_type === 'PORTAL_DOWNTIME') {
           errTitle = 'Portal Facing Downtime / Maintenance';
-        } else if (activeErrorApp.error_type === 'PORTAL_QUOTA_EXHAUSTED') {
+        } else if (matchingErrorApp.error_type === 'PORTAL_QUOTA_EXHAUSTED') {
           errTitle = '50 Application Limit Reached';
-        } else if (activeErrorApp.error_type === 'INVALID_CREDENTIALS') {
+        } else if (matchingErrorApp.error_type === 'INVALID_CREDENTIALS') {
           errTitle = 'Portal Login Error: Incorrect Credentials';
-        } else if (activeErrorApp.error_type === 'ACCOUNT_LOCKED') {
+        } else if (matchingErrorApp.error_type === 'ACCOUNT_LOCKED') {
           errTitle = 'Portal Account Locked';
-        } else if (activeErrorApp.error_type === 'PORTAL_LOGIN_ERROR' || activeErrorApp.error_type === 'AUTH_FAILED') {
+        } else if (matchingErrorApp.error_type === 'PORTAL_LOGIN_ERROR' || matchingErrorApp.error_type === 'AUTH_FAILED') {
           errTitle = 'Portal Authentication Error';
         }
 
-        setSubmissionTracker({
+        setSubmissionTracker(prev => ({
           active: true,
           ready: false,
+          folderName: matchingErrorApp.folder_name || prev?.folderName,
           isError: true,
-          errorType: activeErrorApp.error_type,
+          errorType: matchingErrorApp.error_type,
           percent: 100,
-          stageText: activeErrorApp.error_message || activeErrorApp.stage || errTitle,
-          applicantName: activeErrorApp.applicant_name || activeErrorApp.folder_name,
-          startedAt: submissionTracker.startedAt,
-        });
-      } else if (apps.some(a => a.status === 'NEEDS_CORRECTION')) {
+          stageText: matchingErrorApp.error_message || matchingErrorApp.stage || errTitle,
+          applicantName: matchingErrorApp.applicant_name || matchingErrorApp.folder_name,
+          startedAt: prev?.startedAt || Date.now(),
+        }));
+      } else if (matchingNeedsCorrection) {
         setSubmissionTracker(null);
-      } else if (newlyReadyPreview || (prevs && prevs.length > 0)) {
+      } else if (matchingPreview) {
         setSubmissionTracker(prev => {
           if (prev && prev.active) {
-            const latestPrev = newlyReadyPreview || prevs[0];
             return {
               active: true,
               ready: true,
+              folderName: matchingPreview.folder_name,
               percent: 100,
               stageText: 'Preview Ready!',
-              applicantName: latestPrev?.applicant_name || prev.applicantName,
+              applicantName: matchingPreview.applicant_name || prev.applicantName,
               startedAt: prev.startedAt,
             };
           }
@@ -250,7 +292,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         });
       } else {
         setSubmissionTracker(prev => {
-          if (prev && Date.now() - prev.startedAt > 6000) {
+          if (prev && Date.now() - prev.startedAt > 10000 && !prev.folderName) {
             return null;
           }
           return prev;
@@ -1046,6 +1088,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       return;
     }
 
+    if (activeServiceType === 'reissue' && !passportFile) {
+      setUploadMessage({
+        text: 'Please upload the applicant’s current Passport copy for Reissue application.',
+        type: 'error',
+      });
+      return;
+    }
+
     try {
       setIsUploading(true);
       setUploadMessage(null);
@@ -1061,7 +1111,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       localStorage.setItem('fs_declaration_place', declarationPlace);
       setActiveClientEmail(targetClientEmail);
 
-      await automationApi.uploadApplication(
+      const uploadRes = await automationApi.uploadApplication(
         targetClientEmail,
         targetClientEmail,
         cleanPassword,
@@ -1074,12 +1124,17 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           files: selectedFiles,
         },
         user?.email,
-        declarationPlace
+        declarationPlace,
+        activeServiceType,
+        Object.keys(inAppInfoData).length > 0 ? JSON.stringify(inAppInfoData) : undefined
       );
+
+      const uploadedFolder = uploadRes?.folder_name;
 
       setSubmissionTracker({
         active: true,
         ready: false,
+        folderName: uploadedFolder,
         percent: 20,
         stageText: 'File submitted, waiting for preview...',
         startedAt: Date.now(),
@@ -1094,6 +1149,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setResidenceFile(null);
       setInfoFile(null);
       setSelectedFiles([]);
+      setInAppInfoData({});
       if (photoInputRef.current) photoInputRef.current.value = '';
       if (signInputRef.current) signInputRef.current.value = '';
       if (passportInputRef.current) passportInputRef.current.value = '';
@@ -2364,11 +2420,62 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             </div>
           ) : (
             <div className="fresh-form-card">
-              <div className="card-header">
-                <h2 className="card-title">Fresh / Reissue Passport Application</h2>
-                <p className="card-subtitle">
-                  Provide the applicant's portal credentials and upload supporting documents.
-                </p>
+              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                <div>
+                  <h2 className="card-title">
+                    {activeServiceType === 'fresh' ? 'Fresh Indian Passport Application' : 'Reissue Indian Passport Application'}
+                  </h2>
+                  <p className="card-subtitle">
+                    {activeServiceType === 'fresh'
+                      ? 'First-time passport application for minors & new applicants (No previous passport required)'
+                      : 'Passport renewal, expired validity, exhaustion of pages, damaged, lost, or change in particulars'}
+                  </p>
+                </div>
+
+                <div className="service-mode-pill-group" style={{ display: 'inline-flex', background: '#f1f5f9', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0', gap: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchServiceType('reissue')}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: activeServiceType === 'reissue' ? '#2563eb' : 'transparent',
+                      color: activeServiceType === 'reissue' ? '#ffffff' : '#64748b',
+                      transition: 'all 0.15s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <BookOpen style={{ width: '14px', height: '14px' }} />
+                    <span>Reissue Passport</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchServiceType('fresh')}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: activeServiceType === 'fresh' ? '#059669' : 'transparent',
+                      color: activeServiceType === 'fresh' ? '#ffffff' : '#64748b',
+                      transition: 'all 0.15s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Sparkles style={{ width: '14px', height: '14px' }} />
+                    <span>Fresh Passport</span>
+                  </button>
+                </div>
               </div>
 
               {submissionTracker?.active ? (
@@ -2519,42 +2626,27 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 </div>
               ) : null}
 
-              {quota && (
+              {quota && quota.is_exhausted && (
                 <div
-                  className={`portal-quota-card ${quota.is_exhausted ? 'quota-exhausted' : quota.is_warning ? 'quota-warning' : ''}`}
+                  className="status-banner-card warning"
                   style={{
-                    marginBottom: '20px',
+                    marginBottom: '16px',
                     padding: '12px 16px',
                     borderRadius: '10px',
-                    border: quota.is_exhausted ? '1px solid #fca5a5' : quota.is_warning ? '1px solid #fcd34d' : '1px solid #e2e8f0',
-                    background: quota.is_exhausted ? '#fef2f2' : quota.is_warning ? '#fffbeb' : '#f8fafc'
+                    border: '1px solid #fca5a5',
+                    background: '#fef2f2',
+                    color: '#991b1b',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    fontSize: '13px',
+                    fontWeight: 600
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: quota.is_exhausted ? '#991b1b' : quota.is_warning ? '#92400e' : '#334155' }}>
-                      <Users style={{ width: '16px', height: '16px', color: quota.is_exhausted ? '#ef4444' : quota.is_warning ? '#f59e0b' : '#3b82f6' }} />
-                      <span>Portal Account Quota: {quota.used} / {quota.total} Applications Filled</span>
-                    </div>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: quota.is_exhausted ? '#dc2626' : quota.is_warning ? '#d97706' : '#2563eb' }}>
-                      {quota.is_exhausted ? 'Limit Reached (50/50)' : `${quota.total - quota.used} Slots Remaining`}
-                    </span>
-                  </div>
-                  <div style={{ width: '100%', height: '6px', background: 'rgba(148, 163, 184, 0.25)', borderRadius: '999px', overflow: 'hidden' }}>
-                    <div
-                      style={{
-                        width: `${Math.min(100, (quota.used / quota.total) * 100)}%`,
-                        height: '100%',
-                        borderRadius: '999px',
-                        background: quota.is_exhausted ? '#ef4444' : quota.is_warning ? '#f59e0b' : '#3b82f6',
-                        transition: 'width 0.4s ease'
-                      }}
-                    />
-                  </div>
-                  {quota.is_exhausted && (
-                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#b91c1c', fontWeight: 500, lineHeight: 1.4 }}>
-                      ⛔ This portal email ID has reached the maximum 50 application quota limit. Please use a new portal email ID to submit further applications.
-                    </div>
-                  )}
+                  <AlertCircle style={{ width: '18px', height: '18px', color: '#ef4444', flexShrink: 0 }} />
+                  <span>
+                    Portal account quota reached (50/50 applications used). Please enter a new portal email ID to submit applications.
+                  </span>
                 </div>
               )}
 
@@ -2608,9 +2700,85 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 </div>
 
                 <div className="compact-docs-section">
-                  <div className="compact-docs-header">
+                  <div className="compact-docs-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                     <span className="compact-docs-title">Document Uploads</span>
                     <span className="compact-docs-hint">Select or drop documents into boxes</span>
+                  </div>
+
+                  <div
+                    className="info-template-actions-bar"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '10px',
+                      margin: '10px 0 14px 0',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      background: activeServiceType === 'fresh' ? '#f0fdf4' : '#f8fafc',
+                      border: activeServiceType === 'fresh' ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <FileText style={{ width: '16px', height: '16px', color: activeServiceType === 'fresh' ? '#059669' : '#2563eb' }} />
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>
+                        Supplementary Info Form ({activeServiceType === 'fresh' ? 'Fresh / Minor Form' : 'Reissue Form'}):
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <a
+                        href={`/templates/${activeServiceType === 'fresh' ? 'Fresh_Passport_Info_Form.pdf' : 'Reissue_Passport_Info_Form.pdf'}`}
+                        download={activeServiceType === 'fresh' ? 'Fresh_Passport_Info_Form.pdf' : 'Reissue_Passport_Info_Form.pdf'}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          borderRadius: '8px',
+                          background: '#ffffff',
+                          color: '#334155',
+                          border: '1px solid #cbd5e1',
+                          textDecoration: 'none',
+                          cursor: 'pointer',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                        }}
+                        title="Download official fillable AcroForm PDF to print or fill digitally"
+                      >
+                        <Download style={{ width: '13px', height: '13px', color: '#2563eb' }} />
+                        <span>Download Fillable PDF</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowInAppInfoModal(true)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 14px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: Object.keys(inAppInfoData).length > 0 ? '#059669' : (activeServiceType === 'fresh' ? '#10b981' : '#2563eb'),
+                          color: '#ffffff',
+                          cursor: 'pointer',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                        }}
+                        title="Fill the supplementary details directly inside this application"
+                      >
+                        <Edit3 style={{ width: '13px', height: '13px' }} />
+                        <span>
+                          {Object.keys(inAppInfoData).length > 0
+                            ? `✓ Info Saved (${Object.keys(inAppInfoData).length} fields)`
+                            : 'Fill Info in App'}
+                        </span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="docs-boxes-grid">
@@ -2778,7 +2946,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       />
                       <div className="doc-box-header">
                         <BookOpen className="doc-box-icon" />
-                        <span className="doc-box-title">Passport Copy</span>
+                        <span className="doc-box-title">
+                          {activeServiceType === 'fresh' ? 'Previous PPT (Optional)' : 'Passport Copy *'}
+                        </span>
                       </div>
                       <div className="doc-box-content">
                         {passportFile ? (
@@ -2802,7 +2972,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </div>
                         ) : (
                           <div className="doc-box-empty">
-                            <span className="doc-box-badge">PDF ≤1 MB</span>
+                            <span className="doc-box-badge">
+                              {activeServiceType === 'fresh' ? 'Optional (If Any)' : 'PDF ≤1 MB'}
+                            </span>
                             <div className="doc-box-action-hint">
                               <Upload style={{ width: '12px', height: '12px' }} />
                               <span>Upload</span>
@@ -2910,7 +3082,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       />
                       <div className="doc-box-header">
                         <FileText className="doc-box-icon" />
-                        <span className="doc-box-title">Info</span>
+                        <span className="doc-box-title">
+                          {activeServiceType === 'fresh' ? 'Fresh Info Form' : 'Reissue Info Form'}
+                        </span>
                       </div>
                       <div className="doc-box-content">
                         {infoFile ? (
@@ -2934,7 +3108,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </div>
                         ) : (
                           <div className="doc-box-empty">
-                            <span className="doc-box-badge">Word / PDF / Any</span>
+                            <span className="doc-box-badge">
+                              {Object.keys(inAppInfoData).length > 0 ? 'Filled In-App ✓' : 'Fillable PDF / Doc'}
+                            </span>
                             <div className="doc-box-action-hint">
                               <Upload style={{ width: '12px', height: '12px' }} />
                               <span>Upload</span>
@@ -3011,14 +3187,78 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         </div>
       )}
 
-      {currentSection === 'preview' && (
+      {currentSection === 'preview' && (() => {
+        const displayedPreviews = previews.filter(p => {
+          if (previewFilter === 'fresh') return (p.service_type || '').toLowerCase() === 'fresh';
+          if (previewFilter === 'reissue') return (p.service_type || 'reissue').toLowerCase() !== 'fresh';
+          return true;
+        });
+
+        const reissueCount = previews.filter(p => (p.service_type || 'reissue').toLowerCase() !== 'fresh').length;
+        const freshCount = previews.filter(p => (p.service_type || '').toLowerCase() === 'fresh').length;
+
+        return (
         <div className="fresh-reissue-content">
-          <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+          <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             <div>
               <h2 className="view-main-title">Application Previews</h2>
               <p className="card-subtitle">
                 Review both generated preview documents carefully before submitting to the portal.
               </p>
+            </div>
+
+            <div className="service-filter-pills" style={{ display: 'inline-flex', background: '#f1f5f9', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0', gap: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setPreviewFilter('all')}
+                style={{
+                  padding: '5px 12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  borderRadius: '7px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: previewFilter === 'all' ? '#2563eb' : 'transparent',
+                  color: previewFilter === 'all' ? '#ffffff' : '#64748b',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                All ({previews.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewFilter('reissue')}
+                style={{
+                  padding: '5px 12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  borderRadius: '7px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: previewFilter === 'reissue' ? '#2563eb' : 'transparent',
+                  color: previewFilter === 'reissue' ? '#ffffff' : '#64748b',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                Reissue ({reissueCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewFilter('fresh')}
+                style={{
+                  padding: '5px 12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  borderRadius: '7px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: previewFilter === 'fresh' ? '#059669' : 'transparent',
+                  color: previewFilter === 'fresh' ? '#ffffff' : '#64748b',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                Fresh ({freshCount})
+              </button>
             </div>
           </div>
 
@@ -3083,12 +3323,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             );
           })()}
 
-          {previews.length === 0 ? (
+          {displayedPreviews.length === 0 ? (
             <div className="empty-state-card">
               <div className="empty-icon-seal">
                 <FileCheck className="empty-icon" />
               </div>
-              <h3 className="empty-title">No Pending Previews</h3>
+              <h3 className="empty-title">
+                {previewFilter === 'all' ? 'No Pending Previews' : `No Pending ${previewFilter === 'fresh' ? 'Fresh Passport' : 'Reissue'} Previews`}
+              </h3>
               <p className="empty-desc">
                 When you submit a new application, documents are extracted and preview drafts will appear here for verification.
               </p>
@@ -3104,7 +3346,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             </div>
           ) : (
             <div className="previews-grid">
-              {previews.map((item) => {
+              {displayedPreviews.map((item) => {
                 const folderKey = item.folder_name;
                 const selection = previewSelections[folderKey] || { passport: false, declaration: false };
                 const isUpdatingThis = voiceProcessingFolder === folderKey;
@@ -3118,7 +3360,21 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       <div className="preview-arn-badge">
                         <span className="preview-client-arn" style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>ARN: {item.arn}</span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            background: (item.service_type || '').toLowerCase() === 'fresh' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(37, 99, 235, 0.12)',
+                            color: (item.service_type || '').toLowerCase() === 'fresh' ? '#059669' : '#2563eb',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.3px',
+                          }}
+                        >
+                          {(item.service_type || '').toLowerCase() === 'fresh' ? 'Fresh Passport' : 'Reissue Passport'}
+                        </span>
                         <span className="preview-client-name" style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>{item.applicant_name}</span>
                         <span className="status-tag-pending">Awaiting Verification</span>
                       </div>
@@ -3473,68 +3729,153 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             </div>
           )}
         </div>
-      )}
+      );
+    })()}
 
-      {currentSection === 'submitted' && (
-        <div className="fresh-reissue-content">
-          <div className="view-header">
-            <h2 className="view-main-title">Completed Applications</h2>
-            <p className="card-subtitle">
-              All applications successfully submitted and accepted by the Passport Seva Portal.
-            </p>
-          </div>
+      {currentSection === 'submitted' && (() => {
+        const displayedCompleted = completed.filter(c => {
+          if (submittedFilter === 'fresh') return (c.service_type || '').toLowerCase() === 'fresh';
+          if (submittedFilter === 'reissue') return (c.service_type || 'reissue').toLowerCase() !== 'fresh';
+          return true;
+        });
 
-          {completed.length === 0 ? (
-            <div className="empty-state-card">
-              <div className="empty-icon-seal">
-                <CheckCircle2 className="empty-icon" />
+        const reissueCount = completed.filter(c => (c.service_type || 'reissue').toLowerCase() !== 'fresh').length;
+        const freshCount = completed.filter(c => (c.service_type || '').toLowerCase() === 'fresh').length;
+
+        return (
+          <div className="fresh-reissue-content">
+            <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h2 className="view-main-title">Completed Applications</h2>
+                <p className="card-subtitle">
+                  All applications successfully submitted and accepted by the Passport Seva Portal.
+                </p>
               </div>
-              <h3 className="empty-title">No Completed Applications</h3>
-              <p className="empty-desc">
-                Once an application is verified and submitted from the Preview section, it will appear here with its official ARN and receipt.
-              </p>
+
+              <div className="service-filter-pills" style={{ display: 'inline-flex', background: '#f1f5f9', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0', gap: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => setSubmittedFilter('all')}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    borderRadius: '7px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: submittedFilter === 'all' ? '#2563eb' : 'transparent',
+                    color: submittedFilter === 'all' ? '#ffffff' : '#64748b',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  All ({completed.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubmittedFilter('reissue')}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    borderRadius: '7px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: submittedFilter === 'reissue' ? '#2563eb' : 'transparent',
+                    color: submittedFilter === 'reissue' ? '#ffffff' : '#64748b',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Reissue ({reissueCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubmittedFilter('fresh')}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    borderRadius: '7px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: submittedFilter === 'fresh' ? '#059669' : 'transparent',
+                    color: submittedFilter === 'fresh' ? '#ffffff' : '#64748b',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Fresh ({freshCount})
+                </button>
+              </div>
             </div>
-          ) : (
-            <div className="completed-grid">
-              {completed.map((item, idx) => (
-                <div key={idx} className="completed-card">
-                  <div className="completed-card-left">
-                    <div className="completed-seal">
-                      <CheckCircle2 className="completed-icon" />
-                    </div>
-                    <div className="completed-details">
-                      <h3 className="completed-client-name">{item.applicant_name}</h3>
-                      <div className="completed-meta-row">
-                        <span className="arn-badge">ARN: {item.arn}</span>
-                        {item.portal_email && (
-                          <span className="arn-badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
-                            Portal: {item.portal_email}
+
+            {displayedCompleted.length === 0 ? (
+              <div className="empty-state-card">
+                <div className="empty-icon-seal">
+                  <CheckCircle2 className="empty-icon" />
+                </div>
+                <h3 className="empty-title">
+                  {submittedFilter === 'all' ? 'No Completed Applications' : `No Completed ${submittedFilter === 'fresh' ? 'Fresh Passport' : 'Reissue'} Applications`}
+                </h3>
+                <p className="empty-desc">
+                  Once an application is verified and submitted from the Preview section, it will appear here with its official ARN and receipt.
+                </p>
+              </div>
+            ) : (
+              <div className="completed-grid">
+                {displayedCompleted.map((item, idx) => (
+                  <div key={idx} className="completed-card">
+                    <div className="completed-card-left">
+                      <div className="completed-seal">
+                        <CheckCircle2 className="completed-icon" />
+                      </div>
+                      <div className="completed-details">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <h3 className="completed-client-name">{item.applicant_name}</h3>
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              background: (item.service_type || '').toLowerCase() === 'fresh' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(37, 99, 235, 0.12)',
+                              color: (item.service_type || '').toLowerCase() === 'fresh' ? '#059669' : '#2563eb',
+                              border: `1px solid ${(item.service_type || '').toLowerCase() === 'fresh' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(37, 99, 235, 0.25)'}`,
+                            }}
+                          >
+                            {(item.service_type || '').toLowerCase() === 'fresh' ? 'Fresh Passport' : 'Reissue Passport'}
                           </span>
-                        )}
-                        <span className="submission-date">Submitted: {item.submitted_at}</span>
+                        </div>
+                        <div className="completed-meta-row">
+                          <span className="arn-badge">ARN: {item.arn}</span>
+                          {item.portal_email && (
+                            <span className="arn-badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
+                              Portal: {item.portal_email}
+                            </span>
+                          )}
+                          <span className="submission-date">Submitted: {item.submitted_at}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="completed-card-right">
-                    {item.receipt_url && (
-                      <button
-                        type="button"
-                        onClick={() => openPdfViewer(`Submission Receipt - ${item.applicant_name}`, item.receipt_url!)}
-                        className="receipt-btn"
-                        title="View Official Submission Receipt"
-                      >
-                        <Download className="receipt-icon" />
-                        <span>Receipt</span>
-                      </button>
-                    )}
+                    <div className="completed-card-right">
+                      {item.receipt_url && (
+                        <button
+                          type="button"
+                          onClick={() => openPdfViewer(`Submission Receipt - ${item.applicant_name}`, item.receipt_url!)}
+                          className="receipt-btn"
+                          title="View Official Submission Receipt"
+                        >
+                          <Download className="receipt-icon" />
+                          <span>Receipt</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {cancelModalTarget && (
         <div
@@ -3601,6 +3942,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         title={imageViewerModal.title}
         imageUrl={imageViewerModal.imageUrl}
         onClose={() => setImageViewerModal(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      <InAppInfoModal
+        isOpen={showInAppInfoModal}
+        serviceType={activeServiceType}
+        initialData={inAppInfoData}
+        onSave={(saved) => setInAppInfoData(saved)}
+        onClose={() => setShowInAppInfoModal(false)}
       />
     </div>
   );

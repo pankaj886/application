@@ -19,6 +19,7 @@ export function App() {
   const [freshReissueSection, setFreshReissueSection] = useState<FreshReissueSection>('form');
   const [previewCount, setPreviewCount] = useState<number>(0);
   const [completedCount, setCompletedCount] = useState<number>(0);
+  const [passportServiceType, setPassportServiceType] = useState<'reissue' | 'fresh'>('reissue');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 960);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
@@ -196,7 +197,10 @@ export function App() {
     setActiveTab('services');
   };
 
-  const handleSelectFreshReissue = () => {
+  const handleSelectFreshReissue = (service?: 'fresh' | 'reissue') => {
+    if (service) {
+      setPassportServiceType(service);
+    }
     setActiveTab('fresh-reissue');
     setFreshReissueSection('form');
   };
@@ -205,14 +209,15 @@ export function App() {
     setActiveTab('passport');
   };
 
+  const serviceLabel = passportServiceType === 'fresh' ? 'Fresh Passport' : 'Reissue Passport';
   const currentPathString = !user 
     ? 'Sign In' 
     : (activeTab === 'fresh-reissue'
         ? (freshReissueSection === 'preview'
-            ? 'Services / Passport / Fresh & Reissue / Preview'
+            ? `Services / Passport / ${serviceLabel} / Preview`
             : (freshReissueSection === 'submitted'
-                ? 'Services / Passport / Fresh & Reissue / Submitted'
-                : 'Services / Passport / Fresh & Reissue'))
+                ? `Services / Passport / ${serviceLabel} / Submitted`
+                : `Services / Passport / ${serviceLabel}`))
         : (activeTab === 'passport' ? 'Services / Passport' : 'Services'));
 
   return (
@@ -241,6 +246,7 @@ export function App() {
             onLogout={handleLogoutRequest}
             freshReissueSection={freshReissueSection}
             onFreshReissueSectionChange={(sec) => setFreshReissueSection(sec)}
+            passportServiceType={passportServiceType}
             previewCount={previewCount}
             completedCount={completedCount}
           />
@@ -264,6 +270,8 @@ export function App() {
                   currentSection={freshReissueSection}
                   onSectionChange={(sec) => setFreshReissueSection(sec)}
                   onBackToPassport={handleBackToPassport}
+                  serviceType={passportServiceType}
+                  onServiceTypeChange={setPassportServiceType}
                 />
               )}
             </div>

@@ -41,6 +41,7 @@ export interface ApplicationItem {
   has_passport_preview?: boolean;
   has_declaration_preview?: boolean;
   has_receipt?: boolean;
+  service_type?: string;
   updated_at?: string;
 }
 
@@ -58,6 +59,7 @@ export interface PreviewItem {
   applicant_name: string;
   arn: string;
   status: string;
+  service_type?: string;
   portal_email?: string;
   google_email?: string;
   declaration_place?: string;
@@ -73,6 +75,7 @@ export interface CompletedItem {
   applicant_name: string;
   arn: string;
   status: string;
+  service_type?: string;
   portal_email?: string;
   google_email?: string;
   submitted_at: string;
@@ -267,7 +270,9 @@ class AutomationApiService {
     portalPassword: string,
     files: File[] | CategorizedUploadFiles,
     userEmail?: string,
-    declarationPlace?: string
+    declarationPlace?: string,
+    serviceType?: string,
+    infoData?: string
   ): Promise<{ success: boolean; folder_name: string; message: string }> {
     let baseUrl = await this.resolveGateway();
 
@@ -281,6 +286,12 @@ class AutomationApiService {
       }
       if (declarationPlace && declarationPlace.trim()) {
         fd.append('declaration_place', declarationPlace.trim().toUpperCase());
+      }
+      if (serviceType && serviceType.trim()) {
+        fd.append('service_type', serviceType.trim().toLowerCase());
+      }
+      if (infoData && infoData.trim()) {
+        fd.append('info_data', infoData.trim());
       }
       if (Array.isArray(files)) {
         for (const file of files) {
