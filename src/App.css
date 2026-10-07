@@ -3591,3 +3591,78 @@ input::-webkit-credentials-auto-fill-button {
   color: #000000;
   font-weight: 500;
 }
+
+/* ==========================================================================
+   Passport Portal Application Quota Badge & Warning Styles
+   ========================================================================== */
+
+.portal-quota-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.portal-quota-pill .quota-pill-icon {
+  width: 14px;
+  height: 14px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.portal-quota-pill.quota-warning {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+.portal-quota-pill.quota-warning .quota-pill-icon {
+  color: #d97706;
+}
+
+.portal-quota-pill.quota-exhausted {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2);
+}
+
+.portal-quota-pill.quota-exhausted .quota-pill-icon {
+  color: #ef4444;
+}
+
+.quota-pill-alert {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.portal-quota-card {
+  transition: all 0.2s ease;
+}
+
+.portal-quota-card.quota-warning {
+  border-color: #fcd34d !important;
+  background: #fffbeb !important;
+}
+
+.portal-quota-card.quota-exhausted {
+  border-color: #fca5a5 !important;
+  background: #fef2f2 !important;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.08);
+}
+

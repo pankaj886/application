@@ -20,7 +20,8 @@ import {
   PenTool,
   BookOpen,
   X,
-  Mic
+  Mic,
+  Users
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -28,7 +29,8 @@ import {
   automationApi, 
   ApplicationItem, 
   PreviewItem, 
-  CompletedItem 
+  CompletedItem,
+  QuotaInfo
 } from '../services/automationApi';
 import { FreshReissueSection, UserProfile } from '../types';
 import { PdfViewerModal } from './PdfViewerModal';
@@ -94,11 +96,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [submissionTracker, setSubmissionTracker] = useState<{
     active: boolean;
     ready: boolean;
+    isError?: boolean;
+    errorType?: string;
     percent: number;
     stageText: string;
     applicantName?: string;
     startedAt: number;
   } | null>(null);
+  const [quota, setQuota] = useState<QuotaInfo | null>(null);
   const prevPreviewFoldersRef = useRef<Set<string>>(new Set());
 
   const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
@@ -152,11 +157,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const refreshAllData = async (targetEmailOverride?: string) => {
     const targetEmail = targetEmailOverride || queryAccountEmail;
     try {
-      const [apps, prevs, comps] = await Promise.all([
-        automationApi.getClientStatus(targetEmail).catch(() => []),
+      const [statusRes, prevs, comps] = await Promise.all([
+        automationApi.getClientStatus(targetEmail).catch(() => ({ client_email: targetEmail, applications: [], quota: undefined })),
         automationApi.getPendingPreviews(targetEmail).catch(() => []),
         automationApi.getCompletedApplications(targetEmail).catch(() => []),
       ]);
+      const apps = statusRes.applications || [];
+      if (statusRes.quota) {
+        setQuota(statusRes.quota);
+      }
       setApplications(apps);
       setPreviews(prevs);
       setCompleted(comps);
@@ -186,17 +195,43 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           else serverPct = Math.max(serverPct, 64);
         }
         setSubmissionTracker(prev => {
-          const nextPct = prev && prev.active && !prev.ready ? Math.max(prev.percent, serverPct) : serverPct;
+          const nextPct = prev && prev.active && !prev.ready && !prev.isError ? Math.max(prev.percent, serverPct) : serverPct;
           return {
             active: true,
             ready: false,
+            isError: false,
             percent: Math.min(96, nextPct),
             stageText: activeProcessingApp.stage || 'File submitted, waiting for preview...',
             applicantName: activeProcessingApp.applicant_name || activeProcessingApp.folder_name,
             startedAt: prev?.startedAt || Date.now(),
           };
         });
-      } else if (apps.some(a => a.status === 'NEEDS_CORRECTION' || a.status === 'ERROR')) {
+      } else if (apps.some(a => a.status === 'ERROR') && submissionTracker?.active && !submissionTracker.ready) {
+        const activeErrorApp = apps.find(a => a.status === 'ERROR')!;
+        let errTitle = 'Portal Error';
+        if (activeErrorApp.error_type === 'PORTAL_DOWNTIME') {
+          errTitle = 'Portal Facing Downtime / Maintenance';
+        } else if (activeErrorApp.error_type === 'PORTAL_QUOTA_EXHAUSTED') {
+          errTitle = '50 Application Limit Reached';
+        } else if (activeErrorApp.error_type === 'INVALID_CREDENTIALS') {
+          errTitle = 'Portal Login Error: Incorrect Credentials';
+        } else if (activeErrorApp.error_type === 'ACCOUNT_LOCKED') {
+          errTitle = 'Portal Account Locked';
+        } else if (activeErrorApp.error_type === 'PORTAL_LOGIN_ERROR' || activeErrorApp.error_type === 'AUTH_FAILED') {
+          errTitle = 'Portal Authentication Error';
+        }
+
+        setSubmissionTracker({
+          active: true,
+          ready: false,
+          isError: true,
+          errorType: activeErrorApp.error_type,
+          percent: 100,
+          stageText: activeErrorApp.error_message || activeErrorApp.stage || errTitle,
+          applicantName: activeErrorApp.applicant_name || activeErrorApp.folder_name,
+          startedAt: submissionTracker.startedAt,
+        });
+      } else if (apps.some(a => a.status === 'NEEDS_CORRECTION')) {
         setSubmissionTracker(null);
       } else if (newlyReadyPreview || (prevs && prevs.length > 0)) {
         setSubmissionTracker(prev => {
@@ -985,6 +1020,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       return;
     }
 
+    if (quota && quota.is_exhausted && quota.portal_username && targetClientEmail.toLowerCase() === quota.portal_username.toLowerCase()) {
+      setUploadMessage({
+        text: `Portal account ${targetClientEmail} has reached the 50 application limit (${quota.used}/50). Please enter a new portal Email ID.`,
+        type: 'error'
+      });
+      return;
+    }
+
     const allCandidateFiles = [
       photoFile,
       signFile,
@@ -1311,13 +1354,80 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     });
   };
 
-  const wrongCredsApp = applications.find(
-    a => a.status === 'ERROR' && (
-      a.error_type === 'INVALID_CREDENTIALS' || 
-      (a.error_message && a.error_message.toLowerCase().includes('incorrect user id')) ||
-      (a.error_message && a.error_message.toLowerCase().includes('authentication failed'))
-    )
+  const portalErrorApp = applications.find(
+    a => a.status === 'ERROR' &&
+    a.error_type !== 'PORTAL_FORM_ERROR' &&
+    a.error_type !== 'STAGE1_7_FAILED' &&
+    a.folder_name !== dismissedCorrectionFolder
   );
+
+  const getPortalErrorDetails = (app: ApplicationItem) => {
+    const errType = app.error_type;
+    const rawMsg = app.error_message || app.stage || 'An error occurred connecting to the passport portal.';
+    if (errType === 'PORTAL_DOWNTIME') {
+      return {
+        title: 'PASSPORT SEVA PORTAL FACING DOWNTIME / MAINTENANCE',
+        desc: `The official Passport Seva portal is temporarily down or unreachable for applicant ${app.applicant_name || app.folder_name} (${rawMsg}). Your files are completely safe. Please wait a few moments until portal services resume normal operation.`,
+        badge: 'Portal Downtime',
+        badgeColor: '#d97706',
+        bg: '#fffbeb',
+        border: '#fde68a',
+        borderLeft: '#f59e0b',
+        titleColor: '#92400e',
+        descColor: '#b45309'
+      };
+    }
+    if (errType === 'PORTAL_QUOTA_EXHAUSTED') {
+      return {
+        title: '50 USER APPLICATION LIMIT EXHAUSTED',
+        desc: `This portal login account has reached the maximum ceiling of 50 applications allowed by Passport Seva (${rawMsg}). You cannot submit more applications on this ID. Please use a fresh portal email ID.`,
+        badge: 'Quota Exhausted',
+        badgeColor: '#dc2626',
+        bg: '#fef2f2',
+        border: '#fecaca',
+        borderLeft: '#ef4444',
+        titleColor: '#991b1b',
+        descColor: '#b91c1c'
+      };
+    }
+    if (errType === 'INVALID_CREDENTIALS') {
+      return {
+        title: 'PORTAL LOGIN FAILED: INCORRECT USER ID OR PASSWORD',
+        desc: `The passport portal rejected credentials for applicant ${app.applicant_name || app.folder_name} (${rawMsg}). Please verify the Email ID and Password below and submit again.`,
+        badge: 'Invalid Credentials',
+        badgeColor: '#dc2626',
+        bg: '#fef2f2',
+        border: '#fecaca',
+        borderLeft: '#ef4444',
+        titleColor: '#991b1b',
+        descColor: '#b91c1c'
+      };
+    }
+    if (errType === 'ACCOUNT_LOCKED') {
+      return {
+        title: 'PORTAL ACCOUNT LOCKED OR DEACTIVATED',
+        desc: `The portal account for applicant ${app.applicant_name || app.folder_name} is locked or inactive on Passport Seva. Please unlock it on the official portal website.`,
+        badge: 'Account Locked',
+        badgeColor: '#dc2626',
+        bg: '#fef2f2',
+        border: '#fecaca',
+        borderLeft: '#ef4444',
+        titleColor: '#991b1b',
+        descColor: '#b91c1c'
+      };
+    }
+    return {
+      title: 'PORTAL AUTHENTICATION / CONNECTION ERROR',
+      desc: `Portal error for applicant ${app.applicant_name || app.folder_name}: ${rawMsg}. Please check credentials or retry after a moment.`,
+      badge: 'Portal Error',
+      badgeColor: '#dc2626',
+      bg: '#fef2f2',
+      border: '#fecaca',
+      borderLeft: '#ef4444',
+      titleColor: '#991b1b',
+      descColor: '#b91c1c'
+    };
+  };
 
   const FIELD_ALIAS_MAP: Record<string, string[]> = {
     given_name: ['givenname', 'givennames', 'firstname', 'applicantgivenname'],
@@ -1519,6 +1629,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         </div>
 
         <div className="nav-right-tools">
+          {quota && (
+            <div 
+              className={`portal-quota-pill ${quota.is_exhausted ? 'quota-exhausted' : quota.is_warning ? 'quota-warning' : ''}`}
+              title={`Passport Portal Account Quota: ${quota.used} / ${quota.total} applications used${quota.portal_username ? ` (${quota.portal_username})` : ''}`}
+            >
+              <Users className="quota-pill-icon" />
+              <span>{quota.used} / {quota.total} Used</span>
+              {quota.is_exhausted && <span className="quota-pill-alert">Limit</span>}
+            </div>
+          )}
           <button
             type="button"
             onClick={handleManualRefresh}
@@ -1534,28 +1654,65 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       {currentSection === 'form' && (
         <div className="fresh-reissue-content">
 
-          {wrongCredsApp && (
-            <div className="wrong-creds-banner">
-              <div className="wrong-creds-left">
-                <AlertCircle className="wrong-creds-icon" />
-              </div>
-              <div className="wrong-creds-body">
-                <span className="wrong-creds-title">PORTAL LOGIN FAILED: INCORRECT USER ID OR PASSWORD</span>
-                <span className="wrong-creds-desc">
-                  The passport portal rejected credentials for applicant <b>{wrongCredsApp.applicant_name}</b> ({wrongCredsApp.error_message}). Please check the Email ID and Password below and submit again.
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleDismissCorrection(wrongCredsApp.folder_name)}
-                disabled={isDismissing}
-                className="dismiss-banner-btn"
-                title="Dismiss and delete this application from database"
+          {portalErrorApp && (() => {
+            const errDet = getPortalErrorDetails(portalErrorApp);
+            return (
+              <div 
+                className="wrong-creds-banner" 
+                style={{ 
+                  background: errDet.bg, 
+                  borderColor: errDet.border, 
+                  borderLeftColor: errDet.borderLeft 
+                }}
               >
-                {isDismissing ? 'Dismissing...' : 'Dismiss / Upload New'}
-              </button>
-            </div>
-          )}
+                <div className="wrong-creds-left">
+                  <AlertCircle className="wrong-creds-icon" style={{ color: errDet.badgeColor }} />
+                </div>
+                <div className="wrong-creds-body">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="wrong-creds-title" style={{ color: errDet.titleColor }}>{errDet.title}</span>
+                    <span 
+                      style={{ 
+                        fontSize: '11px', 
+                        fontWeight: 700, 
+                        color: errDet.badgeColor, 
+                        background: 'rgba(0,0,0,0.06)', 
+                        padding: '2px 8px', 
+                        borderRadius: '999px',
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      {errDet.badge}
+                    </span>
+                  </div>
+                  <span className="wrong-creds-desc" style={{ color: errDet.descColor }}>
+                    {errDet.desc}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto', alignSelf: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={handleManualRefresh}
+                    disabled={isManualRefreshing}
+                    className="dismiss-banner-btn"
+                    style={{ background: '#ffffff', color: '#374151', borderColor: '#d1d5db' }}
+                    title="Check portal status and retry"
+                  >
+                    {isManualRefreshing ? 'Checking...' : 'Check Status'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDismissCorrection(portalErrorApp.folder_name)}
+                    disabled={isDismissing}
+                    className="dismiss-banner-btn"
+                    title="Dismiss and delete this application from database"
+                  >
+                    {isDismissing ? 'Dismissing...' : 'Dismiss'}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           {correctionApp ? (
             <div className="correction-card">
@@ -2221,29 +2378,45 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                     marginBottom: '20px',
                     padding: '14px 18px',
                     borderRadius: '12px',
-                    border: submissionTracker.ready
+                    border: submissionTracker.isError
+                      ? '1px solid rgba(239, 68, 68, 0.4)'
+                      : submissionTracker.ready
                       ? '1px solid rgba(16, 185, 129, 0.35)'
                       : '1px solid rgba(37, 99, 235, 0.28)',
-                    background: submissionTracker.ready
+                    background: submissionTracker.isError
+                      ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.04) 100%)'
+                      : submissionTracker.ready
                       ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%)'
                       : 'linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%)',
                   }}
                 >
                   <div className="voice-progress-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '12px' }}>
-                    <div className="voice-progress-status" style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600, fontSize: '14px', color: submissionTracker.ready ? '#059669' : '#1e40af' }}>
-                      {submissionTracker.ready ? (
+                    <div className="voice-progress-status" style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600, fontSize: '14px', color: submissionTracker.isError ? '#dc2626' : submissionTracker.ready ? '#059669' : '#1e40af' }}>
+                      {submissionTracker.isError ? (
+                        <AlertCircle style={{ width: '18px', height: '18px', color: '#ef4444', flexShrink: 0 }} />
+                      ) : submissionTracker.ready ? (
                         <CheckCircle2 style={{ width: '18px', height: '18px', color: '#10b981', flexShrink: 0 }} />
                       ) : (
                         <RefreshCw style={{ width: '16px', height: '16px', color: '#2563eb', flexShrink: 0 }} className="animate-spin" />
                       )}
                       <div>
                         <div>
-                          {submissionTracker.ready
+                          {submissionTracker.isError
+                            ? (submissionTracker.errorType === 'PORTAL_DOWNTIME'
+                                ? `Portal Facing Downtime${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                                : submissionTracker.errorType === 'PORTAL_QUOTA_EXHAUSTED'
+                                ? `50 Application Limit Reached${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                                : submissionTracker.errorType === 'INVALID_CREDENTIALS'
+                                ? `Portal Login Error: Incorrect Credentials${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                                : submissionTracker.errorType === 'ACCOUNT_LOCKED'
+                                ? `Portal Account Locked${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                                : `Portal Authentication Error${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`)
+                            : submissionTracker.ready
                             ? `Preview Ready!${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
                             : `File submitted, waiting for preview...${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`}
                         </div>
-                        {!submissionTracker.ready && submissionTracker.stageText && submissionTracker.stageText !== 'File submitted, waiting for preview...' && (
-                          <div style={{ fontSize: '12px', fontWeight: 500, color: '#475569', marginTop: '2px' }}>
+                        {!submissionTracker.ready && submissionTracker.stageText && (
+                          <div style={{ fontSize: '12px', fontWeight: 500, color: submissionTracker.isError ? '#b91c1c' : '#475569', marginTop: '2px' }}>
                             {submissionTracker.stageText}
                           </div>
                         )}
@@ -2255,13 +2428,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         style={{
                           fontWeight: 700,
                           fontSize: '14px',
-                          color: submissionTracker.ready ? '#059669' : '#2563eb',
-                          background: submissionTracker.ready ? 'rgba(16, 185, 129, 0.15)' : 'rgba(37, 99, 235, 0.12)',
+                          color: submissionTracker.isError ? '#dc2626' : submissionTracker.ready ? '#059669' : '#2563eb',
+                          background: submissionTracker.isError ? 'rgba(239, 68, 68, 0.15)' : submissionTracker.ready ? 'rgba(16, 185, 129, 0.15)' : 'rgba(37, 99, 235, 0.12)',
                           padding: '3px 10px',
                           borderRadius: '999px',
                         }}
                       >
-                        {submissionTracker.ready ? '100%' : `${submissionTracker.percent}%`}
+                        {submissionTracker.isError ? 'Error' : submissionTracker.ready ? '100%' : `${submissionTracker.percent}%`}
                       </span>
                       {submissionTracker.ready && (
                         <button
@@ -2285,6 +2458,28 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           <span>Open Preview</span>
                         </button>
                       )}
+                      {submissionTracker.isError && (
+                        <button
+                          type="button"
+                          onClick={() => setSubmissionTracker(null)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 14px',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: '#991b1b',
+                            background: '#fee2e2',
+                            border: '1px solid #fca5a5',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <X style={{ width: '14px', height: '14px' }} />
+                          <span>Dismiss</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div
@@ -2300,10 +2495,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                     <div
                       className="voice-progress-fill"
                       style={{
-                        width: `${submissionTracker.ready ? 100 : submissionTracker.percent}%`,
+                        width: `${submissionTracker.ready || submissionTracker.isError ? 100 : submissionTracker.percent}%`,
                         height: '100%',
                         borderRadius: '999px',
-                        background: submissionTracker.ready
+                        background: submissionTracker.isError
+                          ? 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)'
+                          : submissionTracker.ready
                           ? 'linear-gradient(90deg, #10b981 0%, #059669 100%)'
                           : 'linear-gradient(90deg, #2563eb 0%, #3b82f6 100%)',
                         transition: 'width 0.45s ease',
@@ -2321,6 +2518,45 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   <span>{uploadMessage.text}</span>
                 </div>
               ) : null}
+
+              {quota && (
+                <div
+                  className={`portal-quota-card ${quota.is_exhausted ? 'quota-exhausted' : quota.is_warning ? 'quota-warning' : ''}`}
+                  style={{
+                    marginBottom: '20px',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: quota.is_exhausted ? '1px solid #fca5a5' : quota.is_warning ? '1px solid #fcd34d' : '1px solid #e2e8f0',
+                    background: quota.is_exhausted ? '#fef2f2' : quota.is_warning ? '#fffbeb' : '#f8fafc'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: quota.is_exhausted ? '#991b1b' : quota.is_warning ? '#92400e' : '#334155' }}>
+                      <Users style={{ width: '16px', height: '16px', color: quota.is_exhausted ? '#ef4444' : quota.is_warning ? '#f59e0b' : '#3b82f6' }} />
+                      <span>Portal Account Quota: {quota.used} / {quota.total} Applications Filled</span>
+                    </div>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: quota.is_exhausted ? '#dc2626' : quota.is_warning ? '#d97706' : '#2563eb' }}>
+                      {quota.is_exhausted ? 'Limit Reached (50/50)' : `${quota.total - quota.used} Slots Remaining`}
+                    </span>
+                  </div>
+                  <div style={{ width: '100%', height: '6px', background: 'rgba(148, 163, 184, 0.25)', borderRadius: '999px', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${Math.min(100, (quota.used / quota.total) * 100)}%`,
+                        height: '100%',
+                        borderRadius: '999px',
+                        background: quota.is_exhausted ? '#ef4444' : quota.is_warning ? '#f59e0b' : '#3b82f6',
+                        transition: 'width 0.4s ease'
+                      }}
+                    />
+                  </div>
+                  {quota.is_exhausted && (
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#b91c1c', fontWeight: 500, lineHeight: 1.4 }}>
+                      ⛔ This portal email ID has reached the maximum 50 application quota limit. Please use a new portal email ID to submit further applications.
+                    </div>
+                  )}
+                </div>
+              )}
 
               <form onSubmit={handleSubmitApplication} className="fresh-form">
                 <div className="form-grid-2">
@@ -2785,6 +3021,67 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               </p>
             </div>
           </div>
+
+          {portalErrorApp && (() => {
+            const errDet = getPortalErrorDetails(portalErrorApp);
+            return (
+              <div 
+                className="wrong-creds-banner" 
+                style={{ 
+                  background: errDet.bg, 
+                  borderColor: errDet.border, 
+                  borderLeftColor: errDet.borderLeft,
+                  marginBottom: '20px'
+                }}
+              >
+                <div className="wrong-creds-left">
+                  <AlertCircle className="wrong-creds-icon" style={{ color: errDet.badgeColor }} />
+                </div>
+                <div className="wrong-creds-body">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="wrong-creds-title" style={{ color: errDet.titleColor }}>{errDet.title}</span>
+                    <span 
+                      style={{ 
+                        fontSize: '11px', 
+                        fontWeight: 700, 
+                        color: errDet.badgeColor, 
+                        background: 'rgba(0,0,0,0.06)', 
+                        padding: '2px 8px', 
+                        borderRadius: '999px',
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      {errDet.badge}
+                    </span>
+                  </div>
+                  <span className="wrong-creds-desc" style={{ color: errDet.descColor }}>
+                    {errDet.desc}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto', alignSelf: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={handleManualRefresh}
+                    disabled={isManualRefreshing}
+                    className="dismiss-banner-btn"
+                    style={{ background: '#ffffff', color: '#374151', borderColor: '#d1d5db' }}
+                    title="Check portal status and retry"
+                  >
+                    {isManualRefreshing ? 'Checking...' : 'Check Status'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDismissCorrection(portalErrorApp.folder_name)}
+                    disabled={isDismissing}
+                    className="dismiss-banner-btn"
+                    title="Dismiss and delete this application from database"
+                  >
+                    {isDismissing ? 'Dismissing...' : 'Dismiss'}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           {previews.length === 0 ? (
             <div className="empty-state-card">

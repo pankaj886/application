@@ -2,6 +2,20 @@ const GITHUB_API_GATEWAY_URL = 'https://api.github.com/repos/pankaj886/foreigner
 const CLOUD_GATEWAY_RAW_URL = 'https://raw.githubusercontent.com/pankaj886/foreigners-studio-releases/main/gateway_config.json';
 const LOCAL_FALLBACK_URL = 'http://127.0.0.1:8001';
 
+export interface QuotaInfo {
+  used: number;
+  total: number;
+  is_exhausted: boolean;
+  is_warning?: boolean;
+  portal_username?: string;
+}
+
+export interface ClientStatusResponse {
+  client_email: string;
+  applications: ApplicationItem[];
+  quota?: QuotaInfo;
+}
+
 export interface ApplicationItem {
   folder_name: string;
   status: 'UPLOADED' | 'EXTRACTING' | 'EXTRACTED' | 'NEEDS_CORRECTION' | 'FILLING_PORTAL' | 'PENDING_CONFIRMATION' | 'SUBMITTING_PORTAL' | 'COMPLETED' | 'ERROR' | string;
@@ -328,11 +342,22 @@ class AutomationApiService {
     return await res.json();
   }
 
-  public async getClientStatus(clientEmail: string): Promise<ApplicationItem[]> {
+  public async getClientStatus(clientEmail: string): Promise<ClientStatusResponse> {
     const res = await this.fetchWithAutoRetry(`/api/clients/${encodeURIComponent(clientEmail)}/status`);
     if (!res.ok) throw new Error('Failed to retrieve applications status');
     const data = await res.json();
-    return data.applications || [];
+    return {
+      client_email: data.client_email || clientEmail,
+      applications: data.applications || [],
+      quota: data.quota
+    };
+  }
+
+  public async getClientQuota(clientEmail: string, portalUsername?: string): Promise<QuotaInfo> {
+    const q = portalUsername ? `?portal_username=${encodeURIComponent(portalUsername)}` : '';
+    const res = await this.fetchWithAutoRetry(`/api/clients/${encodeURIComponent(clientEmail)}/quota${q}`);
+    if (!res.ok) throw new Error('Failed to retrieve portal quota');
+    return await res.json();
   }
 
   public async getPendingPreviews(clientEmail: string): Promise<PreviewItem[]> {
