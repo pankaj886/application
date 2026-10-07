@@ -23,7 +23,8 @@ import {
   Mic,
   Users,
   Sparkles,
-  Edit3
+  Edit3,
+  Plus
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -67,6 +68,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const handleSwitchServiceType = (t: 'reissue' | 'fresh') => {
     setActiveServiceType(t);
     onServiceTypeChange?.(t);
+    if (submissionTracker?.ready) {
+      setSubmissionTracker(null);
+    }
+    setUploadMessage(null);
   };
 
   const [showInAppInfoModal, setShowInAppInfoModal] = useState(false);
@@ -200,30 +205,23 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
       const activeProcessingApp = targetFolder
         ? apps.find(a => a.folder_name === targetFolder && ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status))
-        : apps.find(a => ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status));
+        : undefined;
 
       const currentPreviewFolders = new Set((prevs || []).map(p => p.folder_name));
-      let newlyReadyPreview: PreviewItem | undefined;
-      for (const p of (prevs || [])) {
-        if (!prevPreviewFoldersRef.current.has(p.folder_name)) {
-          newlyReadyPreview = p;
-          break;
-        }
-      }
       prevPreviewFoldersRef.current = currentPreviewFolders;
 
       // Match the preview specifically for the active submission tracker folder
       const matchingPreview = targetFolder
         ? (prevs || []).find(p => p.folder_name === targetFolder)
-        : newlyReadyPreview;
+        : undefined;
 
       const matchingErrorApp = targetFolder
         ? apps.find(a => a.folder_name === targetFolder && a.status === 'ERROR')
-        : apps.find(a => a.status === 'ERROR');
+        : undefined;
 
       const matchingNeedsCorrection = targetFolder
         ? apps.some(a => a.folder_name === targetFolder && a.status === 'NEEDS_CORRECTION')
-        : apps.some(a => a.status === 'NEEDS_CORRECTION');
+        : false;
 
       if (activeProcessingApp) {
         let serverPct = activeProcessingApp.progress || 25;
@@ -716,6 +714,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB strict limit per file
 
   const updateSlotFile = (slot: 'photo' | 'sign' | 'passport' | 'residence' | 'info', file: File | null) => {
+    if (file && submissionTracker?.ready) {
+      setSubmissionTracker(null);
+      setUploadMessage(null);
+    }
     if (file && file.size > MAX_FILE_SIZE_BYTES) {
       setUploadMessage({
         text: `File "${file.name}" exceeds the 10 MB maximum size limit.`,
@@ -749,6 +751,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const autoCategorizeFiles = (incoming: File[]) => {
     if (!incoming || incoming.length === 0) return;
+    if (submissionTracker?.ready) {
+      setSubmissionTracker(null);
+      setUploadMessage(null);
+    }
 
     const oversized = incoming.filter(f => f.size > MAX_FILE_SIZE_BYTES);
     if (oversized.length > 0) {
@@ -1655,7 +1661,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           <button
             type="button"
             className={`section-pill ${currentSection === 'form' ? 'active' : ''}`}
-            onClick={() => onSectionChange('form')}
+            onClick={() => {
+              if (submissionTracker?.ready) {
+                setSubmissionTracker(null);
+                setUploadMessage(null);
+              }
+              onSectionChange('form');
+            }}
           >
             <Upload className="pill-icon" />
             <span>New Application</span>
@@ -2544,26 +2556,51 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         {submissionTracker.isError ? 'Error' : submissionTracker.ready ? '100%' : `${submissionTracker.percent}%`}
                       </span>
                       {submissionTracker.ready && (
-                        <button
-                          type="button"
-                          onClick={() => onSectionChange('preview')}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '6px 14px',
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            color: '#ffffff',
-                            background: '#10b981',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <Eye style={{ width: '14px', height: '14px' }} />
-                          <span>Open Preview</span>
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => onSectionChange('preview')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '6px 14px',
+                              fontSize: '13px',
+                              fontWeight: 600,
+                              color: '#ffffff',
+                              background: '#10b981',
+                              border: 'none',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Eye style={{ width: '14px', height: '14px' }} />
+                            <span>Open Preview</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSubmissionTracker(null);
+                              setUploadMessage(null);
+                            }}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '6px 14px',
+                              fontSize: '13px',
+                              fontWeight: 600,
+                              color: '#065f46',
+                              background: '#d1fae5',
+                              border: '1px solid #a7f3d0',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Plus style={{ width: '14px', height: '14px' }} />
+                            <span>Start New Application</span>
+                          </button>
+                        </>
                       )}
                       {submissionTracker.isError && (
                         <button
