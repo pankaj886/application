@@ -41,6 +41,7 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
 
   const isFresh = serviceType === 'fresh';
   const isChangeInParticulars =
+    formData.is_change_in_particulars === 'Y' ||
     formData.reissue_reason === 'CHANGE IN EXISTING PERSONAL PARTICULARS' ||
     (formData.change_type && formData.change_type !== 'NOT APPLICABLE');
 
@@ -450,16 +451,51 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                     </label>
                     <select
                       value={formData.reissue_reason || 'VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE'}
-                      onChange={(e) => handleChange('reissue_reason', e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        handleChange('reissue_reason', val);
+                        if (val === 'CHANGE IN EXISTING PERSONAL PARTICULARS') {
+                          handleChange('is_change_in_particulars', 'Y');
+                          if (!formData.change_type || formData.change_type === 'NOT APPLICABLE') {
+                            handleChange('change_type', 'CHANGE IN ADDRESS');
+                          }
+                        }
+                      }}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
                       <option value="VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE">VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE</option>
                       <option value="VALIDITY EXPIRED MORE THAN 3 YEARS AGO">VALIDITY EXPIRED MORE THAN 3 YEARS AGO</option>
-                      <option value="CHANGE IN EXISTING PERSONAL PARTICULARS">CHANGE IN EXISTING PERSONAL PARTICULARS</option>
                       <option value="EXHAUSTION OF PAGES">EXHAUSTION OF PAGES</option>
                       <option value="DAMAGED PASSPORT">DAMAGED PASSPORT</option>
                       <option value="LOST PASSPORT">LOST PASSPORT</option>
+                      <option value="CHANGE IN EXISTING PERSONAL PARTICULARS">CHANGE IN EXISTING PERSONAL PARTICULARS</option>
                     </select>
+                  </div>
+
+                  <div style={{ gridColumn: 'span 2', marginTop: '4px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>
+                      <input
+                        type="checkbox"
+                        checked={isChangeInParticulars}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          handleChange('is_change_in_particulars', checked ? 'Y' : 'N');
+                          if (checked) {
+                            if (!formData.change_type || formData.change_type === 'NOT APPLICABLE') {
+                              handleChange('change_type', 'CHANGE IN ADDRESS');
+                            }
+                          } else {
+                            handleChange('change_type', 'NOT APPLICABLE');
+                            handleChange('change_particulars_detail', '');
+                            if (formData.reissue_reason === 'CHANGE IN EXISTING PERSONAL PARTICULARS') {
+                              handleChange('reissue_reason', 'VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE');
+                            }
+                          }
+                        }}
+                        style={{ width: '16px', height: '16px', accentColor: '#2563eb', cursor: 'pointer' }}
+                      />
+                      <span>Change in Existing Personal Particulars (Address, Name, Spouse, etc.)</span>
+                    </label>
                   </div>
                 </div>
 
@@ -519,7 +555,7 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
               {/* REISSUE: Personal Details (Matches info.docx) */}
               <div>
                 <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  2. Personal Status &amp; Profession
+                  2. Personal Status &amp; Profession (from Info Sheet)
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
                   <div>
@@ -556,43 +592,15 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       <option value="OTHERS">OTHERS</option>
                     </select>
                   </div>
-                  <div>
+                  <div style={{ gridColumn: 'span 2' }}>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Marital Status
-                    </label>
-                    <select
-                      value={formData.marital_status || 'SINGLE'}
-                      onChange={(e) => handleChange('marital_status', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
-                    >
-                      <option value="SINGLE">SINGLE</option>
-                      <option value="MARRIED">MARRIED</option>
-                      <option value="DIVORCED">DIVORCED</option>
-                      <option value="WIDOW / WIDOWER">WIDOW / WIDOWER</option>
-                      <option value="SEPARATED">SEPARATED</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Spouse Name (if married or adding spouse)
+                      Italian Residence Address (Street, City, Province)
                     </label>
                     <input
                       type="text"
-                      placeholder="Spouse full name"
-                      value={formData.spouse_name || ''}
-                      onChange={(e) => handleChange('spouse_name', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Visible Distinguishing Mark
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Mole on cheek"
-                      value={formData.visible_mark || ''}
-                      onChange={(e) => handleChange('visible_mark', e.target.value)}
+                      placeholder="e.g. Via Roma 10, 00100 Roma (RM)"
+                      value={formData.italian_address || ''}
+                      onChange={(e) => handleChange('italian_address', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
                     />
                   </div>
@@ -602,7 +610,7 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
               {/* REISSUE: Police Station & Contacts (Matches info.docx) */}
               <div>
                 <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  3. Contact Information &amp; Indian Police Station
+                  3. Contact Information &amp; Indian Police Station (Mandatory)
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
                   <div>
@@ -619,7 +627,7 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Indian Mobile Number
+                      Indian Mobile Number (10 digits)
                     </label>
                     <input
                       type="text"
@@ -650,18 +658,6 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       placeholder="client@email.com"
                       value={formData.email_id || ''}
                       onChange={(e) => handleChange('email_id', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Emergency Contact Person &amp; Mobile
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Name & contact"
-                      value={formData.emergency_contact_name_address || ''}
-                      onChange={(e) => handleChange('emergency_contact_name_address', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
                     />
                   </div>
