@@ -358,9 +358,23 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const handleDownloadFillablePdf = async (filename: string) => {
     setIsDownloadingPdf(true);
     try {
-      const response = await fetch(`/templates/${filename}`);
-      if (!response.ok) {
-        throw new Error(`Failed to load template file: ${response.statusText}`);
+      let response: Response | null = null;
+      const candidates = [
+        `/templates/${filename}`,
+        `templates/${filename}`,
+        `${window.location.origin}/templates/${filename}`
+      ];
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            response = res;
+            break;
+          }
+        } catch (_) {}
+      }
+      if (!response || !response.ok) {
+        throw new Error(`Failed to load template file: ${filename}`);
       }
       const arrayBuffer = await response.arrayBuffer();
       const uint8 = new Uint8Array(arrayBuffer);
@@ -1238,14 +1252,26 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     const targetClientEmail = portalEmail.trim().toUpperCase();
     const cleanPassword = portalPassword.trim();
     if (!targetClientEmail || !cleanPassword) {
-      setUploadMessage({ text: 'Please enter portal Email ID and Password.', type: 'error' });
+      const msg = 'Please enter portal Email ID and Password before submitting.';
+      setUploadMessage({ text: msg, type: 'error' });
+      setCenteredAlert({
+        isOpen: true,
+        title: 'Portal Credentials Required',
+        message: msg,
+      });
       return;
     }
 
     if (quota && quota.is_exhausted && quota.portal_username && targetClientEmail.toLowerCase() === quota.portal_username.toLowerCase()) {
+      const msg = `Portal account ${targetClientEmail} has reached the 50 application limit (${quota.used}/50). Please enter a new portal Email ID.`;
       setUploadMessage({
-        text: `Portal account ${targetClientEmail} has reached the 50 application limit (${quota.used}/50). Please enter a new portal Email ID.`,
+        text: msg,
         type: 'error'
+      });
+      setCenteredAlert({
+        isOpen: true,
+        title: 'Account Quota Exhausted',
+        message: msg,
       });
       return;
     }
@@ -1262,25 +1288,46 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
     const oversized = allCandidateFiles.find(f => f.size > MAX_FILE_SIZE_BYTES);
     if (oversized) {
+      const msg = `File "${oversized.name}" exceeds the 10 MB maximum size limit.`;
       setUploadMessage({
-        text: `File "${oversized.name}" exceeds the 10 MB maximum size limit.`,
+        text: msg,
         type: 'error',
+      });
+      setCenteredAlert({
+        isOpen: true,
+        title: 'File Size Exceeded',
+        message: msg,
       });
       return;
     }
 
     if (!photoFile || !signFile) {
+      const missing = [];
+      if (!photoFile) missing.push('Photograph');
+      if (!signFile) missing.push('Signature');
+      const msg = `Please upload ${missing.join(' and ')} in the designated box(es). Auto-scraping from passport or other documents is disabled.`;
       setUploadMessage({
-        text: 'Please upload Photograph and Signature in their designated boxes.',
+        text: msg,
         type: 'error',
+      });
+      setCenteredAlert({
+        isOpen: true,
+        title: 'Missing Required Documents',
+        message: msg,
       });
       return;
     }
 
     if (activeServiceType === 'reissue' && !passportFile) {
+      const msg = 'Please upload the applicant’s current Passport copy for Reissue application.';
       setUploadMessage({
-        text: 'Please upload the applicant’s current Passport copy for Reissue application.',
+        text: msg,
         type: 'error',
+      });
+      setCenteredAlert({
+        isOpen: true,
+        title: 'Passport Copy Required',
+        message: msg,
       });
       return;
     }
@@ -1355,6 +1402,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setUploadMessage({
         text: friendlyMsg,
         type: 'error',
+      });
+      setCenteredAlert({
+        isOpen: true,
+        title: 'Upload Notice',
+        message: friendlyMsg,
       });
     } finally {
       setIsUploading(false);

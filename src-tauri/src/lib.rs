@@ -908,10 +908,11 @@ async fn save_file_to_downloads(filename: String, bytes: Vec<u8>) -> Result<Stri
 fn open_in_folder(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        let _ = create_silent_command("explorer.exe")
-            .args(["/select,", &path])
-            .spawn()
-            .map_err(|e| format!("Failed to reveal file: {}", e))?;
+        use std::os::windows::process::CommandExt;
+        let mut cmd = std::process::Command::new("explorer.exe");
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.raw_arg(format!(r#"/select,"{}""#, path));
+        let _ = cmd.spawn().map_err(|e| format!("Failed to reveal file: {}", e))?;
     }
     #[cfg(target_os = "macos")]
     {
@@ -940,7 +941,9 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
+                let _ = window.set_always_on_top(true);
                 let _ = window.set_focus();
+                let _ = window.set_always_on_top(false);
             }
         }))
         .plugin(tauri_plugin_opener::init())

@@ -1,5 +1,6 @@
-import React from 'react';
-import { X, Download, ExternalLink, Image as ImageIcon } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Download, ExternalLink, Image as ImageIcon, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 
 interface ImageViewerModalProps {
   isOpen: boolean;
@@ -14,7 +15,54 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   imageUrl,
   onClose,
 }) => {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadFeedback, setDownloadFeedback] = useState<{ message: string; path?: string } | null>(null);
+
   if (!isOpen || !imageUrl) return null;
+
+  const downloadName = `${title.replace(/\s+/g, '_')}.jpg`;
+
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const res = await fetch(imageUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const arrayBuffer = await res.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+
+      let savedPath: string | null = null;
+      if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
+        try {
+          savedPath = await invoke<string>('save_file_to_downloads', {
+            filename: downloadName,
+            bytes: Array.from(uint8)
+          });
+        } catch (tauriErr) {
+          console.warn('Tauri save command failed, falling back to browser download:', tauriErr);
+        }
+      }
+
+      if (savedPath) {
+        setDownloadFeedback({ message: 'Saved to Downloads', path: savedPath });
+      } else {
+        const blob = new Blob([arrayBuffer], { type: 'image/jpeg' });
+        const blobDownloadUrl = URL.createObjectURL(blob);
+        const tempLink = document.createElement('a');
+        tempLink.href = blobDownloadUrl;
+        tempLink.download = downloadName;
+        document.body.appendChild(tempLink);
+        tempLink.click();
+        document.body.removeChild(tempLink);
+        setTimeout(() => URL.revokeObjectURL(blobDownloadUrl), 2000);
+        setDownloadFeedback({ message: 'Downloaded successfully' });
+      }
+    } catch (e: any) {
+      console.error('Image download error:', e);
+      setDownloadFeedback({ message: 'Download failed' });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div className="pdf-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
@@ -50,28 +98,64 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#1e293b' }}>{title}</h3>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <a
-              href={imageUrl}
-              download={title.replace(/\s+/g, '_') + '.jpg'}
-              className="pdf-modal-action-btn"
-              title="Download image"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '6px 10px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 500,
-                color: '#475569',
-                textDecoration: 'none',
-                background: '#ffffff',
-                border: '1px solid #cbd5e1',
-              }}
-            >
-              <Download style={{ width: '14px', height: '14px' }} />
-              <span>Download</span>
-            </a>
+            {downloadFeedback ? (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#059669', fontWeight: 600 }}>
+                <CheckCircle2 style={{ width: '14px', height: '14px' }} />
+                <span>{downloadFeedback.message}</span>
+                {downloadFeedback.path && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await invoke('open_in_folder', { path: downloadFeedback.path });
+                      } catch (e) {
+                        console.error(e);
+                      }
+                    }}
+                    style={{
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '2px 8px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Show in Folder
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={isDownloading}
+                className="pdf-modal-action-btn"
+                title="Download image"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  color: '#475569',
+                  background: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  cursor: isDownloading ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isDownloading ? (
+                  <RefreshCw style={{ width: '14px', height: '14px' }} className="animate-spin" />
+                ) : (
+                  <Download style={{ width: '14px', height: '14px' }} />
+                )}
+                <span>{isDownloading ? 'Saving...' : 'Download'}</span>
+              </button>
+            )}
             <a
               href={imageUrl}
               target="_blank"

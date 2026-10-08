@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, FileText, ExternalLink, RefreshCw, AlertCircle } from 'lucide-react';
+import { X, Download, FileText, ExternalLink, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 
 interface PdfViewerModalProps {
   isOpen: boolean;
@@ -17,6 +18,8 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
   const [blobUrl, setBlobUrl] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [downloadFeedback, setDownloadFeedback] = useState<{ message: string; path?: string } | null>(null);
 
   useEffect(() => {
     if (!isOpen || !pdfUrl) {
@@ -24,12 +27,14 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
         URL.revokeObjectURL(blobUrl);
         setBlobUrl('');
       }
+      setDownloadFeedback(null);
       return;
     }
 
     let active = true;
     setLoading(true);
     setError(null);
+    setDownloadFeedback(null);
 
     fetch(pdfUrl)
       .then(res => {
@@ -62,6 +67,51 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
   const downloadName = title.toLowerCase().endsWith('.pdf') ? title : `${title}.pdf`;
   const effectiveUrl = blobUrl || pdfUrl;
 
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const res = await fetch(effectiveUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const arrayBuffer = await res.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+
+      let savedPath: string | null = null;
+      if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
+        try {
+          savedPath = await invoke<string>('save_file_to_downloads', {
+            filename: downloadName,
+            bytes: Array.from(uint8)
+          });
+        } catch (tauriErr) {
+          console.warn('Tauri save command failed, falling back to browser download:', tauriErr);
+        }
+      }
+
+      if (savedPath) {
+        setDownloadFeedback({
+          message: 'Saved to Downloads',
+          path: savedPath
+        });
+      } else {
+        const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+        const blobDownloadUrl = URL.createObjectURL(blob);
+        const tempLink = document.createElement('a');
+        tempLink.href = blobDownloadUrl;
+        tempLink.download = downloadName;
+        document.body.appendChild(tempLink);
+        tempLink.click();
+        document.body.removeChild(tempLink);
+        setTimeout(() => URL.revokeObjectURL(blobDownloadUrl), 2000);
+        setDownloadFeedback({ message: 'Downloaded successfully' });
+      }
+    } catch (e: any) {
+      console.error('Download error:', e);
+      setDownloadFeedback({ message: 'Download failed' });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <div className="pdf-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
       <div className="pdf-modal-container" onClick={(e) => e.stopPropagation()}>
@@ -71,16 +121,53 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
             <h3 className="pdf-modal-title">{title}</h3>
           </div>
           <div className="pdf-modal-header-actions">
-            <a
-              href={effectiveUrl}
-              download={downloadName}
-              className="pdf-modal-action-btn"
-              title="Download PDF"
-              aria-label="Download PDF"
-            >
-              <Download className="action-icon" />
-              <span>Download</span>
-            </a>
+            {downloadFeedback ? (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#059669', fontWeight: 600 }}>
+                <CheckCircle2 style={{ width: '14px', height: '14px' }} />
+                <span>{downloadFeedback.message}</span>
+                {downloadFeedback.path && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await invoke('open_in_folder', { path: downloadFeedback.path });
+                      } catch (e) {
+                        console.error(e);
+                      }
+                    }}
+                    style={{
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '2px 8px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Show in Folder
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={isDownloading}
+                className="pdf-modal-action-btn"
+                title="Download PDF to your PC"
+                aria-label="Download PDF"
+                style={{ cursor: isDownloading ? 'not-allowed' : 'pointer' }}
+              >
+                {isDownloading ? (
+                  <RefreshCw className="action-icon animate-spin" />
+                ) : (
+                  <Download className="action-icon" />
+                )}
+                <span>{isDownloading ? 'Saving...' : 'Download'}</span>
+              </button>
+            )}
             <a
               href={pdfUrl}
               target="_blank"
