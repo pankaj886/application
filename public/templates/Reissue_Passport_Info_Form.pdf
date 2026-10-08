@@ -44,7 +44,7 @@ endobj
 /AP <<
 /N 7 0 R
 >> /DA (/Helv 9 Tf 0 0 0 rg) /DV (NORMAL) /F 4 /FT /Ch /Ff 131072 
-  /I [ 0 ] /Opt [ (NORMAL) (TATKAAL) ] /P 42 0 R /Rect [ 41 697.8898 289.1378 719.8898 ] /Subtype /Widget /T (application_type) 
+  /I [ 0 ] /Opt [ (NORMAL) (TATKAAL) ] /P 39 0 R /Rect [ 41 697.8898 289.1378 719.8898 ] /Subtype /Widget /T (application_type) 
   /TU (Application Type) /Type /Annot /V (NORMAL)
 >>
 endobj
@@ -65,7 +65,7 @@ endobj
 /AP <<
 /N 10 0 R
 >> /DA (/Helv 9 Tf 0 0 0 rg) /DV (36 PAGES) /F 4 /FT /Ch /Ff 131072 
-  /I [ 0 ] /Opt [ (36 PAGES) (60 PAGES) ] /P 42 0 R /Rect [ 306.1378 697.8898 554.2756 719.8898 ] /Subtype /Widget /T (booklet_type) 
+  /I [ 0 ] /Opt [ (36 PAGES) (60 PAGES) ] /P 39 0 R /Rect [ 306.1378 697.8898 554.2756 719.8898 ] /Subtype /Widget /T (booklet_type) 
   /TU (Booklet Type) /Type /Annot /V (36 PAGES)
 >>
 endobj
@@ -87,7 +87,7 @@ endobj
 /AP <<
 /N 13 0 R
 >> /DA (/Helv 9 Tf 0 0 0 rg) /DV (VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE) /F 4 /FT /Ch /Ff 131072 
-  /I [ 0 ] /Opt [ (VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE) (VALIDITY EXPIRED MORE THAN 3 YEARS AGO) (EXHAUSTION OF PAGES) (DAMAGED PASSPORT) (LOST PASSPORT) (CHANGE IN EXISTING PERSONAL PARTICULARS) ] /P 42 0 R /Rect [ 41 647.8898 554.2756 669.8898 ] /Subtype /Widget /T (reissue_reason) 
+  /I [ 0 ] /Opt [ (VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE) (VALIDITY EXPIRED MORE THAN 3 YEARS AGO) (EXHAUSTION OF PAGES) (DAMAGED PASSPORT) (LOST PASSPORT) (CHANGE IN EXISTING PERSONAL PARTICULARS) ] /P 39 0 R /Rect [ 41 647.8898 554.2756 669.8898 ] /Subtype /Widget /T (reissue_reason) 
   /TU (Reason for Reissue) /Type /Annot /V (VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE)
 >>
 endobj
@@ -109,7 +109,7 @@ endobj
 /AP <<
 /N 16 0 R
 >> /DA (/Helv 9 Tf 0 0 0 rg) /DV (NOT APPLICABLE) /F 4 /FT /Ch /Ff 131072 
-  /I [ 0 ] /Opt [ (NOT APPLICABLE) (CHANGE IN ADDRESS) (CHANGE IN NAME / SURNAME) (CHANGE IN SPOUSE NAME) (CHANGE IN APPEARANCE / SIGNATURE) (CHANGE IN DATE OF BIRTH) (OTHER PARTICULARS) ] /P 42 0 R /Rect [ 41 597.8898 289.1378 619.8898 ] /Subtype /Widget /T (change_type) 
+  /I [ 0 ] /Opt [ (NOT APPLICABLE) (CHANGE IN ADDRESS) (CHANGE IN NAME / SURNAME) (CHANGE IN SPOUSE NAME) (CHANGE IN APPEARANCE / SIGNATURE) (CHANGE IN DATE OF BIRTH) (OTHER PARTICULARS) ] /P 39 0 R /Rect [ 41 597.8898 289.1378 619.8898 ] /Subtype /Widget /T (change_type) 
   /TU (If Change in Personal Particulars, Specify Type) /Type /Annot /V (NOT APPLICABLE)
 >>
 endobj
@@ -131,7 +131,7 @@ endobj
 /AP <<
 /N 19 0 R
 >> /DA (/Helv 9 Tf 0 0 0 rg) /DV () /F 4 /FT /Tx /Ff 0 
-  /MaxLen 100 /P 42 0 R /Rect [ 307.1378 597.8898 553.2756 619.8898 ] /Subtype /Widget /T (change_particulars_detail) /TU (Specify exact change requested \(e.g. New Italian address or spouse name\)) 
+  /MaxLen 100 /P 39 0 R /Rect [ 307.1378 597.8898 553.2756 619.8898 ] /Subtype /Widget /T (change_particulars_detail) /TU (Specify exact change requested \(e.g. New Italian address or spouse name\)) 
   /Type /Annot /V ()
 >>
 endobj
@@ -151,7 +151,7 @@ endobj
 /AP <<
 /N 22 0 R
 >> /DA (/Helv 9 Tf 0 0 0 rg) /DV (10TH PASS AND ABOVE) /F 4 /FT /Ch /Ff 131072 
-  /I [ 0 ] /Opt [ (10TH PASS AND ABOVE) (GRADUATE AND ABOVE) (BETWEEN 8TH AND 9TH STANDARD) (7TH PASS OR LESS) ] /P 42 0 R /Rect [ 41 498.8898 289.1378 520.8898 ] /Subtype /Widget /T (educational_qualification) 
+  /I [ 0 ] /Opt [ (10TH PASS AND ABOVE) (GRADUATE AND ABOVE) (BETWEEN 8TH AND 9TH STANDARD) (7TH PASS OR LESS) ] /P 39 0 R /Rect [ 41 498.8898 289.1378 520.8898 ] /Subtype /Widget /T (educational_qualification) 
   /TU (Educational Qualification) /Type /Annot /V (10TH PASS AND ABOVE)
 >>
 endobj
@@ -172,7 +172,7 @@ endobj
 /AP <<
 /N 25 0 R
 >> /DA (/Helv 9 Tf 0 0 0 rg) /DV (PRIVATE) /F 4 /FT /Ch /Ff 131072 
-  /I [ 0 ] /Opt [ (PRIVATE) (SELF EMPLOYED) (GOVERNMENT) (HOMEMAKER) (STUDENT) (RETIRED) (NOT EMPLOYED) (OTHERS) ] /P 42 0 R /Rect [ 306.1378 498.8898 554.2756 520.8898 ] /Subtype /Widget /T (employment_type) 
+  /I [ 0 ] /Opt [ (PRIVATE) (SELF EMPLOYED) (GOVERNMENT) (HOMEMAKER) (STUDENT) (RETIRED) (NOT EMPLOYED) (OTHERS) ] /P 39 0 R /Rect [ 306.1378 498.8898 554.2756 520.8898 ] /Subtype /Widget /T (employment_type) 
   /TU (Employment Type / Profession) /Type /Annot /V (PRIVATE)
 >>
 endobj
@@ -194,7 +194,7 @@ endobj
 /AP <<
 /N 28 0 R
 >> /DA (/Helv 9 Tf 0 0 0 rg) /DV () /F 4 /FT /Tx /Ff 0 
-  /MaxLen 100 /P 42 0 R /Rect [ 42 399.8898 201.7585 421.8898 ] /Subtype /Widget /T (indian_mobile_number) /TU (10 digit Indian mobile) 
+  /MaxLen 100 /P 39 0 R /Rect [ 42 399.8898 201.7585 421.8898 ] /Subtype /Widget /T (indian_mobile_number) /TU (10 digit Indian mobile) 
   /Type /Annot /V ()
 >>
 endobj
@@ -216,7 +216,7 @@ endobj
 /AP <<
 /N 31 0 R
 >> /DA (/Helv 9 Tf 0 0 0 rg) /DV () /F 4 /FT /Tx /Ff 0 
-  /MaxLen 100 /P 42 0 R /Rect [ 217.7585 399.8898 377.5171 421.8898 ] /Subtype /Widget /T (italian_mobile_number) /TU (Italian mobile number) 
+  /MaxLen 100 /P 39 0 R /Rect [ 217.7585 399.8898 377.5171 421.8898 ] /Subtype /Widget /T (italian_mobile_number) /TU (Italian mobile number) 
   /Type /Annot /V ()
 >>
 endobj
@@ -238,7 +238,7 @@ endobj
 /AP <<
 /N 34 0 R
 >> /DA (/Helv 9 Tf 0 0 0 rg) /DV () /F 4 /FT /Tx /Ff 0 
-  /MaxLen 100 /P 42 0 R /Rect [ 393.5171 399.8898 553.2756 421.8898 ] /Subtype /Widget /T (email_id) /TU (Active email address) 
+  /MaxLen 100 /P 39 0 R /Rect [ 393.5171 399.8898 553.2756 421.8898 ] /Subtype /Widget /T (email_id) /TU (Active email address) 
   /Type /Annot /V ()
 >>
 endobj
@@ -247,49 +247,27 @@ endobj
 endobj
 37 0 obj
 <<
-/BBox [ 0 0 246.1378 22 ] /Filter [ /FlateDecode ] /FormType 1 /Length 66 /Matrix [ 1 0 0 1 0 0 ] /Resources << /ProcSet [/PDF /Text] /Font <</Helv 36 0 R>> >> 
+/BBox [ 0 0 511.2756 22 ] /Filter [ /FlateDecode ] /FormType 1 /Length 66 /Matrix [ 1 0 0 1 0 0 ] /Resources << /ProcSet [/PDF /Text] /Font <</Helv 36 0 R>> >> 
   /Subtype /Form /Type /XObject
 >>
 stream
-xœÓ©PpòuVà*ä2P0P021Ó3467·45275µ40µP02R(Jå
+xœÓ©PpòuVà*ä2P0P054Ô3275µ40554´044U02R(Jå
 çÊã2PHç2Ppç
-ärõuæ h¼àendstream
+ärõuæ eéÉendstream
 endobj
 38 0 obj
 <<
 /AP <<
 /N 37 0 R
 >> /DA (/Helv 9 Tf 0 0 0 rg) /DV () /F 4 /FT /Tx /Ff 0 
-  /MaxLen 100 /P 42 0 R /Rect [ 42 349.8898 288.1378 371.8898 ] /Subtype /Widget /T (police_station) /TU (Police Station in India) 
+  /MaxLen 100 /P 39 0 R /Rect [ 42 349.8898 553.2756 371.8898 ] /Subtype /Widget /T (police_station) /TU (Police Station in India) 
   /Type /Annot /V ()
 >>
 endobj
 39 0 obj
-<< /BaseFont /Helvetica /Subtype /Type1 /Name /Helv /Type /Font /Encoding 5 0 R >>
-endobj
-40 0 obj
-<<
-/BBox [ 0 0 246.1378 22 ] /Filter [ /FlateDecode ] /FormType 1 /Length 66 /Matrix [ 1 0 0 1 0 0 ] /Resources << /ProcSet [/PDF /Text] /Font <</Helv 39 0 R>> >> 
-  /Subtype /Form /Type /XObject
->>
-stream
-xœÓ©PpòuVà*ä2P0P021Ó3467·45275µ40µP02R(Jå
-çÊã2PHç2Ppç
-ärõuæ h¼àendstream
-endobj
-41 0 obj
-<<
-/AP <<
-/N 40 0 R
->> /DA (/Helv 9 Tf 0 0 0 rg) /DV () /F 4 /FT /Tx /Ff 0 
-  /MaxLen 100 /P 42 0 R /Rect [ 307.1378 349.8898 553.2756 371.8898 ] /Subtype /Widget /T (italian_address) /TU (Italian residence address) 
-  /Type /Annot /V ()
->>
-endobj
-42 0 obj
 <<
 /Annots [ 8 0 R 11 0 R 14 0 R 17 0 R 20 0 R 23 0 R 26 0 R 29 0 R 32 0 R 35 0 R 
-  38 0 R 41 0 R ] /Contents 46 0 R /MediaBox [ 0 0 595.2756 841.8898 ] /Parent 45 0 R /Resources <<
+  38 0 R ] /Contents 43 0 R /MediaBox [ 0 0 595.2756 841.8898 ] /Parent 42 0 R /Resources <<
 /Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ] /XObject <<
 /FormXob.97408b443ffb08cbf8a7328182d5749e 3 0 R
 >>
@@ -299,30 +277,30 @@ endobj
 >> /Type /Page
 >>
 endobj
-43 0 obj
+40 0 obj
 <<
-/AcroForm 47 0 R /PageMode /UseNone /Pages 45 0 R /Type /Catalog
+/AcroForm 44 0 R /PageMode /UseNone /Pages 42 0 R /Type /Catalog
 >>
 endobj
-44 0 obj
+41 0 obj
 <<
-/Author (anonymous) /CreationDate (D:20261008023023+05'00') /Creator (anonymous) /Keywords () /ModDate (D:20261008023023+05'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+/Author (anonymous) /CreationDate (D:20261008100129+05'00') /Creator (anonymous) /Keywords () /ModDate (D:20261008100129+05'00') /Producer (ReportLab PDF Library - \(opensource\)) 
   /Subject (unspecified) /Title (untitled) /Trapped /False
 >>
 endobj
-45 0 obj
+42 0 obj
 <<
-/Count 1 /Kids [ 42 0 R ] /Type /Pages
+/Count 1 /Kids [ 39 0 R ] /Type /Pages
 >>
 endobj
-46 0 obj
+43 0 obj
 <<
-/Filter [ /ASCII85Decode /FlateDecode ] /Length 1400
+/Filter [ /ASCII85Decode /FlateDecode ] /Length 1355
 >>
 stream
-Gatn&?#QJt'Sc)J/)I<V*H`gn4-qcIZUeqr!OCFEEoV[A]k\a#?q0td,<kZUNODDY77)lc?U)T7cgcQOKaQ6lis^0in2M^:)PRqa:^fb<n=mbnJSqkKknX[B[]M'?1NF%>K?%[LZbMF+19qA>=W<*eVJF_=f;V,S?#tgs-)PO<(ad5[gRo-U+ZG$s.1O43QZDqVSt_g2^p.:.Zu2E__f.XI4TF`k$UTNoEoPF6&cIXO90]Nndp"P*Z/3V@\uh><q+W^8r%MB%#ef.LJ*`^sG+c\'!Q!)JhF;A8h8B`!Be#Qg>/r@Kn83!AdRC'>"B&[op(<!,HOAQE>qDTGYoEN1)&@*$q;^SC)haRQ'^#IpCMs7JA![1dSki@nbC#bPk^,L;]+mH*'eaSq].H*Q+_Z=FEropBHR`fAFTe/4.R^`dBEfa"e!Jg6FOf`TT2@`d`IEJ>f+T085)ZHJd68]\(bLXcBd"'B?C(9W4(\%P-L'@`376t3q'j=e1uC"V*"++:,,YJM.OuRlK$*WbiKhGFh;)VCq:WcZ5u1TO\L:;phui\dAnApoXG/h@mEX`qYgr\hcJJX$D@2lEF%g":JN$a*BmYV(0V<Z"f_ek]Vnr97rbOVcpo!:DB?V04g!o[R\U57k81pC#H/)XXWOkj$!oI`BGhQg([GDiIqfBG8a31ocfOZW&nf!Qka<G2,GqIu@p'/fdXZ#h!d:ut'GWq&@EJ0/b\c-Z+48?.=n'8/)5;uS)N4OYG)SW_fM&X]lJ)58&d#Bue+3$M(\tN7SFWaI>c1+]5\R:fTfpYL6L."JI2nUWDbTfK/53bp,Z#mrC*V4pWCW,S:T6"%41n]ns(6\44Doc!G*gAks<?Dgl,W7YQoeOYnr5j)ZE\Hrc9T9_Z$-f1U4D"l"mZuuq>0F/h11d4g&Rn4Zd_'t(YOVn(%HheRrJZ#?G/-_AYWQN:P=2^^`+g,iP-O9Q@p\ODRMt[JkOHgYra#N@Uk;bg2c7i[9l+#U$/&9D/?=\M(.Q,\gf/s(<.rGm(VdR$^+TA@p[$5=e+Ts5`19AEFK$B?d\bknYD@%*Sr4W3HFjon.@aB*ORuU&?'e879kBGq=4@jORduhEJY\+fk3Zce$^"gibAph.l2gH`7ndL"\d+K/Edn0AkG5"LL3dBNKg<eK8BQ+%>@j`E4/?,;k2o\uDjDg;FiLJ>,nEN.\gm^#R+sOI,`=1X"4+$B$Qq(mZKYVU8=ETZ6_i=)RY>.VA70[c9@cX51p2qL25LH#'<jBaBn-,\A>!q]J$?AL4)>hYf!HuPpqc%MhS^GsdGbl$r1">Nh)Q?Yb[R^S`9GEMK+h:._@*kr<Fjnm@Eg<W2NmSor:%r!k"G(3<Z%.*(e2tNp4\*9(eE+[O\W1M<.C7Mi"lV;D57~>endstream
+Gatn&?#S^^(kqGS($DT+7^HgC'.t_efgm\K8Qb@PgmH$RhK<;I:1hGZ?fcpD.@S\b6:)m=Hi1N?5.32=6\j'<VZlROi-o:R0TkEMCs>H?L`dR_+'<FXP3'R3iH^aOq]d1s0t<h^=o9j0g;pUCIq.56So8^8h;gci/CQP*1NP[*6noF/DhCMILYNBnThH:u4-\V5oT8]%#(.6DaR$o<$4LR*-j[T5K.'3ZXJXt9'9[j-I.#0]0rl%12#!i:D0_R[)S_(t5o@YC!-&SK'i'?:aUU0(3\^&E:psZA?<:7EE?*6q*;B)a,C\=8Y'&Qg=+PI<Q?PYMZi^L"0O?@R_oXkE(NV.J;%cW)O5hY&`i&W&5g+N]G^+B@d-pdPc+M>7g7!0B)t.s?V5.Rp7'b^t1DU);7rHYG4QeukNnfZ1FEGd34<LF08b)<GD*4-PFQF<<%mp37BluMb;<FX`RMNRmU50F.9&r;_U.hQ_p6i45,0/p'HU#pR*/-C"c_T>oYS'SYPpcsZP/rNW2():M6+isAbP,p1f(iuh0;,5M,)e%.,CDnof2Pa,_g9CEOD[4!3*h#[S+COuIl5*'je!`5C'^];5.5Z;7Z1C\a3B\<E#($s&C+nr`.%tWEl!,LbDp/IaR\lSHa<"*c=q<OXR;6F353prZb0*-XkqeWmpj&G`%-"9ljI!?\]-du;WLfV>7$@rDr?#nC>0YtXL9rZ(@u'!8MCU:EVLC2%cMdRNosLs*h-Ft::c.`*^5SHdrD[Lrcub2gTk1rIXLi1f58u"gBYl[OV1H!_`5WJ/iH[<4Z%7kCs+;N@ub@Geu2sKL21Lpj#c_:h_^k+r0"B1]E,^d9M!=7^EDD:GuXbk<,6#XNo:kBW'N]d7l\2!<?<DLMQ(U44/5pcc;KP0l:u%oU9u!,+k=">Q8.O_-RmS%H'WA&g\-,H/0/(^b-Z;Gm[Qm3pH8sH3XjX-(<&C2U=H&2<"lZap$`Z=HgB9`3"6qHH#S3ql>NtWUHQ1(kXO:2>3WHRH!$;Y%or(AS2M;sOaCX;&O\OWfnsf!$LC25+nD/"N,W;OXdcd7ejI80m"eP$+fd8X<3_CJ.7Hj>[f-CR.HKFjdk45<R;Di?2!,c<UHDIlH(.^Kq&VQV]K,dE/=I_]]d[&`dHo&5\ZWjm"dRi>9[^<-Ha'dg>m%&S<HI^UP9d>\6XtEiRO+k";:&4kOu<pf8Lp$B-5B(>J[T88=XL-5O@`W\+1/]i*@Hg^)kth'5H$]941N0P=e:7NXqLnD[n]Co;df<K&\@A(_253R@fk]%&k+`G>dK<^m::6N5JHX!q'U63.W!_bCqEjGIF-'$_J&?a7]4nroR<(@i.'[15/.~>endstream
 endobj
-47 0 obj
+44 0 obj
 <<
 /DA (/Helv 0 Tf 0 g) /DR << /Encoding
 <<
@@ -331,11 +309,11 @@ endobj
 >>
 /Font << /Helv 6 0 R >>
 >> /Fields [ 8 0 R 11 0 R 14 0 R 17 0 R 20 0 R 23 0 R 26 0 R 29 0 R 32 0 R 35 0 R 
-  38 0 R 41 0 R ]
+  38 0 R ]
 >>
 endobj
 xref
-0 48
+0 45
 0000000000 65535 f 
 0000000061 00000 n 
 0000000102 00000 n 
@@ -376,24 +354,21 @@ xref
 0000178196 00000 n 
 0000178494 00000 n 
 0000178742 00000 n 
-0000178841 00000 n 
-0000179139 00000 n 
-0000179396 00000 n 
-0000179763 00000 n 
-0000179850 00000 n 
-0000180112 00000 n 
-0000180173 00000 n 
-0000181665 00000 n 
+0000179102 00000 n 
+0000179189 00000 n 
+0000179451 00000 n 
+0000179512 00000 n 
+0000180959 00000 n 
 trailer
 <<
 /ID 
-[<3150bdd9b542ab7a372e665f70b1975b><3150bdd9b542ab7a372e665f70b1975b>]
+[<4787f6e9c2a0af55b63bbf30a06698ad><4787f6e9c2a0af55b63bbf30a06698ad>]
 % ReportLab generated PDF document -- digest (opensource)
 
-/Info 44 0 R
-/Root 43 0 R
-/Size 48
+/Info 41 0 R
+/Root 40 0 R
+/Size 45
 >>
 startxref
-181876
+181163
 %%EOF

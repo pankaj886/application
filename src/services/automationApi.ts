@@ -49,6 +49,7 @@ export interface CategorizedUploadFiles {
   photo?: File | null;
   signature?: File | null;
   passport?: File | null;
+  identity?: File | null;
   residence?: File | null;
   supporting?: File | null;
   files?: File[];
@@ -301,6 +302,7 @@ class AutomationApiService {
         if (files.photo) fd.append('photo', files.photo);
         if (files.signature) fd.append('signature', files.signature);
         if (files.passport) fd.append('passport', files.passport);
+        if (files.identity) fd.append('identity', files.identity);
         if (files.residence) fd.append('residence', files.residence);
         if (files.supporting) fd.append('supporting', files.supporting);
         if (files.files && Array.isArray(files.files)) {

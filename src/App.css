@@ -2922,12 +2922,12 @@ input::-webkit-credentials-auto-fill-button {
 /* Document Upload Boxes Grid */
 .docs-boxes-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 8px;
   margin-bottom: 8px;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 1024px) {
   .docs-boxes-grid {
     grid-template-columns: repeat(3, 1fr);
   }

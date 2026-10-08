@@ -592,18 +592,6 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       <option value="OTHERS">OTHERS</option>
                     </select>
                   </div>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Italian Residence Address (Street, City, Province)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Via Roma 10, 00100 Roma (RM)"
-                      value={formData.italian_address || ''}
-                      onChange={(e) => handleChange('italian_address', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
-                  </div>
                 </div>
               </div>
 

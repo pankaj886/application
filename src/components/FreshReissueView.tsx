@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  ArrowLeft, 
   Upload, 
   FileText, 
   CheckCircle2, 
@@ -21,8 +20,6 @@ import {
   BookOpen,
   X,
   Mic,
-  Users,
-  Sparkles,
   Edit3,
   Plus
 } from 'lucide-react';
@@ -44,7 +41,7 @@ interface FreshReissueViewProps {
   user: UserProfile;
   currentSection: FreshReissueSection;
   onSectionChange: (sec: FreshReissueSection) => void;
-  onBackToPassport: () => void;
+  onBackToPassport?: () => void;
   serviceType?: 'reissue' | 'fresh';
   onServiceTypeChange?: (service: 'reissue' | 'fresh') => void;
 }
@@ -53,9 +50,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   user,
   currentSection,
   onSectionChange,
-  onBackToPassport,
   serviceType,
-  onServiceTypeChange,
+  onServiceTypeChange: _onServiceTypeChange,
 }) => {
   const [activeServiceType, setActiveServiceType] = useState<'reissue' | 'fresh'>(serviceType || 'reissue');
 
@@ -65,32 +61,24 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   }, [serviceType]);
 
-  const handleSwitchServiceType = (t: 'reissue' | 'fresh') => {
-    setActiveServiceType(t);
-    onServiceTypeChange?.(t);
-    if (submissionTracker?.ready) {
-      setSubmissionTracker(null);
-    }
-    setUploadMessage(null);
-  };
-
   const [showInAppInfoModal, setShowInAppInfoModal] = useState(false);
   const [inAppInfoData, setInAppInfoData] = useState<Record<string, any>>({});
   const [previewFilter, setPreviewFilter] = useState<'all' | 'reissue' | 'fresh'>('all');
   const [submittedFilter, setSubmittedFilter] = useState<'all' | 'reissue' | 'fresh'>('all');
 
-  const initialEmail = (localStorage.getItem('fs_active_client_email') || user.email || '').toUpperCase();
+  const initialEmail = (localStorage.getItem('fs_active_client_email') || '').toUpperCase();
   const initialPassword = localStorage.getItem('fs_portal_password') || '';
   const [portalEmail, setPortalEmail] = useState(initialEmail);
-  const [activeClientEmail, setActiveClientEmail] = useState(initialEmail || 'CLIENT@FOREIGNERSSTUDIO.COM');
+  const [activeClientEmail, setActiveClientEmail] = useState(initialEmail || '');
   const [portalPassword, setPortalPassword] = useState(initialPassword);
   const [showPassword, setShowPassword] = useState(false);
   const declarationPlace = 'ROME';
 
-  // 5 Distinct Document Upload Boxes + Extras
+  // 6 Distinct Document Upload Boxes + Extras
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [signFile, setSignFile] = useState<File | null>(null);
   const [passportFile, setPassportFile] = useState<File | null>(null);
+  const [identityFile, setIdentityFile] = useState<File | null>(null);
   const [residenceFile, setResidenceFile] = useState<File | null>(null);
   const [infoFile, setInfoFile] = useState<File | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -104,6 +92,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     photo: photoFile,
     sign: signFile,
     passport: passportFile,
+    identity: identityFile,
     residence: residenceFile,
     info: infoFile,
     selected: selectedFiles,
@@ -114,11 +103,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       photo: photoFile,
       sign: signFile,
       passport: passportFile,
+      identity: identityFile,
       residence: residenceFile,
       info: infoFile,
       selected: selectedFiles,
     };
-  }, [photoFile, signFile, passportFile, residenceFile, infoFile, selectedFiles]);
+  }, [photoFile, signFile, passportFile, identityFile, residenceFile, infoFile, selectedFiles]);
 
   const [isUploading, setIsUploading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -179,14 +169,21 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const photoInputRef = useRef<HTMLInputElement>(null);
   const signInputRef = useRef<HTMLInputElement>(null);
   const passportInputRef = useRef<HTMLInputElement>(null);
+  const identityInputRef = useRef<HTMLInputElement>(null);
   const residenceInputRef = useRef<HTMLInputElement>(null);
   const infoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const queryAccountEmail = user?.email ? user.email.trim().toLowerCase() : activeClientEmail;
+  const queryAccountEmail = (portalEmail || activeClientEmail || localStorage.getItem('fs_active_client_email') || '').trim().toLowerCase();
 
   const refreshAllData = async (targetEmailOverride?: string) => {
-    const targetEmail = targetEmailOverride || queryAccountEmail;
+    const targetEmail = (targetEmailOverride || queryAccountEmail || '').trim().toLowerCase();
+    if (!targetEmail) {
+      setApplications([]);
+      setPreviews([]);
+      setCompleted([]);
+      return;
+    }
     try {
       const [statusRes, prevs, comps] = await Promise.all([
         automationApi.getClientStatus(targetEmail).catch(() => ({ client_email: targetEmail, applications: [], quota: undefined })),
@@ -416,7 +413,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setVoiceProcessingFolder(folderName);
       const text = textPrompt !== undefined ? textPrompt : (voiceTextInputs[folderName] || '');
       const lowText = text.toLowerCase();
-      const email = user?.email || portalEmail || activeClientEmail;
+      const email = (queryAccountEmail || activeClientEmail || user?.email || '').trim().toLowerCase();
 
       const detectedActionLabel = lowText.includes('sign') || lowText.includes('firma')
         ? 'Re-cropping signature & isolating strokes on white background...'
@@ -539,7 +536,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     refreshAllData();
     const interval = setInterval(() => refreshAllData(), 2500);
     return () => clearInterval(interval);
-  }, [user?.email, activeClientEmail]);
+  }, [portalEmail, activeClientEmail]);
 
   const correctionApp = applications.find(
     app => (app.status === 'NEEDS_CORRECTION' || (app.status === 'ERROR' && (app.error_type === 'PORTAL_FORM_ERROR' || app.error_type === 'STAGE1_7_FAILED'))) && app.folder_name !== dismissedCorrectionFolder
@@ -713,7 +710,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB strict limit per file
 
-  const updateSlotFile = (slot: 'photo' | 'sign' | 'passport' | 'residence' | 'info', file: File | null) => {
+  const updateSlotFile = (slot: 'photo' | 'sign' | 'passport' | 'identity' | 'residence' | 'info', file: File | null) => {
     if (file && submissionTracker?.ready) {
       setSubmissionTracker(null);
       setUploadMessage(null);
@@ -726,6 +723,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       if (slot === 'photo' && photoInputRef.current) photoInputRef.current.value = '';
       if (slot === 'sign' && signInputRef.current) signInputRef.current.value = '';
       if (slot === 'passport' && passportInputRef.current) passportInputRef.current.value = '';
+      if (slot === 'identity' && identityInputRef.current) identityInputRef.current.value = '';
       if (slot === 'residence' && residenceInputRef.current) residenceInputRef.current.value = '';
       if (slot === 'info' && infoInputRef.current) infoInputRef.current.value = '';
       return;
@@ -740,6 +738,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     } else if (slot === 'passport') {
       setPassportFile(file);
       if (!file && passportInputRef.current) passportInputRef.current.value = '';
+    } else if (slot === 'identity') {
+      setIdentityFile(file);
+      if (!file && identityInputRef.current) identityInputRef.current.value = '';
     } else if (slot === 'residence') {
       setResidenceFile(file);
       if (!file && residenceInputRef.current) residenceInputRef.current.value = '';
@@ -771,6 +772,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     let p = current.photo;
     let s = current.sign;
     let pass = current.passport;
+    let ident = current.identity;
     let res = current.residence;
     let inf = current.info;
     const extras: File[] = [];
@@ -783,12 +785,19 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         s = f;
       } else if (!pass && (lower.includes('pass') || lower.includes('passport') || lower.includes('passaporto'))) {
         pass = f;
-      } else if (!res && (
+      } else if (!ident && (
+        lower.includes('permesso') || 
         lower.includes('pds') || 
+        lower.includes('soggiorno') || 
         lower.includes('cie') || 
         lower.includes('carta') || 
-        lower.includes('soggiorno') || 
+        lower.includes('identity') || 
+        lower.includes('identita')
+      )) {
+        ident = f;
+      } else if (!res && (
         lower.includes('residen') || 
+        lower.includes('certificato') || 
         lower.includes('ospiti') || 
         lower.includes('ospitalita') || 
         lower.includes('fabbricato') || 
@@ -796,7 +805,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         lower.includes('affitto') || 
         lower.includes('locazione') || 
         lower.includes('bolletta') ||
-        lower.includes('contratto')
+        lower.includes('contratto') ||
+        lower.includes('anagrafe') ||
+        lower.includes('famiglia')
       )) {
         res = f;
       } else if (!inf && (
@@ -816,6 +827,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           pass = f;
         } else if (!p && lower.match(/\.(jpg|jpeg|png|webp)$/)) {
           p = f;
+        } else if (!ident && lower.endsWith('.pdf')) {
+          ident = f;
         } else if (!res && lower.endsWith('.pdf')) {
           res = f;
         } else if (!s && lower.match(/\.(jpg|jpeg|png)$/)) {
@@ -839,6 +852,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (pass !== current.passport) {
       filesStateRef.current.passport = pass;
       setPassportFile(pass);
+    }
+    if (ident !== current.identity) {
+      filesStateRef.current.identity = ident;
+      setIdentityFile(ident);
     }
     if (res !== current.residence) {
       filesStateRef.current.residence = res;
@@ -893,9 +910,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const handleEmailBlur = () => {
     const trimmed = portalEmail.trim().toUpperCase();
-    if (trimmed && trimmed.includes('@')) {
+    if (trimmed) {
       setActiveClientEmail(trimmed);
       localStorage.setItem('fs_active_client_email', trimmed);
+      refreshAllData(trimmed.toLowerCase());
     }
   };
 
@@ -1034,7 +1052,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         const droppedFiles = Array.from(e.dataTransfer.files);
         if (droppedFiles.length > 1) {
           autoCategorizeFiles(droppedFiles);
-        } else if (targetSlot && ['photo', 'sign', 'passport', 'residence', 'info'].includes(targetSlot)) {
+        } else if (targetSlot && ['photo', 'sign', 'passport', 'identity', 'residence', 'info'].includes(targetSlot)) {
           updateSlotFile(targetSlot as any, droppedFiles[0]);
         } else {
           autoCategorizeFiles(droppedFiles);
@@ -1080,6 +1098,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       photoFile,
       signFile,
       passportFile,
+      identityFile,
       residenceFile,
       infoFile,
       ...selectedFiles,
@@ -1125,6 +1144,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           photo: photoFile,
           signature: signFile,
           passport: passportFile,
+          identity: identityFile,
           residence: residenceFile,
           supporting: infoFile,
           files: selectedFiles,
@@ -1152,6 +1172,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setPhotoFile(null);
       setSignFile(null);
       setPassportFile(null);
+      setIdentityFile(null);
       setResidenceFile(null);
       setInfoFile(null);
       setSelectedFiles([]);
@@ -1159,10 +1180,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       if (photoInputRef.current) photoInputRef.current.value = '';
       if (signInputRef.current) signInputRef.current.value = '';
       if (passportInputRef.current) passportInputRef.current.value = '';
+      if (identityInputRef.current) identityInputRef.current.value = '';
       if (residenceInputRef.current) residenceInputRef.current.value = '';
       if (infoInputRef.current) infoInputRef.current.value = '';
       if (fileInputRef.current) fileInputRef.current.value = '';
-      refreshAllData(user?.email || targetClientEmail);
+      refreshAllData(targetClientEmail.toLowerCase());
     } catch (err: any) {
       const friendlyMsg = sanitizeErrorMessage(err);
       setSubmissionTracker(null);
@@ -1288,7 +1310,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
 
       await automationApi.submitCorrection(
-        user?.email || activeClientEmail,
+        (queryAccountEmail || activeClientEmail || user?.email || '').trim().toLowerCase(),
         correctionApp.folder_name,
         finalData
       );
@@ -1322,7 +1344,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (!targetFolder) return;
     try {
       setIsDismissing(true);
-      const email = user?.email || activeClientEmail;
+      const email = (queryAccountEmail || activeClientEmail || user?.email || '').trim().toLowerCase();
       await automationApi.dismissApplication(email, targetFolder);
       setApplications(prev => prev.filter(a => a.folder_name !== targetFolder));
       setDismissedCorrectionFolder(null);
@@ -1348,7 +1370,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const executeCancelApplication = async (folderName: string) => {
     try {
       setCancellingFolder(folderName);
-      const email = user?.email || activeClientEmail;
+      const email = (queryAccountEmail || activeClientEmail || user?.email || '').trim().toLowerCase();
       await automationApi.dismissApplication(email, folderName);
 
       setPreviews(prev => prev.filter(p => p.folder_name !== folderName));
@@ -1388,7 +1410,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (voiceProcessingFolder) return;
     try {
       setSubmittingArn(arn);
-      await automationApi.confirmSubmission(user?.email || activeClientEmail, folderName, arn);
+      const email = (queryAccountEmail || activeClientEmail || user?.email || '').trim().toLowerCase();
+      await automationApi.confirmSubmission(email, folderName, arn);
       await refreshAllData();
       onSectionChange('submitted');
     } catch (err: any) {
@@ -1645,79 +1668,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   return (
     <div className="fresh-reissue-container">
 
-      <div className="view-navigation-bar">
-        <button
-          type="button"
-          onClick={onBackToPassport}
-          className="back-btn"
-          title="Return to Passport Services"
-          aria-label="Return to Passport Services"
-        >
-          <ArrowLeft className="back-arrow" />
-          <span>Passport Services</span>
-        </button>
-
-        <div className="section-pill-selector">
-          <button
-            type="button"
-            className={`section-pill ${currentSection === 'form' ? 'active' : ''}`}
-            onClick={() => {
-              if (submissionTracker?.ready) {
-                setSubmissionTracker(null);
-                setUploadMessage(null);
-              }
-              onSectionChange('form');
-            }}
-          >
-            <Upload className="pill-icon" />
-            <span>New Application</span>
-          </button>
-          <button
-            type="button"
-            className={`section-pill ${currentSection === 'preview' ? 'active' : ''}`}
-            onClick={() => onSectionChange('preview')}
-          >
-            <Eye className="pill-icon" />
-            <span>Preview</span>
-            {previews.length > 0 && (
-              <span className="pill-badge">{previews.length}</span>
-            )}
-          </button>
-          <button
-            type="button"
-            className={`section-pill ${currentSection === 'submitted' ? 'active' : ''}`}
-            onClick={() => onSectionChange('submitted')}
-          >
-            <CheckCircle2 className="pill-icon" />
-            <span>Submitted</span>
-            {completed.length > 0 && (
-              <span className="pill-badge pill-badge-success">{completed.length}</span>
-            )}
-          </button>
-        </div>
-
-        <div className="nav-right-tools">
-          {quota && (
-            <div 
-              className={`portal-quota-pill ${quota.is_exhausted ? 'quota-exhausted' : quota.is_warning ? 'quota-warning' : ''}`}
-              title={`Passport Portal Account Quota: ${quota.used} / ${quota.total} applications used${quota.portal_username ? ` (${quota.portal_username})` : ''}`}
-            >
-              <Users className="quota-pill-icon" />
-              <span>{quota.used} / {quota.total} Used</span>
-              {quota.is_exhausted && <span className="quota-pill-alert">Limit</span>}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={handleManualRefresh}
-            className="refresh-btn"
-            aria-label="Refresh"
-            disabled={isManualRefreshing}
-          >
-            <RefreshCw className={`refresh-icon ${isManualRefreshing ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
 
       {currentSection === 'form' && (
         <div className="fresh-reissue-content">
@@ -2432,63 +2382,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             </div>
           ) : (
             <div className="fresh-form-card">
-              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-                <div>
-                  <h2 className="card-title">
-                    {activeServiceType === 'fresh' ? 'Fresh Indian Passport Application' : 'Reissue Indian Passport Application'}
-                  </h2>
-                  <p className="card-subtitle">
-                    {activeServiceType === 'fresh'
-                      ? 'First-time passport application for minors & new applicants (No previous passport required)'
-                      : 'Passport renewal, expired validity, exhaustion of pages, damaged, lost, or change in particulars'}
-                  </p>
-                </div>
-
-                <div className="service-mode-pill-group" style={{ display: 'inline-flex', background: '#f1f5f9', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0', gap: '4px' }}>
-                  <button
-                    type="button"
-                    onClick={() => handleSwitchServiceType('reissue')}
-                    style={{
-                      padding: '6px 14px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      borderRadius: '8px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      background: activeServiceType === 'reissue' ? '#2563eb' : 'transparent',
-                      color: activeServiceType === 'reissue' ? '#ffffff' : '#64748b',
-                      transition: 'all 0.15s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <BookOpen style={{ width: '14px', height: '14px' }} />
-                    <span>Reissue Passport</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSwitchServiceType('fresh')}
-                    style={{
-                      padding: '6px 14px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      borderRadius: '8px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      background: activeServiceType === 'fresh' ? '#059669' : 'transparent',
-                      color: activeServiceType === 'fresh' ? '#ffffff' : '#64748b',
-                      transition: 'all 0.15s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <Sparkles style={{ width: '14px', height: '14px' }} />
-                    <span>Fresh Passport</span>
-                  </button>
-                </div>
-              </div>
 
               {submissionTracker?.active ? (
                 <div
@@ -3021,7 +2914,73 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       </div>
                     </div>
 
-                    {/* 4. Residence Proof Box */}
+                    {/* 4. Identity Proof Box */}
+                    <div
+                      className={`doc-upload-box ${identityFile ? 'has-file' : ''} ${dragSlot === 'identity' ? 'drag-target' : ''}`}
+                      data-drop-slot="identity"
+                      onClick={() => identityInputRef.current?.click()}
+                      onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'identity'; setDragSlot('identity'); }}
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = 'identity'; }}
+                      onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === 'identity') { dragSlotRef.current = null; setDragSlot(null); } }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        lastDropTimeRef.current = Date.now();
+                        dragSlotRef.current = null;
+                        setDragSlot(null);
+                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                          if (e.dataTransfer.files.length > 1) {
+                            autoCategorizeFiles(Array.from(e.dataTransfer.files));
+                          } else {
+                            updateSlotFile('identity', e.dataTransfer.files[0]);
+                          }
+                        }
+                      }}
+                    >
+                      <input
+                        ref={identityInputRef}
+                        type="file"
+                        accept=".pdf,image/jpeg,image/png,image/jpg"
+                        style={{ display: 'none' }}
+                        onChange={(e) => { if (e.target.files?.[0]) updateSlotFile('identity', e.target.files[0]); }}
+                      />
+                      <div className="doc-box-header">
+                        <FileCheck className="doc-box-icon" />
+                        <span className="doc-box-title">Identity Proof</span>
+                      </div>
+                      <div className="doc-box-content">
+                        {identityFile ? (
+                          <div className="doc-box-file-info">
+                            <FileText style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
+                            <div className="doc-box-text-info">
+                              <span className="doc-box-filename" title={identityFile.name}>{identityFile.name}</span>
+                              <span className="doc-box-filesize">{(identityFile.size / 1024).toFixed(0)} KB</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="doc-box-remove-btn"
+                              title="Remove identity proof"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateSlotFile('identity', null);
+                              }}
+                            >
+                              <X style={{ width: '13px', height: '13px' }} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="doc-box-empty">
+                            <span className="doc-box-badge">Permesso / Permesso di Soggiorno</span>
+                            <div className="doc-box-action-hint">
+                              <Upload style={{ width: '12px', height: '12px' }} />
+                              <span>Upload</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 5. Residence Proof Box */}
                     <div
                       className={`doc-upload-box ${residenceFile ? 'has-file' : ''} ${dragSlot === 'residence' ? 'drag-target' : ''}`}
                       data-drop-slot="residence"
@@ -3077,7 +3036,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </div>
                         ) : (
                           <div className="doc-box-empty">
-                            <span className="doc-box-badge">Permesso / CIE / Ospiti</span>
+                            <span className="doc-box-badge">Residenza / Certificato di Residenza / Ospiti</span>
                             <div className="doc-box-action-hint">
                               <Upload style={{ width: '12px', height: '12px' }} />
                               <span>Upload</span>
@@ -3087,7 +3046,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       </div>
                     </div>
 
-                    {/* 5. Info Box */}
+                    {/* 6. Info Box */}
                     <div
                       className={`doc-upload-box ${infoFile ? 'has-file' : ''} ${dragSlot === 'info' ? 'drag-target' : ''}`}
                       data-drop-slot="info"

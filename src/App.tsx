@@ -82,11 +82,15 @@ export function App() {
   }, [user]);
 
   useEffect(() => {
-    if (!user?.email) return;
-
     const updateCounts = async () => {
       try {
-        const activeEmail = user.email.trim().toLowerCase();
+        const storedPortalEmail = localStorage.getItem('fs_active_client_email')?.trim().toLowerCase();
+        const activeEmail = storedPortalEmail || '';
+        if (!activeEmail) {
+          setPreviewCount(0);
+          setCompletedCount(0);
+          return;
+        }
         const [prevs, comps] = await Promise.all([
           automationApi.getPendingPreviews(activeEmail).catch(() => []),
           automationApi.getCompletedApplications(activeEmail).catch(() => []),

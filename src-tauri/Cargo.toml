@@ -1,6 +1,6 @@
 [package]
 name = "foreigners_studio"
-version = "1.0.43"
+version = "1.0.44"
 description = "Foreigners Studio Enterprise Desktop Application"
 authors = ["Foreigners Studio Team"]
 edition = "2021"
