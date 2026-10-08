@@ -846,9 +846,103 @@ async fn read_local_file(path: String) -> Result<LocalFileInfo, String> {
     Ok(LocalFileInfo { name, data })
 }
 
+fn get_downloads_dir() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(userprofile) = std::env::var("USERPROFILE") {
+            let p = std::path::PathBuf::from(userprofile).join("Downloads");
+            if p.exists() {
+                return Some(p);
+            }
+        }
+        if let Ok(homedrive) = std::env::var("HOMEDRIVE") {
+            if let Ok(homepath) = std::env::var("HOMEPATH") {
+                let p = std::path::PathBuf::from(format!("{}{}", homedrive, homepath)).join("Downloads");
+                if p.exists() {
+                    return Some(p);
+                }
+            }
+        }
+        std::env::var("USERPROFILE").ok().map(|p| std::path::PathBuf::from(p).join("Downloads"))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let p = std::path::PathBuf::from(home).join("Downloads");
+            if p.exists() {
+                return Some(p);
+            }
+        }
+        std::env::var("HOME").ok().map(|p| std::path::PathBuf::from(p).join("Downloads"))
+    }
+}
+
+#[tauri::command]
+async fn save_file_to_downloads(filename: String, bytes: Vec<u8>) -> Result<String, String> {
+    let downloads_dir = get_downloads_dir()
+        .ok_or_else(|| "Could not locate Downloads folder on your system.".to_string())?;
+
+    if !downloads_dir.exists() {
+        let _ = std::fs::create_dir_all(&downloads_dir);
+    }
+
+    let p = std::path::Path::new(&filename);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("document");
+    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("pdf");
+
+    let mut target_path = downloads_dir.join(&filename);
+    let mut counter = 1;
+    while target_path.exists() {
+        target_path = downloads_dir.join(format!("{} ({}).{}", stem, counter, ext));
+        counter += 1;
+    }
+
+    std::fs::write(&target_path, &bytes)
+        .map_err(|e| format!("Failed to save file to {}: {}", target_path.display(), e))?;
+
+    let saved_str = target_path.to_string_lossy().to_string();
+    Ok(saved_str)
+}
+
+#[tauri::command]
+fn open_in_folder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = create_silent_command("explorer.exe")
+            .args(["/select,", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to reveal file: {}", e))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to reveal file: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            let _ = std::process::Command::new("xdg-open")
+                .arg(parent)
+                .spawn()
+                .map_err(|e| format!("Failed to open directory: {}", e))?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            use tauri::Manager;
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -869,6 +963,8 @@ pub fn run() {
             touch_session_activity,
             clear_saved_session,
             read_local_file,
+            save_file_to_downloads,
+            open_in_folder,
             get_platform
         ])
         .run(tauri::generate_context!())

@@ -329,6 +329,99 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [voiceResults, setVoiceResults] = useState<Record<string, { transcription: string; summary: string; success: boolean }>>({});
   const [voiceTextInputs, setVoiceTextInputs] = useState<Record<string, string>>({});
 
+  // Download notice & progress
+  const [downloadNotice, setDownloadNotice] = useState<{
+    path?: string;
+    message: string;
+    type?: 'success' | 'error';
+  } | null>(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  // Sleek centered permission request & notification dialog states
+  const [micPermissionModal, setMicPermissionModal] = useState<{
+    isOpen: boolean;
+    targetFolder: string | null;
+    status: 'prompt' | 'denied';
+    errorMessage?: string;
+  }>({
+    isOpen: false,
+    targetFolder: null,
+    status: 'prompt'
+  });
+
+  const [centeredAlert, setCenteredAlert] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+  } | null>(null);
+
+  const handleDownloadFillablePdf = async (filename: string) => {
+    setIsDownloadingPdf(true);
+    try {
+      const response = await fetch(`/templates/${filename}`);
+      if (!response.ok) {
+        throw new Error(`Failed to load template file: ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+
+      let savedToPath: string | null = null;
+      if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
+        try {
+          savedToPath = await invoke<string>('save_file_to_downloads', {
+            filename,
+            bytes: Array.from(uint8)
+          });
+        } catch (tauriErr) {
+          console.warn('Tauri save command failed, falling back to browser download:', tauriErr);
+        }
+      }
+
+      if (savedToPath) {
+        setDownloadNotice({
+          path: savedToPath,
+          message: `Saved successfully to Downloads (${filename})`,
+          type: 'success'
+        });
+      } else {
+        const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
+        const tempLink = document.createElement('a');
+        tempLink.href = blobUrl;
+        tempLink.download = filename;
+        document.body.appendChild(tempLink);
+        tempLink.click();
+        document.body.removeChild(tempLink);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+
+        setDownloadNotice({
+          message: `Download started for ${filename}`,
+          type: 'success'
+        });
+      }
+    } catch (err: any) {
+      setDownloadNotice({
+        message: `Failed to download PDF: ${err.message || 'Unknown error'}`,
+        type: 'error'
+      });
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
+  const requestMicAndRecord = async (folderName: string) => {
+    const hasGranted = localStorage.getItem('fs_mic_permission_granted') === 'true';
+    if (!hasGranted) {
+      setMicPermissionModal({
+        isOpen: true,
+        targetFolder: folderName,
+        status: 'prompt'
+      });
+      return;
+    }
+    await startVoiceRecording(folderName);
+  };
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerIntervalRef = useRef<any>(null);
@@ -337,6 +430,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const startVoiceRecording = async (folderName: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStorage.setItem('fs_mic_permission_granted', 'true');
       audioChunksRef.current = [];
 
       let mimeType = 'audio/webm;codecs=opus';
@@ -385,6 +479,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }, 1000);
     } catch (err: any) {
       console.error('Microphone error:', err);
+      localStorage.removeItem('fs_mic_permission_granted');
+      setMicPermissionModal({
+        isOpen: true,
+        targetFolder: null,
+        status: 'denied',
+        errorMessage: err.message || 'Microphone access is blocked in your system settings.'
+      });
       setVoiceResults((prev) => ({
         ...prev,
         [folderName]: {
@@ -1168,6 +1269,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       return;
     }
 
+    if (!photoFile || !signFile) {
+      setUploadMessage({
+        text: 'Please upload Photograph and Signature in their designated boxes.',
+        type: 'error',
+      });
+      return;
+    }
+
     if (activeServiceType === 'reissue' && !passportFile) {
       setUploadMessage({
         text: 'Please upload the applicant’s current Passport copy for Reissue application.',
@@ -1470,7 +1579,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       await refreshAllData();
       onSectionChange('submitted');
     } catch (err: any) {
-      alert(`Final submission note: ${sanitizeErrorMessage(err)}. Please retry.`);
+      setCenteredAlert({
+        isOpen: true,
+        title: 'Submission Note',
+        message: `${sanitizeErrorMessage(err)}. Please retry.`,
+      });
       await refreshAllData();
     } finally {
       setSubmittingArn(null);
@@ -2713,9 +2826,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <a
-                        href={`/templates/${activeServiceType === 'fresh' ? 'Fresh_Passport_Info_Form.pdf' : 'Reissue_Passport_Info_Form.pdf'}`}
-                        download={activeServiceType === 'fresh' ? 'Fresh_Passport_Info_Form.pdf' : 'Reissue_Passport_Info_Form.pdf'}
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadFillablePdf(activeServiceType === 'fresh' ? 'Fresh_Passport_Info_Form.pdf' : 'Reissue_Passport_Info_Form.pdf')}
+                        disabled={isDownloadingPdf}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -2727,15 +2841,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           background: '#ffffff',
                           color: '#334155',
                           border: '1px solid #cbd5e1',
-                          textDecoration: 'none',
-                          cursor: 'pointer',
+                          cursor: isDownloadingPdf ? 'not-allowed' : 'pointer',
                           boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
                         }}
-                        title="Download official fillable AcroForm PDF to print or fill digitally"
+                        title="Download official fillable AcroForm PDF directly to your PC"
                       >
-                        <Download style={{ width: '13px', height: '13px', color: '#2563eb' }} />
-                        <span>Download Fillable PDF</span>
-                      </a>
+                        {isDownloadingPdf ? (
+                          <RefreshCw style={{ width: '13px', height: '13px', color: '#2563eb' }} className="animate-spin" />
+                        ) : (
+                          <Download style={{ width: '13px', height: '13px', color: '#2563eb' }} />
+                        )}
+                        <span>{isDownloadingPdf ? 'Downloading...' : 'Download Fillable PDF'}</span>
+                      </button>
 
                       <button
                         type="button"
@@ -3025,7 +3142,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </div>
                         ) : (
                           <div className="doc-box-empty">
-                            <span className="doc-box-badge">Permesso / Permesso di Soggiorno</span>
+                            <span className="doc-box-badge">Permesso di Soggiorno</span>
                             <div className="doc-box-action-hint">
                               <Upload style={{ width: '12px', height: '12px' }} />
                               <span>Upload</span>
@@ -3091,7 +3208,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </div>
                         ) : (
                           <div className="doc-box-empty">
-                            <span className="doc-box-badge">Residenza / Certificato di Residenza / Ospiti</span>
+                            <span className="doc-box-badge">Residenza / CIE / Ospiti</span>
                             <div className="doc-box-action-hint">
                               <Upload style={{ width: '12px', height: '12px' }} />
                               <span>Upload</span>
@@ -3473,7 +3590,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           <button
                             type="button"
                             disabled={voiceProcessingFolder === folderKey}
-                            onClick={() => startVoiceRecording(folderKey)}
+                            onClick={() => requestMicAndRecord(folderKey)}
                             className="voice-record-btn"
                             title="Record voice note for Smart Voice Agent"
                           >
@@ -4002,6 +4119,274 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         onSave={(saved) => setInAppInfoData(saved)}
         onClose={() => setShowInAppInfoModal(false)}
       />
+
+      {/* Sleek Middle-Centered Microphone Permission Dialog */}
+      {micPermissionModal.isOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(8px)',
+          padding: '20px'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '460px',
+            backgroundColor: '#ffffff',
+            borderRadius: '20px',
+            padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              backgroundColor: micPermissionModal.status === 'denied' ? '#fef2f2' : '#eff6ff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '18px',
+              border: `2px solid ${micPermissionModal.status === 'denied' ? '#fecaca' : '#bfdbfe'}`
+            }}>
+              {micPermissionModal.status === 'denied' ? (
+                <AlertCircle style={{ width: '32px', height: '32px', color: '#ef4444' }} />
+              ) : (
+                <Mic style={{ width: '32px', height: '32px', color: '#2563eb' }} />
+              )}
+            </div>
+
+            <h3 style={{ fontSize: '19px', fontWeight: 700, color: '#0f172a', margin: '0 0 10px 0' }}>
+              {micPermissionModal.status === 'denied' ? 'Microphone Permission Blocked' : 'Allow Microphone Access'}
+            </h3>
+
+            <p style={{ fontSize: '13.5px', color: '#475569', lineHeight: 1.5, margin: '0 0 24px 0' }}>
+              {micPermissionModal.status === 'denied'
+                ? (micPermissionModal.errorMessage || 'Microphone access is blocked in your system settings. Please grant microphone permission to Foreigners Studio in Windows Privacy Settings to use Voice Agent.')
+                : 'Foreigners Studio AI Voice Agent requires microphone permission to record voice notes, review applicant details, and assist you with hands-free instructions.'
+              }
+            </p>
+
+            {micPermissionModal.status === 'denied' ? (
+              <button
+                type="button"
+                onClick={() => setMicPermissionModal({ isOpen: false, targetFolder: null, status: 'prompt' })}
+                style={{
+                  width: '100%',
+                  padding: '11px 18px',
+                  borderRadius: '12px',
+                  backgroundColor: '#0f172a',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontSize: '13.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Dismiss
+              </button>
+            ) : (
+              <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                <button
+                  type="button"
+                  onClick={() => setMicPermissionModal({ isOpen: false, targetFolder: null, status: 'prompt' })}
+                  style={{
+                    flex: 1,
+                    padding: '11px 16px',
+                    borderRadius: '12px',
+                    backgroundColor: '#f1f5f9',
+                    color: '#475569',
+                    border: 'none',
+                    fontSize: '13.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const target = micPermissionModal.targetFolder;
+                    try {
+                      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                      stream.getTracks().forEach(t => t.stop());
+                      localStorage.setItem('fs_mic_permission_granted', 'true');
+                      setMicPermissionModal({ isOpen: false, targetFolder: null, status: 'prompt' });
+                      if (target) {
+                        startVoiceRecording(target);
+                      }
+                    } catch (err: any) {
+                      console.error('Microphone access denied:', err);
+                      setMicPermissionModal({
+                        isOpen: true,
+                        targetFolder: null,
+                        status: 'denied',
+                        errorMessage: err.message || 'Microphone permission was denied.'
+                      });
+                    }
+                  }}
+                  style={{
+                    flex: 2,
+                    padding: '11px 16px',
+                    borderRadius: '12px',
+                    backgroundColor: '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontSize: '13.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
+                  }}
+                >
+                  Grant Microphone Access
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Sleek Middle-Centered Notice / Alert Dialog */}
+      {centeredAlert && centeredAlert.isOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 10001,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(8px)',
+          padding: '20px'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '440px',
+            backgroundColor: '#ffffff',
+            borderRadius: '20px',
+            padding: '26px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              backgroundColor: '#eff6ff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '16px',
+              border: '2px solid #bfdbfe'
+            }}>
+              <AlertCircle style={{ width: '28px', height: '28px', color: '#2563eb' }} />
+            </div>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', margin: '0 0 8px 0' }}>
+              {centeredAlert.title}
+            </h3>
+            <p style={{ fontSize: '13.5px', color: '#475569', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+              {centeredAlert.message}
+            </p>
+            <button
+              type="button"
+              onClick={() => setCenteredAlert(null)}
+              style={{
+                width: '100%',
+                padding: '11px 18px',
+                borderRadius: '12px',
+                backgroundColor: '#0f172a',
+                color: '#ffffff',
+                border: 'none',
+                fontSize: '13.5px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Centered Download Confirmation Toast */}
+      {downloadNotice && (
+        <div style={{
+          position: 'fixed',
+          bottom: '28px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          background: '#0f172a',
+          color: '#ffffff',
+          padding: '12px 20px',
+          borderRadius: '12px',
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          fontSize: '13px',
+          fontWeight: 500,
+          border: '1px solid #334155'
+        }}>
+          {downloadNotice.type === 'error' ? (
+            <AlertCircle style={{ width: '18px', height: '18px', color: '#ef4444', flexShrink: 0 }} />
+          ) : (
+            <CheckCircle2 style={{ width: '18px', height: '18px', color: '#10b981', flexShrink: 0 }} />
+          )}
+          <span>{downloadNotice.message}</span>
+          {downloadNotice.path && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await invoke('open_in_folder', { path: downloadNotice.path });
+                } catch (e) {
+                  console.error(e);
+                }
+              }}
+              style={{
+                background: '#2563eb',
+                color: '#ffffff',
+                border: 'none',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                marginLeft: '4px'
+              }}
+            >
+              Show in Folder
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setDownloadNotice(null)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              padding: '2px',
+              display: 'flex',
+              alignItems: 'center'
+            }}
+          >
+            <X style={{ width: '14px', height: '14px' }} />
+          </button>
+        </div>
+      )}
     </div>
   );
 };
