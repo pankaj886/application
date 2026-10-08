@@ -102,7 +102,16 @@ export function App() {
 
     updateCounts();
     const interval = setInterval(updateCounts, 4000);
-    return () => clearInterval(interval);
+    const handleEmailChanged = () => {
+      updateCounts();
+    };
+    window.addEventListener('fs_active_email_changed', handleEmailChanged);
+    window.addEventListener('storage', handleEmailChanged);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('fs_active_email_changed', handleEmailChanged);
+      window.removeEventListener('storage', handleEmailChanged);
+    };
   }, [user?.email]);
 
   useEffect(() => {
@@ -184,6 +193,11 @@ export function App() {
   const handleConfirmLogout = () => {
     setShowLogoutConfirm(false);
     localStorage.removeItem('fs_user_session');
+    localStorage.removeItem('fs_active_client_email');
+    localStorage.removeItem('fs_portal_password');
+    try {
+      window.dispatchEvent(new Event('fs_active_email_changed'));
+    } catch (_) {}
     invoke('clear_saved_session').catch(() => {});
     setUser(null);
     setActiveTab('services');

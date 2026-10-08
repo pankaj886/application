@@ -413,7 +413,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setVoiceProcessingFolder(folderName);
       const text = textPrompt !== undefined ? textPrompt : (voiceTextInputs[folderName] || '');
       const lowText = text.toLowerCase();
-      const email = (queryAccountEmail || activeClientEmail || user?.email || '').trim().toLowerCase();
+      const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
 
       const detectedActionLabel = lowText.includes('sign') || lowText.includes('firma')
         ? 'Re-cropping signature & isolating strokes on white background...'
@@ -823,20 +823,38 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       )) {
         inf = f;
       } else {
-        if (!pass && lower.endsWith('.pdf')) {
-          pass = f;
-        } else if (!p && lower.match(/\.(jpg|jpeg|png|webp)$/)) {
-          p = f;
-        } else if (!ident && lower.endsWith('.pdf')) {
-          ident = f;
-        } else if (!res && lower.endsWith('.pdf')) {
-          res = f;
-        } else if (!s && lower.match(/\.(jpg|jpeg|png)$/)) {
-          s = f;
-        } else if (!inf) {
-          inf = f;
+        if (activeServiceType === 'fresh') {
+          if (!ident && lower.endsWith('.pdf')) {
+            ident = f;
+          } else if (!res && lower.endsWith('.pdf')) {
+            res = f;
+          } else if (!p && lower.match(/\.(jpg|jpeg|png|webp)$/)) {
+            p = f;
+          } else if (!s && lower.match(/\.(jpg|jpeg|png)$/)) {
+            s = f;
+          } else if (!inf) {
+            inf = f;
+          } else if (!pass && lower.endsWith('.pdf')) {
+            pass = f;
+          } else {
+            extras.push(f);
+          }
         } else {
-          extras.push(f);
+          if (!pass && lower.endsWith('.pdf')) {
+            pass = f;
+          } else if (!p && lower.match(/\.(jpg|jpeg|png|webp)$/)) {
+            p = f;
+          } else if (!ident && lower.endsWith('.pdf')) {
+            ident = f;
+          } else if (!res && lower.endsWith('.pdf')) {
+            res = f;
+          } else if (!s && lower.match(/\.(jpg|jpeg|png)$/)) {
+            s = f;
+          } else if (!inf) {
+            inf = f;
+          } else {
+            extras.push(f);
+          }
         }
       }
     }
@@ -908,11 +926,48 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const clearDocumentSlots = () => {
+    filesStateRef.current = {
+      photo: null,
+      sign: null,
+      passport: null,
+      identity: null,
+      residence: null,
+      info: null,
+      selected: [],
+    };
+    setPhotoFile(null);
+    setSignFile(null);
+    setPassportFile(null);
+    setIdentityFile(null);
+    setResidenceFile(null);
+    setInfoFile(null);
+    setSelectedFiles([]);
+    setInAppInfoData({});
+    if (photoInputRef.current) photoInputRef.current.value = '';
+    if (signInputRef.current) signInputRef.current.value = '';
+    if (passportInputRef.current) passportInputRef.current.value = '';
+    if (identityInputRef.current) identityInputRef.current.value = '';
+    if (residenceInputRef.current) residenceInputRef.current.value = '';
+    if (infoInputRef.current) infoInputRef.current.value = '';
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setSubmissionTracker(null);
+    setUploadMessage(null);
+  };
+
   const handleEmailBlur = () => {
     const trimmed = portalEmail.trim().toUpperCase();
-    if (trimmed) {
+    if (trimmed !== activeClientEmail) {
+      clearDocumentSlots();
       setActiveClientEmail(trimmed);
-      localStorage.setItem('fs_active_client_email', trimmed);
+      if (trimmed) {
+        localStorage.setItem('fs_active_client_email', trimmed);
+      } else {
+        localStorage.removeItem('fs_active_client_email');
+      }
+      try {
+        window.dispatchEvent(new Event('fs_active_email_changed'));
+      } catch (_) {}
       refreshAllData(trimmed.toLowerCase());
     }
   };
@@ -1001,7 +1056,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             if (loadedFiles.length > 0) {
               if (loadedFiles.length > 1) {
                 autoCategorizeFiles(loadedFiles);
-              } else if (targetSlot && ['photo', 'sign', 'passport', 'residence', 'info'].includes(targetSlot)) {
+              } else if (targetSlot && ['photo', 'sign', 'passport', 'identity', 'residence', 'info'].includes(targetSlot)) {
                 updateSlotFile(targetSlot as any, loadedFiles[0]);
               } else {
                 autoCategorizeFiles(loadedFiles);
@@ -1310,7 +1365,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
 
       await automationApi.submitCorrection(
-        (queryAccountEmail || activeClientEmail || user?.email || '').trim().toLowerCase(),
+        (queryAccountEmail || activeClientEmail || '').trim().toLowerCase(),
         correctionApp.folder_name,
         finalData
       );
@@ -1344,7 +1399,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (!targetFolder) return;
     try {
       setIsDismissing(true);
-      const email = (queryAccountEmail || activeClientEmail || user?.email || '').trim().toLowerCase();
+      const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
       await automationApi.dismissApplication(email, targetFolder);
       setApplications(prev => prev.filter(a => a.folder_name !== targetFolder));
       setDismissedCorrectionFolder(null);
@@ -1370,7 +1425,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const executeCancelApplication = async (folderName: string) => {
     try {
       setCancellingFolder(folderName);
-      const email = (queryAccountEmail || activeClientEmail || user?.email || '').trim().toLowerCase();
+      const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
       await automationApi.dismissApplication(email, folderName);
 
       setPreviews(prev => prev.filter(p => p.folder_name !== folderName));
@@ -1410,7 +1465,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (voiceProcessingFolder) return;
     try {
       setSubmittingArn(arn);
-      const email = (queryAccountEmail || activeClientEmail || user?.email || '').trim().toLowerCase();
+      const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
       await automationApi.confirmSubmission(email, folderName, arn);
       await refreshAllData();
       onSectionChange('submitted');
@@ -3134,7 +3189,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       onChange={handleFileSelect}
                     />
                     <Upload style={{ width: '14px', height: '14px', color: '#3b82f6' }} />
-                    <span>Or drag all 5 documents together here to auto-assign</span>
+                    <span>Or drag all 6 documents together here to auto-assign</span>
                   </div>
 
                   {selectedFiles.length > 0 && (
