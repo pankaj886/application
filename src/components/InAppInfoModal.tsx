@@ -108,10 +108,10 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#0f172a' }}>
-                {isFresh ? 'Fresh Passport Supplementary Info' : 'Reissue Passport Supplementary Info'}
+                {isFresh ? 'Fresh Passport Mandatory Info' : 'Reissue Passport Mandatory Info'}
               </h3>
               <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b' }}>
-                Only enter supplementary details not present on uploaded documents. All fields auto-merge into application.
+                Only enter mandatory details not present on uploaded documents. All fields auto-merge into application.
               </p>
             </div>
           </div>

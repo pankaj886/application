@@ -200,24 +200,69 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
       const targetFolder = submissionTracker?.folderName;
 
-      const activeProcessingApp = targetFolder
-        ? apps.find(a => a.folder_name === targetFolder && ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status))
+      // 1. Find active processing app: match by folder_name, original_folder, or applicant_name
+      let activeProcessingApp = targetFolder
+        ? apps.find(a =>
+            ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status) &&
+            (a.folder_name === targetFolder ||
+             (a as any).original_folder === targetFolder ||
+             (submissionTracker?.applicantName && a.applicant_name && a.applicant_name.toLowerCase() === submissionTracker.applicantName.toLowerCase()))
+          )
         : undefined;
+
+      // If tracker is active but direct targetFolder didn't match (e.g. folder renamed during extraction), check if an app is processing
+      if (!activeProcessingApp && submissionTracker?.active && !submissionTracker.ready) {
+        activeProcessingApp = apps.find(a => ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status));
+      }
 
       const currentPreviewFolders = new Set((prevs || []).map(p => p.folder_name));
+      let newlyReadyPreview: PreviewItem | undefined;
+      for (const p of (prevs || [])) {
+        if (!prevPreviewFoldersRef.current.has(p.folder_name)) {
+          newlyReadyPreview = p;
+          break;
+        }
+      }
       prevPreviewFoldersRef.current = currentPreviewFolders;
 
-      // Match the preview specifically for the active submission tracker folder
-      const matchingPreview = targetFolder
-        ? (prevs || []).find(p => p.folder_name === targetFolder)
+      // 2. Match the preview specifically for the active submission tracker folder
+      let matchingPreview = targetFolder
+        ? (prevs || []).find(p =>
+            p.folder_name === targetFolder ||
+            (p as any).original_folder === targetFolder ||
+            (submissionTracker?.applicantName && p.applicant_name && p.applicant_name.toLowerCase() === submissionTracker.applicantName.toLowerCase())
+          )
         : undefined;
 
-      const matchingErrorApp = targetFolder
-        ? apps.find(a => a.folder_name === targetFolder && a.status === 'ERROR')
+      // If tracker is active and waiting for preview, and server finished processing (activeProcessingApp is undefined), match the ready preview!
+      if (!matchingPreview && submissionTracker?.active && !submissionTracker.ready) {
+        if (newlyReadyPreview) {
+          matchingPreview = newlyReadyPreview;
+        } else if (!activeProcessingApp && (prevs || []).length > 0) {
+          matchingPreview = prevs[0];
+        }
+      }
+
+      let matchingErrorApp = targetFolder
+        ? apps.find(a =>
+            a.status === 'ERROR' &&
+            (a.folder_name === targetFolder ||
+             (a as any).original_folder === targetFolder ||
+             (submissionTracker?.applicantName && a.applicant_name && a.applicant_name.toLowerCase() === submissionTracker.applicantName.toLowerCase()))
+          )
         : undefined;
+
+      if (!matchingErrorApp && submissionTracker?.active && !submissionTracker.ready && !activeProcessingApp && !matchingPreview) {
+        matchingErrorApp = apps.find(a => a.status === 'ERROR');
+      }
 
       const matchingNeedsCorrection = targetFolder
-        ? apps.some(a => a.folder_name === targetFolder && a.status === 'NEEDS_CORRECTION')
+        ? apps.some(a =>
+            a.status === 'NEEDS_CORRECTION' &&
+            (a.folder_name === targetFolder ||
+             (a as any).original_folder === targetFolder ||
+             (submissionTracker?.applicantName && a.applicant_name && a.applicant_name.toLowerCase() === submissionTracker.applicantName.toLowerCase()))
+          )
         : false;
 
       if (activeProcessingApp) {
@@ -2873,7 +2918,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <FileText style={{ width: '16px', height: '16px', color: activeServiceType === 'fresh' ? '#059669' : '#2563eb' }} />
                       <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>
-                        Supplementary Info Form ({activeServiceType === 'fresh' ? 'Fresh / Minor Form' : 'Reissue Form'}):
+                        Mandatory Info Form ({activeServiceType === 'fresh' ? 'Fresh / Minor Form' : 'Reissue Form'}):
                       </span>
                     </div>
 
@@ -2923,13 +2968,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           cursor: 'pointer',
                           boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                         }}
-                        title="Fill the supplementary details directly inside this application"
+                        title="Fill the additional details directly inside this application"
                       >
                         <Edit3 style={{ width: '13px', height: '13px' }} />
                         <span>
                           {Object.keys(inAppInfoData).length > 0
                             ? `✓ Info Saved (${Object.keys(inAppInfoData).length} fields)`
-                            : 'Fill Info in App'}
+                            : 'Fill Additional Info'}
                         </span>
                       </button>
                     </div>
@@ -3303,7 +3348,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       <div className="doc-box-header">
                         <FileText className="doc-box-icon" />
                         <span className="doc-box-title">
-                          {activeServiceType === 'fresh' ? 'Fresh Info Form' : 'Reissue Info Form'}
+                          Additional Documents
                         </span>
                       </div>
                       <div className="doc-box-content">
