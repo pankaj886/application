@@ -540,7 +540,7 @@ class AutomationApiService {
     return await res.json();
   }
 
-  public async aiEditPhoto(
+  public async editPhoto(
     clientEmail: string,
     folderName: string,
     instruction: string,
@@ -549,7 +549,7 @@ class AutomationApiService {
     const uKey = (userEmail || '').trim().toLowerCase();
     const q = uKey ? `?user_email=${encodeURIComponent(uKey)}` : '';
     const res = await this.fetchWithAutoRetry(
-      `/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/ai-edit-photo${q}`,
+      `/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/edit-photo${q}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -563,6 +563,15 @@ class AutomationApiService {
     }
 
     return await res.json();
+  }
+
+  public async aiEditPhoto(
+    clientEmail: string,
+    folderName: string,
+    instruction: string,
+    userEmail?: string
+  ): Promise<{ success: boolean; message: string; photo_preview_url: string; photo_size_kb: number }> {
+    return this.editPhoto(clientEmail, folderName, instruction, userEmail);
   }
 
   public async reuploadFailedPortalFile(
@@ -707,6 +716,43 @@ class AutomationApiService {
       };
     }
 
+    return await res.json();
+  }
+
+  public async classifyDocuments(
+    files: File[],
+    serviceType: string = 'reissue',
+    applicantData?: Record<string, any>,
+    notes?: string
+  ): Promise<{
+    success: boolean;
+    service_type: string;
+    classifications: Array<{
+      filename: string;
+      role: string;
+      recommended_name: string;
+      target_slot: 'photo' | 'sign' | 'passport' | 'identity' | 'residence' | 'info' | 'extra';
+      confidence: number;
+      reasoning: string;
+      size_kb?: number;
+      page_count?: number;
+      is_pdf?: boolean;
+      is_image?: boolean;
+    }>;
+  }> {
+    const fd = new FormData();
+    files.forEach(f => fd.append('files', f));
+    fd.append('service_type', serviceType);
+    if (applicantData) fd.append('applicant_data', JSON.stringify(applicantData));
+    if (notes) fd.append('notes', notes);
+
+    const res = await this.fetchWithAutoRetry('/api/classify-documents', {
+      method: 'POST',
+      body: fd,
+    });
+    if (!res.ok) {
+      return { success: false, service_type: serviceType, classifications: [] };
+    }
     return await res.json();
   }
 }

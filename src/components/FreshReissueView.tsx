@@ -992,6 +992,45 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   };
 
+  const MAX_TOTAL_FILES = 10;
+
+  const countTotalFiles = (
+    p: File | null = filesStateRef.current.photo,
+    s: File | null = filesStateRef.current.sign,
+    pass: File | null = filesStateRef.current.passport,
+    ident: File | null = filesStateRef.current.identity,
+    res: File | null = filesStateRef.current.residence,
+    inf: File | null = filesStateRef.current.info,
+    selected: File[] = filesStateRef.current.selected || []
+  ) => {
+    return [p, s, pass, ident, res, inf].filter(Boolean).length + selected.length;
+  };
+
+  const compressAndStandardizeDocument = async (file: File): Promise<File> => {
+    const maxPortalBytes = 870.4 * 1024;
+    const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+    const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|bmp)$/i.test(file.name);
+    if ((isPdf && file.size > maxPortalBytes) || isImage) {
+      try {
+        const res = await automationApi.validateDocumentWithPortal(file);
+        if (res.valid && res.processed_doc_base64) {
+          const byteString = atob(res.processed_doc_base64);
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+          }
+          const baseName = file.name.replace(/\.[^/.]+$/, '');
+          const newName = `${baseName}.pdf`;
+          return new File([ab], newName, { type: 'application/pdf' });
+        }
+      } catch (err) {
+        console.warn('[DOC STANDARDIZE WARNING]', err);
+      }
+    }
+    return file;
+  };
+
   const triggerPortalSignatureValidation = async (file: File | null) => {
     const reqSeq = ++signValidationSeqRef.current;
     if (!file) return;
@@ -1032,6 +1071,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       if (slot === 'info' && infoInputRef.current) infoInputRef.current.value = '';
       return;
     }
+    if (file && !filesStateRef.current[slot] && countTotalFiles() >= MAX_TOTAL_FILES) {
+      setUploadMessage({
+        text: 'Maximum 10 files can be uploaded.',
+        type: 'error',
+      });
+      return;
+    }
     filesStateRef.current[slot] = file;
     if (slot === 'photo') {
       setPhotoFile(file);
@@ -1044,15 +1090,47 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     } else if (slot === 'passport') {
       setPassportFile(file);
       if (!file && passportInputRef.current) passportInputRef.current.value = '';
+      if (file) {
+        compressAndStandardizeDocument(file).then(comp => {
+          if (comp !== file) {
+            filesStateRef.current.passport = comp;
+            setPassportFile(comp);
+          }
+        });
+      }
     } else if (slot === 'identity') {
       setIdentityFile(file);
       if (!file && identityInputRef.current) identityInputRef.current.value = '';
+      if (file) {
+        compressAndStandardizeDocument(file).then(comp => {
+          if (comp !== file) {
+            filesStateRef.current.identity = comp;
+            setIdentityFile(comp);
+          }
+        });
+      }
     } else if (slot === 'residence') {
       setResidenceFile(file);
       if (!file && residenceInputRef.current) residenceInputRef.current.value = '';
+      if (file) {
+        compressAndStandardizeDocument(file).then(comp => {
+          if (comp !== file) {
+            filesStateRef.current.residence = comp;
+            setResidenceFile(comp);
+          }
+        });
+      }
     } else if (slot === 'info') {
       setInfoFile(file);
       if (!file && infoInputRef.current) infoInputRef.current.value = '';
+      if (file && (file.name.toLowerCase().endsWith('.pdf') || file.type.startsWith('image/'))) {
+        compressAndStandardizeDocument(file).then(comp => {
+          if (comp !== file) {
+            filesStateRef.current.info = comp;
+            setInfoFile(comp);
+          }
+        });
+      }
     }
   };
 
@@ -1071,7 +1149,24 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       });
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
-    const validIncoming = incoming.filter(f => f.size <= MAX_FILE_SIZE_BYTES);
+    const currentTotal = countTotalFiles();
+    if (currentTotal >= MAX_TOTAL_FILES) {
+      setUploadMessage({
+        text: 'Maximum 10 files can be uploaded.',
+        type: 'error',
+      });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    const remainingSlots = MAX_TOTAL_FILES - currentTotal;
+    let validIncoming = incoming.filter(f => f.size <= MAX_FILE_SIZE_BYTES);
+    if (validIncoming.length > remainingSlots) {
+      setUploadMessage({
+        text: `Maximum 10 files can be uploaded. Accepting first ${remainingSlots} files.`,
+        type: 'error',
+      });
+      validIncoming = validIncoming.slice(0, remainingSlots);
+    }
     if (validIncoming.length === 0) return;
 
     const current = filesStateRef.current;
@@ -1177,31 +1272,131 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (s !== current.sign) {
       filesStateRef.current.sign = s;
       setSignFile(s);
+      if (s) triggerPortalSignatureValidation(s);
     }
     if (pass !== current.passport) {
       filesStateRef.current.passport = pass;
       setPassportFile(pass);
+      if (pass) {
+        compressAndStandardizeDocument(pass).then(comp => {
+          if (comp !== pass) {
+            filesStateRef.current.passport = comp;
+            setPassportFile(comp);
+          }
+        });
+      }
     }
     if (ident !== current.identity) {
       filesStateRef.current.identity = ident;
       setIdentityFile(ident);
+      if (ident) {
+        compressAndStandardizeDocument(ident).then(comp => {
+          if (comp !== ident) {
+            filesStateRef.current.identity = comp;
+            setIdentityFile(comp);
+          }
+        });
+      }
     }
     if (res !== current.residence) {
       filesStateRef.current.residence = res;
       setResidenceFile(res);
+      if (res) {
+        compressAndStandardizeDocument(res).then(comp => {
+          if (comp !== res) {
+            filesStateRef.current.residence = comp;
+            setResidenceFile(comp);
+          }
+        });
+      }
     }
     if (inf !== current.info) {
       filesStateRef.current.info = inf;
       setInfoFile(inf);
+      if (inf && (inf.name.toLowerCase().endsWith('.pdf') || inf.type.startsWith('image/'))) {
+        compressAndStandardizeDocument(inf).then(comp => {
+          if (comp !== inf) {
+            filesStateRef.current.info = comp;
+            setInfoFile(comp);
+          }
+        });
+      }
     }
 
     if (extras.length > 0) {
       setSelectedFiles(prev => {
         const existingKeys = new Set(prev.map(item => `${item.name}_${item.size}`));
         const toAdd = extras.filter(item => !existingKeys.has(`${item.name}_${item.size}`));
-        return [...prev, ...toAdd];
+        const currentSlotCount = [p, s, pass, ident, res, inf].filter(Boolean).length;
+        const availableForExtras = Math.max(0, MAX_TOTAL_FILES - currentSlotCount);
+        const capped = [...prev, ...toAdd].slice(0, availableForExtras);
+        filesStateRef.current.selected = capped;
+        toAdd.forEach(extraFile => {
+          compressAndStandardizeDocument(extraFile).then(compressed => {
+            if (compressed !== extraFile) {
+              setSelectedFiles(currList => {
+                const updated = currList.map(item => (item === extraFile || item.name === extraFile.name ? compressed : item));
+                filesStateRef.current.selected = updated;
+                return updated;
+              });
+            }
+          });
+        });
+        return capped;
       });
     }
+
+    // Intelligently refine slots and document roles using Vertex & learned semantic knowledge
+    automationApi.classifyDocuments(validIncoming, activeServiceType)
+      .then(res => {
+        if (!res || !res.success || !res.classifications || res.classifications.length === 0) return;
+        res.classifications.forEach(item => {
+          const matchedFile = validIncoming.find(f => f.name === item.filename);
+          if (!matchedFile) return;
+
+          const recName = item.recommended_name || matchedFile.name;
+          const renamedFile = (recName !== matchedFile.name)
+            ? new File([matchedFile], recName, { type: matchedFile.type })
+            : matchedFile;
+
+          if (item.target_slot === 'photo' && !filesStateRef.current.photo) {
+            filesStateRef.current.photo = renamedFile;
+            setPhotoFile(renamedFile);
+            triggerPortalPhotoValidation(renamedFile);
+          } else if (item.target_slot === 'sign' && !filesStateRef.current.sign) {
+            filesStateRef.current.sign = renamedFile;
+            setSignFile(renamedFile);
+            triggerPortalSignatureValidation(renamedFile);
+          } else if (item.target_slot === 'passport' && !filesStateRef.current.passport) {
+            filesStateRef.current.passport = renamedFile;
+            setPassportFile(renamedFile);
+            compressAndStandardizeDocument(renamedFile).then(comp => {
+              filesStateRef.current.passport = comp;
+              setPassportFile(comp);
+            });
+          } else if (item.target_slot === 'identity' && !filesStateRef.current.identity) {
+            filesStateRef.current.identity = renamedFile;
+            setIdentityFile(renamedFile);
+            compressAndStandardizeDocument(renamedFile).then(comp => {
+              filesStateRef.current.identity = comp;
+              setIdentityFile(comp);
+            });
+          } else if (item.target_slot === 'residence' && !filesStateRef.current.residence) {
+            filesStateRef.current.residence = renamedFile;
+            setResidenceFile(renamedFile);
+            compressAndStandardizeDocument(renamedFile).then(comp => {
+              filesStateRef.current.residence = comp;
+              setResidenceFile(comp);
+            });
+          } else if (item.target_slot === 'info' && !filesStateRef.current.info) {
+            filesStateRef.current.info = renamedFile;
+            setInfoFile(renamedFile);
+          }
+        });
+      })
+      .catch(err => {
+        console.warn('[SEMANTIC ENGINE NOTICE]', err);
+      });
   };
 
   const handleFileDrop = (e: React.DragEvent) => {
@@ -1234,7 +1429,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   };
 
   const handleRemoveFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    setSelectedFiles(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      filesStateRef.current.selected = updated;
+      return updated;
+    });
   };
 
   const clearDocumentSlots = () => {
@@ -1475,6 +1674,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       infoFile,
       ...selectedFiles,
     ].filter((f): f is File => Boolean(f));
+
+    if (allCandidateFiles.length > MAX_TOTAL_FILES) {
+      const msg = `Maximum 10 files can be uploaded (currently ${allCandidateFiles.length} files selected).`;
+      setUploadMessage({
+        text: msg,
+        type: 'error',
+      });
+      return;
+    }
 
     const oversized = allCandidateFiles.find(f => f.size > MAX_FILE_SIZE_BYTES);
     if (oversized) {
