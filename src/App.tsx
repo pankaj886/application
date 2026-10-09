@@ -84,7 +84,14 @@ export function App() {
   useEffect(() => {
     const updateCounts = async () => {
       try {
-        const storedPortalEmail = localStorage.getItem('fs_active_client_email')?.trim().toLowerCase();
+        const gEmail = user?.email?.trim().toLowerCase() || '';
+        if (!gEmail) {
+          setPreviewCount(0);
+          setCompletedCount(0);
+          return;
+        }
+        const scopedKey = `fs_active_client_email_${gEmail}`;
+        const storedPortalEmail = localStorage.getItem(scopedKey)?.trim().toLowerCase();
         const activeEmail = storedPortalEmail || '';
         if (!activeEmail) {
           setPreviewCount(0);
@@ -92,8 +99,8 @@ export function App() {
           return;
         }
         const [prevs, comps] = await Promise.all([
-          automationApi.getPendingPreviews(activeEmail).catch(() => []),
-          automationApi.getCompletedApplications(activeEmail).catch(() => []),
+          automationApi.getPendingPreviews(activeEmail, gEmail).catch(() => []),
+          automationApi.getCompletedApplications(activeEmail, gEmail).catch(() => []),
         ]);
         setPreviewCount(prevs.length);
         setCompletedCount(comps.length);
@@ -192,6 +199,11 @@ export function App() {
 
   const handleConfirmLogout = () => {
     setShowLogoutConfirm(false);
+    const gEmail = user?.email?.trim().toLowerCase() || '';
+    if (gEmail) {
+      localStorage.removeItem(`fs_active_client_email_${gEmail}`);
+      localStorage.removeItem(`fs_portal_password_${gEmail}`);
+    }
     localStorage.removeItem('fs_user_session');
     localStorage.removeItem('fs_active_client_email');
     localStorage.removeItem('fs_portal_password');

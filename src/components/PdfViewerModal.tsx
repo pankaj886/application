@@ -64,14 +64,26 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
 
   if (!isOpen) return null;
 
-  const downloadName = title.toLowerCase().endsWith('.pdf') ? title : `${title}.pdf`;
+  const rawName = title.toLowerCase().endsWith('.pdf') ? title : `${title}.pdf`;
+  const downloadName = rawName.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/\s+/g, ' ').trim();
   const effectiveUrl = blobUrl || pdfUrl;
 
   const handleDownload = async () => {
     setIsDownloading(true);
+    setDownloadFeedback(null);
     try {
-      const res = await fetch(effectiveUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      let res: Response | null = null;
+      if (blobUrl && blobUrl.startsWith('blob:')) {
+        try {
+          const r = await fetch(blobUrl);
+          if (r.ok) res = r;
+        } catch (_) {}
+      }
+      if (!res) {
+        const r = await fetch(pdfUrl);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        res = r;
+      }
       const arrayBuffer = await res.arrayBuffer();
       const uint8 = new Uint8Array(arrayBuffer);
 
@@ -121,7 +133,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
             <h3 className="pdf-modal-title">{title}</h3>
           </div>
           <div className="pdf-modal-header-actions">
-            {downloadFeedback ? (
+            {downloadFeedback && downloadFeedback.message !== 'Download failed' ? (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#059669', fontWeight: 600 }}>
                 <CheckCircle2 style={{ width: '14px', height: '14px' }} />
                 <span>{downloadFeedback.message}</span>
@@ -151,22 +163,30 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
                 )}
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={handleDownload}
-                disabled={isDownloading}
-                className="pdf-modal-action-btn"
-                title="Download PDF to your PC"
-                aria-label="Download PDF"
-                style={{ cursor: isDownloading ? 'not-allowed' : 'pointer' }}
-              >
-                {isDownloading ? (
-                  <RefreshCw className="action-icon animate-spin" />
-                ) : (
-                  <Download className="action-icon" />
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                {downloadFeedback?.message === 'Download failed' && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>
+                    <AlertCircle style={{ width: '14px', height: '14px' }} />
+                    Download failed
+                  </span>
                 )}
-                <span>{isDownloading ? 'Saving...' : 'Download'}</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={handleDownload}
+                  disabled={isDownloading}
+                  className="pdf-modal-action-btn"
+                  title="Download PDF to your PC"
+                  aria-label="Download PDF"
+                  style={{ cursor: isDownloading ? 'not-allowed' : 'pointer' }}
+                >
+                  {isDownloading ? (
+                    <RefreshCw className="action-icon animate-spin" />
+                  ) : (
+                    <Download className="action-icon" />
+                  )}
+                  <span>{isDownloading ? 'Saving...' : 'Download'}</span>
+                </button>
+              </div>
             )}
             <a
               href={pdfUrl}

@@ -886,11 +886,26 @@ async fn save_file_to_downloads(filename: String, bytes: Vec<u8>) -> Result<Stri
         let _ = std::fs::create_dir_all(&downloads_dir);
     }
 
-    let p = std::path::Path::new(&filename);
+    let sanitized: String = filename
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' | '\0'..='\x1f' => '_',
+            _ => c,
+        })
+        .collect::<String>()
+        .trim()
+        .to_string();
+    let safe_name = if sanitized.is_empty() {
+        "document.pdf".to_string()
+    } else {
+        sanitized
+    };
+
+    let p = std::path::Path::new(&safe_name);
     let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("document");
     let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("pdf");
 
-    let mut target_path = downloads_dir.join(&filename);
+    let mut target_path = downloads_dir.join(&safe_name);
     let mut counter = 1;
     while target_path.exists() {
         target_path = downloads_dir.join(format!("{} ({}).{}", stem, counter, ext));

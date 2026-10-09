@@ -34,7 +34,7 @@ with open(pkg_file, "r", encoding="utf-8") as f:
 
 TAG = f"v{VERSION}"
 NAME = f"Foreigners Studio {TAG}"
-BODY = "Download the new update below."
+BODY = ""
 
 DIST_DIR = os.path.join(os.path.dirname(__file__), "dist-release")
 

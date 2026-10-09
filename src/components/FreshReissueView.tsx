@@ -21,7 +21,8 @@ import {
   X,
   Mic,
   Edit3,
-  Plus
+  Plus,
+  AlertTriangle
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -66,13 +67,29 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [previewFilter, setPreviewFilter] = useState<'all' | 'reissue' | 'fresh'>('all');
   const [submittedFilter, setSubmittedFilter] = useState<'all' | 'reissue' | 'fresh'>('all');
 
-  const initialEmail = (localStorage.getItem('fs_active_client_email') || '').toUpperCase();
-  const initialPassword = localStorage.getItem('fs_portal_password') || '';
+  const googleUserEmail = (user?.email || '').trim().toLowerCase();
+  const scopedEmailKey = googleUserEmail ? `fs_active_client_email_${googleUserEmail}` : 'fs_active_client_email';
+  const scopedPassKey = googleUserEmail ? `fs_portal_password_${googleUserEmail}` : 'fs_portal_password';
+
+  const initialEmail = (localStorage.getItem(scopedEmailKey) || '').toUpperCase();
+  const initialPassword = localStorage.getItem(scopedPassKey) || '';
   const [portalEmail, setPortalEmail] = useState(initialEmail);
   const [activeClientEmail, setActiveClientEmail] = useState(initialEmail || '');
   const [portalPassword, setPortalPassword] = useState(initialPassword);
   const [showPassword, setShowPassword] = useState(false);
   const declarationPlace = 'ROME';
+
+  useEffect(() => {
+    const savedEmail = (localStorage.getItem(scopedEmailKey) || '').toUpperCase();
+    const savedPass = localStorage.getItem(scopedPassKey) || '';
+    setPortalEmail(savedEmail);
+    setActiveClientEmail(savedEmail);
+    setPortalPassword(savedPass);
+    setApplications([]);
+    setPreviews([]);
+    setCompleted([]);
+    setQuota(null);
+  }, [scopedEmailKey, scopedPassKey]);
 
   // 6 Distinct Document Upload Boxes + Extras
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -113,17 +130,29 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
-  const [submissionTracker, setSubmissionTracker] = useState<{
+  type SubmissionTrackerState = {
     active: boolean;
     ready: boolean;
     folderName?: string;
+    originalFolder?: string;
     isError?: boolean;
     errorType?: string;
+    isMissingInfo?: boolean;
     percent: number;
     stageText: string;
     applicantName?: string;
     startedAt: number;
-  } | null>(null);
+  } | null;
+  const [submissionTracker, _setSubmissionTracker] = useState<SubmissionTrackerState>(null);
+  const submissionTrackerRef = useRef<SubmissionTrackerState>(null);
+  submissionTrackerRef.current = submissionTracker;
+  const setSubmissionTracker = (
+    updater: SubmissionTrackerState | ((prev: SubmissionTrackerState) => SubmissionTrackerState)
+  ) => {
+    const next = typeof updater === 'function' ? updater(submissionTrackerRef.current) : updater;
+    submissionTrackerRef.current = next;
+    _setSubmissionTracker(next);
+  };
   const [quota, setQuota] = useState<QuotaInfo | null>(null);
   const prevPreviewFoldersRef = useRef<Set<string>>(new Set());
 
@@ -136,6 +165,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   } | null>(null);
   const [correctionFormData, setCorrectionFormData] = useState<Record<string, string>>({});
   const [dismissedCorrectionFolder, setDismissedCorrectionFolder] = useState<string | null>(null);
+  const dismissedFoldersRef = useRef<Set<string>>(new Set());
 
   const [applications, setApplications] = useState<ApplicationItem[]>([]);
   const [previews, setPreviews] = useState<PreviewItem[]>([]);
@@ -145,6 +175,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     [key: string]: { passport: boolean; declaration: boolean };
   }>({});
   const [submittingArn, setSubmittingArn] = useState<string | null>(null);
+  const [reuploadFiles, setReuploadFiles] = useState<Record<string, File | null>>({});
+  const [reuploadingFolder, setReuploadingFolder] = useState<string | null>(null);
 
   const [viewerModal, setViewerModal] = useState<{
     isOpen: boolean;
@@ -166,6 +198,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     imageUrl: '',
   });
 
+  const [photoValidation, setPhotoValidation] = useState<{
+    status: 'idle' | 'validating' | 'valid' | 'invalid';
+    message?: string;
+  }>({ status: 'idle' });
+  const photoValidationSeqRef = useRef<number>(0);
+  const signValidationSeqRef = useRef<number>(0);
+
   const photoInputRef = useRef<HTMLInputElement>(null);
   const signInputRef = useRef<HTMLInputElement>(null);
   const passportInputRef = useRef<HTMLInputElement>(null);
@@ -174,23 +213,24 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const infoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const queryAccountEmail = (portalEmail || activeClientEmail || localStorage.getItem('fs_active_client_email') || '').trim().toLowerCase();
+  const queryAccountEmail = (portalEmail || activeClientEmail || localStorage.getItem(scopedEmailKey) || '').trim().toLowerCase();
 
   const refreshAllData = async (targetEmailOverride?: string) => {
     const targetEmail = (targetEmailOverride || queryAccountEmail || '').trim().toLowerCase();
-    if (!targetEmail) {
+    if (!targetEmail || !googleUserEmail) {
       setApplications([]);
       setPreviews([]);
       setCompleted([]);
+      setQuota(null);
       return;
     }
     try {
       const [statusRes, prevs, comps] = await Promise.all([
-        automationApi.getClientStatus(targetEmail).catch(() => ({ client_email: targetEmail, applications: [], quota: undefined })),
-        automationApi.getPendingPreviews(targetEmail).catch(() => []),
-        automationApi.getCompletedApplications(targetEmail).catch(() => []),
+        automationApi.getClientStatus(targetEmail, googleUserEmail).catch(() => ({ client_email: targetEmail, applications: [], quota: undefined })),
+        automationApi.getPendingPreviews(targetEmail, googleUserEmail).catch(() => []),
+        automationApi.getCompletedApplications(targetEmail, googleUserEmail).catch(() => []),
       ]);
-      const apps = statusRes.applications || [];
+      const apps = (statusRes.applications || []).filter(a => !dismissedFoldersRef.current.has(a.folder_name));
       if (statusRes.quota) {
         setQuota(statusRes.quota);
       }
@@ -198,141 +238,143 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setPreviews(prevs);
       setCompleted(comps);
 
-      const targetFolder = submissionTracker?.folderName;
+      const activeTracker = submissionTrackerRef.current;
+      const matchesTrackerFolder = (item: { folder_name?: string; original_folder?: string; applicant_name?: string }) => {
+        if (!activeTracker) return false;
+        const tf = (activeTracker.folderName || '').trim().toLowerCase();
+        const of = (activeTracker.originalFolder || '').trim().toLowerCase();
+        const an = (activeTracker.applicantName || '').trim().toLowerCase();
+        const itemFolder = (item.folder_name || '').trim().toLowerCase();
+        const itemOrig = ((item as any).original_folder || '').trim().toLowerCase();
+        const itemName = (item.applicant_name || '').trim().toLowerCase();
+        if (tf && (itemFolder === tf || itemOrig === tf || itemName === tf)) return true;
+        if (of && (itemFolder === of || itemOrig === of || itemName === of)) return true;
+        if (an && (itemName === an || itemFolder === an)) return true;
+        return false;
+      };
 
-      // 1. Find active processing app: match by folder_name, original_folder, or applicant_name
-      let activeProcessingApp = targetFolder
+      let activeProcessingApp = activeTracker
         ? apps.find(a =>
             ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status) &&
-            (a.folder_name === targetFolder ||
-             (a as any).original_folder === targetFolder ||
-             (submissionTracker?.applicantName && a.applicant_name && a.applicant_name.toLowerCase() === submissionTracker.applicantName.toLowerCase()))
+            matchesTrackerFolder(a)
           )
         : undefined;
 
-      // If tracker is active but direct targetFolder didn't match (e.g. folder renamed during extraction), check if an app is processing
-      if (!activeProcessingApp && submissionTracker?.active && !submissionTracker.ready) {
+      if (!activeProcessingApp && (!activeTracker || (activeTracker.active && !activeTracker.ready))) {
         activeProcessingApp = apps.find(a => ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status));
       }
 
+      // Check if an application requires correction (missing information)
+      const matchingCorrectionApp = activeTracker
+        ? apps.find(a => a.status === 'NEEDS_CORRECTION' && matchesTrackerFolder(a))
+        : apps.find(a => a.status === 'NEEDS_CORRECTION');
+
       const currentPreviewFolders = new Set((prevs || []).map(p => p.folder_name));
-      let newlyReadyPreview: PreviewItem | undefined;
-      for (const p of (prevs || [])) {
-        if (!prevPreviewFoldersRef.current.has(p.folder_name)) {
-          newlyReadyPreview = p;
-          break;
-        }
-      }
       prevPreviewFoldersRef.current = currentPreviewFolders;
 
-      // 2. Match the preview specifically for the active submission tracker folder
-      let matchingPreview = targetFolder
-        ? (prevs || []).find(p =>
-            p.folder_name === targetFolder ||
-            (p as any).original_folder === targetFolder ||
-            (submissionTracker?.applicantName && p.applicant_name && p.applicant_name.toLowerCase() === submissionTracker.applicantName.toLowerCase())
-          )
-        : undefined;
-
-      // If tracker is active and waiting for preview, and server finished processing (activeProcessingApp is undefined), match the ready preview!
-      if (!matchingPreview && submissionTracker?.active && !submissionTracker.ready) {
-        if (newlyReadyPreview) {
-          matchingPreview = newlyReadyPreview;
-        } else if (!activeProcessingApp && (prevs || []).length > 0) {
-          matchingPreview = prevs[0];
+      // Find matching preview strictly for this application
+      let matchingPreview: PreviewItem | undefined = undefined;
+      if (activeTracker) {
+        matchingPreview = (prevs || []).find(p => matchesTrackerFolder(p));
+        if (!matchingPreview) {
+          const readyApp = apps.find(a => a.status === 'PENDING_CONFIRMATION' && matchesTrackerFolder(a));
+          if (readyApp) {
+            matchingPreview = (prevs || []).find(p => p.folder_name === readyApp.folder_name);
+          }
         }
       }
 
-      let matchingErrorApp = targetFolder
-        ? apps.find(a =>
-            a.status === 'ERROR' &&
-            (a.folder_name === targetFolder ||
-             (a as any).original_folder === targetFolder ||
-             (submissionTracker?.applicantName && a.applicant_name && a.applicant_name.toLowerCase() === submissionTracker.applicantName.toLowerCase()))
-          )
+      let matchingErrorApp = activeTracker
+        ? apps.find(a => a.status === 'ERROR' && matchesTrackerFolder(a))
         : undefined;
 
-      if (!matchingErrorApp && submissionTracker?.active && !submissionTracker.ready && !activeProcessingApp && !matchingPreview) {
+      if (!matchingErrorApp && activeTracker?.active && !activeTracker.ready && !activeProcessingApp && !matchingPreview && !matchingCorrectionApp) {
         matchingErrorApp = apps.find(a => a.status === 'ERROR');
       }
 
-      const matchingNeedsCorrection = targetFolder
-        ? apps.some(a =>
-            a.status === 'NEEDS_CORRECTION' &&
-            (a.folder_name === targetFolder ||
-             (a as any).original_folder === targetFolder ||
-             (submissionTracker?.applicantName && a.applicant_name && a.applicant_name.toLowerCase() === submissionTracker.applicantName.toLowerCase()))
-          )
-        : false;
-
-      if (activeProcessingApp) {
-        let serverPct = activeProcessingApp.progress || 25;
-        if (activeProcessingApp.status === 'UPLOADED') serverPct = Math.max(serverPct, 18);
-        else if (activeProcessingApp.status === 'EXTRACTING') serverPct = Math.max(serverPct, 38);
-        else if (activeProcessingApp.status === 'EXTRACTED') serverPct = Math.max(serverPct, 55);
-        else if (activeProcessingApp.status === 'FILLING_PORTAL') {
-          if ((activeProcessingApp.stage || '').includes('Generating PDF')) serverPct = Math.max(serverPct, 90);
-          else if ((activeProcessingApp.stage || '').includes('Submitting Stages')) serverPct = Math.max(serverPct, 76);
-          else serverPct = Math.max(serverPct, 64);
-        }
+      if (matchingCorrectionApp) {
+        // Freeze tracker at extraction % and show missing info alert — NEVER jump to 100% or clear tracker!
+        setUploadMessage(null);
         setSubmissionTracker(prev => {
-          const nextPct = prev && prev.active && !prev.ready && !prev.isError ? Math.max(prev.percent, serverPct) : serverPct;
+          const frozenPct = prev?.percent ? Math.min(Math.max(25, prev.percent), 42) : 35;
           return {
             active: true,
             ready: false,
-            folderName: activeProcessingApp.folder_name || prev?.folderName,
+            isMissingInfo: true,
             isError: false,
-            percent: Math.min(96, nextPct),
-            stageText: activeProcessingApp.stage || 'File submitted, waiting for preview...',
-            applicantName: activeProcessingApp.applicant_name || activeProcessingApp.folder_name,
+            folderName: matchingCorrectionApp.folder_name,
+            originalFolder: (matchingCorrectionApp as any).original_folder || prev?.originalFolder || prev?.folderName,
+            percent: frozenPct,
+            stageText: 'Required details missing — please complete the fields below to resume.',
+            applicantName: matchingCorrectionApp.applicant_name || prev?.applicantName || matchingCorrectionApp.folder_name,
             startedAt: prev?.startedAt || Date.now(),
           };
         });
-      } else if (matchingErrorApp && submissionTracker?.active && !submissionTracker.ready) {
-        let errTitle = 'Portal Error';
-        if (matchingErrorApp.error_type === 'PORTAL_DOWNTIME') {
-          errTitle = 'Portal Facing Downtime / Maintenance';
-        } else if (matchingErrorApp.error_type === 'PORTAL_QUOTA_EXHAUSTED') {
-          errTitle = '50 Application Limit Reached';
-        } else if (matchingErrorApp.error_type === 'INVALID_CREDENTIALS') {
-          errTitle = 'Portal Login Error: Incorrect Credentials';
-        } else if (matchingErrorApp.error_type === 'ACCOUNT_LOCKED') {
-          errTitle = 'Portal Account Locked';
-        } else if (matchingErrorApp.error_type === 'PORTAL_LOGIN_ERROR' || matchingErrorApp.error_type === 'AUTH_FAILED') {
-          errTitle = 'Portal Authentication Error';
-        }
-
-        setSubmissionTracker(prev => ({
-          active: true,
-          ready: false,
-          folderName: matchingErrorApp.folder_name || prev?.folderName,
-          isError: true,
-          errorType: matchingErrorApp.error_type,
-          percent: 100,
-          stageText: matchingErrorApp.error_message || matchingErrorApp.stage || errTitle,
-          applicantName: matchingErrorApp.applicant_name || matchingErrorApp.folder_name,
-          startedAt: prev?.startedAt || Date.now(),
-        }));
-      } else if (matchingNeedsCorrection) {
-        setSubmissionTracker(null);
-      } else if (matchingPreview) {
+      } else if (matchingPreview && matchesTrackerFolder(matchingPreview)) {
+        // Only mark ready when preview actually belongs to this application and is generated
+        setUploadMessage(null);
         setSubmissionTracker(prev => {
           if (prev && prev.active) {
             return {
               active: true,
               ready: true,
+              isMissingInfo: false,
+              isError: false,
               folderName: matchingPreview.folder_name,
+              originalFolder: prev.originalFolder || prev.folderName,
               percent: 100,
               stageText: 'Preview Ready!',
-              applicantName: matchingPreview.applicant_name || prev.applicantName,
+              applicantName: matchingPreview.applicant_name || prev.applicantName || matchingPreview.folder_name,
               startedAt: prev.startedAt,
             };
           }
           return prev;
         });
+      } else if (activeProcessingApp) {
+        const serverPct = typeof activeProcessingApp.progress === 'number' && activeProcessingApp.progress > 0
+          ? activeProcessingApp.progress
+          : (activeProcessingApp.status === 'UPLOADED'
+              ? 18
+              : activeProcessingApp.status === 'EXTRACTING'
+              ? 35
+              : activeProcessingApp.status === 'EXTRACTED'
+              ? 50
+              : 68);
+        setSubmissionTracker(prev => ({
+          active: true,
+          ready: false,
+          isMissingInfo: false,
+          folderName: activeProcessingApp.folder_name || prev?.folderName,
+          originalFolder: (activeProcessingApp as any).original_folder || prev?.originalFolder || prev?.folderName,
+          isError: false,
+          percent: Math.min(99, Math.max(10, serverPct)),
+          stageText: activeProcessingApp.stage || 'Processing application on backend...',
+          applicantName: activeProcessingApp.applicant_name || activeProcessingApp.folder_name,
+          startedAt: prev?.startedAt || Date.now(),
+        }));
+      } else if (matchingErrorApp) {
+        setUploadMessage(null);
+        setSubmissionTracker(prev => {
+          if (prev && prev.active) {
+            return {
+              active: true,
+              ready: false,
+              isError: true,
+              isMissingInfo: false,
+              errorType: matchingErrorApp.error_type,
+              folderName: matchingErrorApp.folder_name,
+              originalFolder: (matchingErrorApp as any).original_folder || prev.originalFolder,
+              percent: prev.percent || 40,
+              stageText: matchingErrorApp.error_message || 'Application encountered an error during submission.',
+              applicantName: matchingErrorApp.applicant_name || prev.applicantName || matchingErrorApp.folder_name,
+              startedAt: prev.startedAt,
+            };
+          }
+          return null;
+        });
       } else {
         setSubmissionTracker(prev => {
-          if (prev && Date.now() - prev.startedAt > 10000 && !prev.folderName) {
+          if (prev && Date.now() - prev.startedAt > 15000 && !prev.folderName && !prev.ready && !prev.isMissingInfo) {
             return null;
           }
           return prev;
@@ -572,42 +614,37 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     try {
       setVoiceProcessingFolder(folderName);
       const text = textPrompt !== undefined ? textPrompt : (voiceTextInputs[folderName] || '');
-      const lowText = text.toLowerCase();
       const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
-
-      const detectedActionLabel = lowText.includes('sign') || lowText.includes('firma')
-        ? 'Re-cropping signature & isolating strokes on white background...'
-        : lowText.includes('photo') || lowText.includes('shoulder') || lowText.includes('face') || lowText.includes('foto')
-        ? 'Re-cropping photograph from source document...'
-        : audioBlob
-        ? 'Decoding voice note & applying document/field updates...'
-        : 'Applying requested updates to application fields & documents...';
 
       setVoiceProgress((prev) => ({
         ...prev,
-        [folderName]: { percent: 15, stage: 'Analyzing update request...' },
+        [folderName]: {
+          percent: 15,
+          stage: audioBlob
+            ? 'Sending voice instruction to backend...'
+            : 'Sending edit instruction to backend...',
+        },
       }));
 
-      let currentTick = 0;
-      progressTimer = setInterval(() => {
-        currentTick += 1;
-        setVoiceProgress((prev) => {
-          const cur = prev[folderName]?.percent || 15;
-          if (currentTick === 1) {
-            return { ...prev, [folderName]: { percent: 42, stage: detectedActionLabel } };
+      progressTimer = setInterval(async () => {
+        try {
+          const statusRes = await automationApi.getClientStatus(email, googleUserEmail);
+          const match = (statusRes.applications || []).find(
+            (a) => a.folder_name === folderName || (a as any).original_folder === folderName
+          );
+          if (match) {
+            setVoiceProgress((prev) => ({
+              ...prev,
+              [folderName]: {
+                percent: typeof match.progress === 'number' && match.progress > 0 ? match.progress : (prev[folderName]?.percent || 20),
+                stage: match.stage || prev[folderName]?.stage || 'Applying updates on backend...',
+              },
+            }));
           }
-          if (currentTick === 2) {
-            return { ...prev, [folderName]: { percent: 68, stage: 'Regenerating official PDF previews...' } };
-          }
-          if (currentTick >= 3) {
-            const nextPct = Math.min(92, cur + 6);
-            return { ...prev, [folderName]: { percent: nextPct, stage: 'Finalizing updated previews...' } };
-          }
-          return prev;
-        });
-      }, 900);
+        } catch (_) {}
+      }, 800);
 
-      const res = await automationApi.sendVoiceInstruction(email, folderName, audioBlob, text);
+      const res = await automationApi.sendVoiceInstruction(email, folderName, audioBlob, text, googleUserEmail);
 
       if (progressTimer) {
         clearInterval(progressTimer);
@@ -676,27 +713,30 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   };
 
-  useEffect(() => {
-    if (!submissionTracker?.active || submissionTracker.ready) return;
-    const progInterval = setInterval(() => {
-      setSubmissionTracker(prev => {
-        if (!prev || !prev.active || prev.ready) return prev;
-        if (prev.percent >= 95) return prev;
-        const step = prev.percent < 45 ? 3 : prev.percent < 75 ? 2 : 1;
-        return {
-          ...prev,
-          percent: Math.min(95, prev.percent + step),
-        };
-      });
-    }, 1200);
-    return () => clearInterval(progInterval);
-  }, [submissionTracker?.active, submissionTracker?.ready]);
+  const refreshAllDataRef = useRef(refreshAllData);
+  refreshAllDataRef.current = refreshAllData;
 
   useEffect(() => {
-    refreshAllData();
-    const interval = setInterval(() => refreshAllData(), 2500);
+    refreshAllDataRef.current();
+    const isBusy =
+      Boolean(submissionTracker?.active && !submissionTracker.ready) ||
+      Boolean(submittingArn) ||
+      Boolean(reuploadingFolder) ||
+      Boolean(voiceProcessingFolder);
+    const pollMs = isBusy ? 900 : 2200;
+    const interval = setInterval(() => refreshAllDataRef.current(), pollMs);
     return () => clearInterval(interval);
-  }, [portalEmail, activeClientEmail]);
+  }, [
+    portalEmail,
+    activeClientEmail,
+    currentSection,
+    googleUserEmail,
+    submissionTracker?.active,
+    submissionTracker?.ready,
+    submittingArn,
+    reuploadingFolder,
+    voiceProcessingFolder,
+  ]);
 
   const correctionApp = applications.find(
     app => (app.status === 'NEEDS_CORRECTION' || (app.status === 'ERROR' && (app.error_type === 'PORTAL_FORM_ERROR' || app.error_type === 'STAGE1_7_FAILED'))) && app.folder_name !== dismissedCorrectionFolder
@@ -805,6 +845,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
 
     if (
+      lower.includes('portal server error') ||
+      lower.includes('failed to upload') ||
+      lower.includes('self-healing attempts')
+    ) {
+      return raw;
+    }
+
+    if (
       lower.includes('connect') ||
       lower.includes('fetch') ||
       lower.includes('gateway') ||
@@ -870,6 +918,102 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB strict limit per file
 
+  const triggerPortalPhotoValidation = async (file: File | null) => {
+    const reqSeq = ++photoValidationSeqRef.current;
+    if (!file) {
+      setPhotoValidation({ status: 'idle' });
+      return;
+    }
+    setPhotoValidation({
+      status: 'validating',
+      message: 'Checking photograph compliance with Passport Seva Portal...',
+    });
+    setUploadMessage(null);
+    try {
+      const targetEmail = (portalEmail || activeClientEmail || localStorage.getItem(scopedEmailKey) || '').trim();
+      const targetPass = (portalPassword || localStorage.getItem(scopedPassKey) || '').trim();
+      const res = await automationApi.validatePhotoWithPortal(
+        file,
+        targetEmail,
+        targetPass,
+        googleUserEmail
+      );
+      if (photoValidationSeqRef.current !== reqSeq) return;
+      if (res.valid) {
+        if (res.processed_photo_base64) {
+          try {
+            const byteString = atob(res.processed_photo_base64);
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+              ia[i] = byteString.charCodeAt(i);
+            }
+            const verifiedFile = new File([ab], 'photo.jpg', { type: 'image/jpeg' });
+            filesStateRef.current.photo = verifiedFile;
+            setPhotoFile(verifiedFile);
+          } catch (_) {}
+        }
+        setPhotoValidation({
+          status: 'valid',
+          message: res.message || 'Photograph accepted by Passport Seva Portal.',
+        });
+        setUploadMessage({
+          text: res.message || 'Photograph verified and accepted by Passport Seva Portal.',
+          type: 'success',
+        });
+      } else {
+        filesStateRef.current.photo = null;
+        setPhotoFile(null);
+        if (photoInputRef.current) photoInputRef.current.value = '';
+        const rejectMsg = res.message || 'This photo is not allowed by the portal. Please upload another photograph.';
+        setPhotoValidation({
+          status: 'invalid',
+          message: rejectMsg,
+        });
+        setUploadMessage({
+          text: rejectMsg,
+          type: 'error',
+        });
+      }
+    } catch (err: any) {
+      if (photoValidationSeqRef.current !== reqSeq) return;
+      filesStateRef.current.photo = null;
+      setPhotoFile(null);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+      const errMsg = sanitizeErrorMessage(err) || 'This photo is not allowed by the portal. Please upload another photograph.';
+      setPhotoValidation({
+        status: 'invalid',
+        message: errMsg,
+      });
+      setUploadMessage({
+        text: errMsg,
+        type: 'error',
+      });
+    }
+  };
+
+  const triggerPortalSignatureValidation = async (file: File | null) => {
+    const reqSeq = ++signValidationSeqRef.current;
+    if (!file) return;
+    try {
+      const res = await automationApi.validateSignatureWithPortal(file);
+      if (signValidationSeqRef.current !== reqSeq) return;
+      if (res.valid && res.processed_signature_base64) {
+        try {
+          const byteString = atob(res.processed_signature_base64);
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+          }
+          const standardizedFile = new File([ab], 'sign.jpg', { type: 'image/jpeg' });
+          filesStateRef.current.sign = standardizedFile;
+          setSignFile(standardizedFile);
+        } catch (_) {}
+      }
+    } catch (_) {}
+  };
+
   const updateSlotFile = (slot: 'photo' | 'sign' | 'passport' | 'identity' | 'residence' | 'info', file: File | null) => {
     if (file && submissionTracker?.ready) {
       setSubmissionTracker(null);
@@ -892,9 +1036,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (slot === 'photo') {
       setPhotoFile(file);
       if (!file && photoInputRef.current) photoInputRef.current.value = '';
+      triggerPortalPhotoValidation(file);
     } else if (slot === 'sign') {
       setSignFile(file);
       if (!file && signInputRef.current) signInputRef.current.value = '';
+      if (file) triggerPortalSignatureValidation(file);
     } else if (slot === 'passport') {
       setPassportFile(file);
       if (!file && passportInputRef.current) passportInputRef.current.value = '';
@@ -939,10 +1085,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
     for (const f of validIncoming) {
       const lower = f.name.toLowerCase();
-      if (!p && (lower.includes('photo') || lower.includes('fototessera') || lower.includes('picture') || lower.includes('portrait'))) {
-        p = f;
-      } else if (!s && (lower.includes('sign') || lower.includes('signature') || lower.includes('firma'))) {
-        s = f;
+      if (lower.includes('photo') || lower.includes('fototessera') || lower.includes('picture') || lower.includes('portrait')) {
+        if (!p || f.size > p.size) {
+          p = f;
+        }
+      } else if (lower.includes('sign') || lower.includes('signature') || lower.includes('firma')) {
+        if (!s || f.size > s.size) {
+          s = f;
+        }
       } else if (!pass && (lower.includes('pass') || lower.includes('passport') || lower.includes('passaporto'))) {
         pass = f;
       } else if (!ident && (
@@ -1022,6 +1172,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (p !== current.photo) {
       filesStateRef.current.photo = p;
       setPhotoFile(p);
+      triggerPortalPhotoValidation(p);
     }
     if (s !== current.sign) {
       filesStateRef.current.sign = s;
@@ -1087,6 +1238,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   };
 
   const clearDocumentSlots = () => {
+    photoValidationSeqRef.current++;
+    setPhotoValidation({ status: 'idle' });
     filesStateRef.current = {
       photo: null,
       sign: null,
@@ -1121,9 +1274,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       clearDocumentSlots();
       setActiveClientEmail(trimmed);
       if (trimmed) {
-        localStorage.setItem('fs_active_client_email', trimmed);
+        localStorage.setItem(scopedEmailKey, trimmed);
       } else {
-        localStorage.removeItem('fs_active_client_email');
+        localStorage.removeItem(scopedEmailKey);
       }
       try {
         window.dispatchEvent(new Event('fs_active_email_changed'));
@@ -1134,7 +1287,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const handlePasswordChange = (val: string) => {
     setPortalPassword(val);
-    localStorage.setItem('fs_portal_password', val);
+    localStorage.setItem(scopedPassKey, val);
   };
 
   useEffect(() => {
@@ -1293,17 +1446,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const handleSubmitApplication = async (e: React.FormEvent) => {
     e.preventDefault();
     setUploadMessage(null);
+    dismissedFoldersRef.current.clear();
+    setDismissedCorrectionFolder(null);
 
     const targetClientEmail = portalEmail.trim().toUpperCase();
     const cleanPassword = portalPassword.trim();
     if (!targetClientEmail || !cleanPassword) {
       const msg = 'Please enter portal Email ID and Password before submitting.';
       setUploadMessage({ text: msg, type: 'error' });
-      setCenteredAlert({
-        isOpen: true,
-        title: 'Portal Credentials Required',
-        message: msg,
-      });
       return;
     }
 
@@ -1312,11 +1462,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setUploadMessage({
         text: msg,
         type: 'error'
-      });
-      setCenteredAlert({
-        isOpen: true,
-        title: 'Account Quota Exhausted',
-        message: msg,
       });
       return;
     }
@@ -1338,27 +1483,33 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         text: msg,
         type: 'error',
       });
-      setCenteredAlert({
-        isOpen: true,
-        title: 'File Size Exceeded',
-        message: msg,
+      return;
+    }
+
+    if (photoValidation.status === 'validating') {
+      setUploadMessage({
+        text: 'Please wait while the photograph is being verified with the Passport Seva Portal.',
+        type: 'error',
       });
       return;
     }
 
-    if (!photoFile || !signFile) {
+    if (photoValidation.status === 'invalid') {
+      setUploadMessage({
+        text: photoValidation.message || 'This photo is not allowed by the portal. Please upload another photograph.',
+        type: 'error',
+      });
+      return;
+    }
+
+    if (!photoFile || photoValidation.status !== 'valid' || !signFile) {
       const missing = [];
-      if (!photoFile) missing.push('Photograph');
+      if (!photoFile || photoValidation.status !== 'valid') missing.push('a Portal-Verified Photograph');
       if (!signFile) missing.push('Signature');
-      const msg = `Please upload ${missing.join(' and ')} in the designated box(es). Auto-scraping from passport or other documents is disabled.`;
+      const msg = `Please upload ${missing.join(' and ')} in the designated box(es).`;
       setUploadMessage({
         text: msg,
         type: 'error',
-      });
-      setCenteredAlert({
-        isOpen: true,
-        title: 'Missing Required Documents',
-        message: msg,
       });
       return;
     }
@@ -1368,11 +1519,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setUploadMessage({
         text: msg,
         type: 'error',
-      });
-      setCenteredAlert({
-        isOpen: true,
-        title: 'Passport Copy Required',
-        message: msg,
       });
       return;
     }
@@ -1387,10 +1533,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         stageText: 'Uploading documents to server...',
         startedAt: Date.now(),
       });
-      localStorage.setItem('fs_active_client_email', targetClientEmail);
-      localStorage.setItem('fs_portal_password', cleanPassword);
+      localStorage.setItem(scopedEmailKey, targetClientEmail);
+      localStorage.setItem(scopedPassKey, cleanPassword);
       localStorage.setItem('fs_declaration_place', declarationPlace);
       setActiveClientEmail(targetClientEmail);
+      try {
+        window.dispatchEvent(new Event('fs_active_email_changed'));
+      } catch (_) {}
 
       const uploadRes = await automationApi.uploadApplication(
         targetClientEmail,
@@ -1417,14 +1566,17 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         active: true,
         ready: false,
         folderName: uploadedFolder,
-        percent: 20,
-        stageText: 'File submitted, waiting for preview...',
+        originalFolder: uploadedFolder,
+        percent: 18,
+        stageText: 'Extracting details from uploaded documents...',
         startedAt: Date.now(),
       });
       setUploadMessage({
         text: 'File submitted, waiting for preview...',
         type: 'success',
       });
+      photoValidationSeqRef.current++;
+      setPhotoValidation({ status: 'idle' });
       setPhotoFile(null);
       setSignFile(null);
       setPassportFile(null);
@@ -1447,11 +1599,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setUploadMessage({
         text: friendlyMsg,
         type: 'error',
-      });
-      setCenteredAlert({
-        isOpen: true,
-        title: 'Upload Notice',
-        message: friendlyMsg,
       });
     } finally {
       setIsUploading(false);
@@ -1573,13 +1720,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       await automationApi.submitCorrection(
         (queryAccountEmail || activeClientEmail || '').trim().toLowerCase(),
         correctionApp.folder_name,
-        finalData
+        finalData,
+        googleUserEmail
       );
 
       setSubmissionTracker({
         active: true,
         ready: false,
-        percent: 60,
+        folderName: correctionApp.folder_name,
+        originalFolder: (correctionApp as any).original_folder || correctionApp.folder_name,
+        percent: 54,
         stageText: 'Details saved! Resuming portal form filling...',
         applicantName: correctionApp.applicant_name || correctionApp.folder_name,
         startedAt: Date.now(),
@@ -1603,18 +1753,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const handleDismissCorrection = async (folderName?: string) => {
     const targetFolder = folderName || correctionApp?.folder_name;
     if (!targetFolder) return;
+    dismissedFoldersRef.current.add(targetFolder);
+    setDismissedCorrectionFolder(targetFolder);
+    setApplications(prev => prev.filter(a => a.folder_name !== targetFolder));
+    setSubmissionTracker(null);
+    setUploadMessage(null);
     try {
       setIsDismissing(true);
       const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
-      await automationApi.dismissApplication(email, targetFolder);
-      setApplications(prev => prev.filter(a => a.folder_name !== targetFolder));
-      setDismissedCorrectionFolder(null);
-      setUploadMessage(null);
+      await automationApi.dismissApplication(email, targetFolder, googleUserEmail);
       await refreshAllData();
     } catch (err: any) {
       console.warn("Failed to dismiss application on server:", err);
-      setApplications(prev => prev.filter(a => a.folder_name !== targetFolder));
-      setDismissedCorrectionFolder(targetFolder);
       await refreshAllData();
     } finally {
       setIsDismissing(false);
@@ -1632,7 +1782,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     try {
       setCancellingFolder(folderName);
       const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
-      await automationApi.dismissApplication(email, folderName);
+      await automationApi.dismissApplication(email, folderName, googleUserEmail);
 
       setPreviews(prev => prev.filter(p => p.folder_name !== folderName));
       setApplications(prev => prev.filter(a => a.folder_name !== folderName));
@@ -1672,14 +1822,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     try {
       setSubmittingArn(arn);
       const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
-      await automationApi.confirmSubmission(email, folderName, arn);
+      await automationApi.confirmSubmission(email, folderName, arn, googleUserEmail);
       await refreshAllData();
       onSectionChange('submitted');
     } catch (err: any) {
       setCenteredAlert({
         isOpen: true,
         title: 'Submission Note',
-        message: `${sanitizeErrorMessage(err)}. Please retry.`,
+        message: `${sanitizeErrorMessage(err)}`,
       });
       await refreshAllData();
     } finally {
@@ -1687,8 +1837,119 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   };
 
-  const openPdfViewer = (title: string, relativeUrl: string) => {
-    const fullUrl = `${automationApi.getBaseUrl()}${relativeUrl}`;
+  const handleReuploadAndRetry = async (
+    folderName: string,
+    arn: string,
+    slot?: string,
+    targetFilename?: string
+  ) => {
+    const file = reuploadFiles[folderName];
+    if (!file) {
+      setCenteredAlert({
+        isOpen: true,
+        title: 'Select Replacement File',
+        message: 'Please select a replacement file to re-upload and retry portal submission.',
+      });
+      return;
+    }
+    try {
+      setReuploadingFolder(folderName);
+      setSubmittingArn(arn);
+      const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
+      await automationApi.reuploadFailedPortalFile(
+        email,
+        folderName,
+        file,
+        slot,
+        targetFilename,
+        arn,
+        true,
+        googleUserEmail
+      );
+      setReuploadFiles(prev => {
+        const copy = { ...prev };
+        delete copy[folderName];
+        return copy;
+      });
+      await refreshAllData();
+      onSectionChange('submitted');
+    } catch (err: any) {
+      setCenteredAlert({
+        isOpen: true,
+        title: 'Portal Upload Error',
+        message: `${sanitizeErrorMessage(err)}`,
+      });
+      await refreshAllData();
+    } finally {
+      setReuploadingFolder(null);
+      setSubmittingArn(null);
+    }
+  };
+
+  const [downloadingFormKey, setDownloadingFormKey] = useState<string | null>(null);
+
+  const handleDirectDownloadPdf = async (title: string, relativeUrl: string, itemKey: string) => {
+    if (downloadingFormKey) return;
+    setDownloadingFormKey(itemKey);
+    try {
+      const baseUrl = await automationApi.resolveGateway();
+      const cleanRel = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
+      const fullUrl = relativeUrl.startsWith('http') ? relativeUrl : `${baseUrl}${cleanRel}`;
+      const res = await fetch(fullUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const arrayBuffer = await res.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+
+      const rawName = title.toLowerCase().endsWith('.pdf') ? title : `${title}.pdf`;
+      const safeName = rawName.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/\s+/g, ' ').trim();
+
+      let savedPath: string | null = null;
+      if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
+        try {
+          savedPath = await invoke<string>('save_file_to_downloads', {
+            filename: safeName,
+            bytes: Array.from(uint8),
+          });
+        } catch (tauriErr) {
+          console.warn('Tauri save_file_to_downloads failed, falling back to browser download:', tauriErr);
+        }
+      }
+
+      if (savedPath) {
+        setDownloadNotice({
+          path: savedPath,
+          message: `Saved to Downloads (${safeName})`,
+          type: 'success',
+        });
+      } else {
+        const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
+        const tempLink = document.createElement('a');
+        tempLink.href = blobUrl;
+        tempLink.download = safeName;
+        document.body.appendChild(tempLink);
+        tempLink.click();
+        document.body.removeChild(tempLink);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+        setDownloadNotice({
+          message: `Downloaded ${safeName}`,
+          type: 'success',
+        });
+      }
+    } catch (err: any) {
+      setDownloadNotice({
+        message: `Download failed: ${err?.message || 'Unable to download PDF'}`,
+        type: 'error',
+      });
+    } finally {
+      setDownloadingFormKey(null);
+    }
+  };
+
+  const openPdfViewer = async (title: string, relativeUrl: string) => {
+    const baseUrl = await automationApi.resolveGateway().catch(() => automationApi.getBaseUrl());
+    const cleanRel = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
+    const fullUrl = relativeUrl.startsWith('http') ? relativeUrl : `${baseUrl}${cleanRel}`;
     setViewerModal({
       isOpen: true,
       title,
@@ -1708,8 +1969,34 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     a => a.status === 'ERROR' &&
     a.error_type !== 'PORTAL_FORM_ERROR' &&
     a.error_type !== 'STAGE1_7_FAILED' &&
-    a.folder_name !== dismissedCorrectionFolder
+    a.folder_name !== dismissedCorrectionFolder &&
+    !dismissedFoldersRef.current.has(a.folder_name)
   );
+
+  useEffect(() => {
+    if (!portalErrorApp?.folder_name) return;
+    const targetFolder = portalErrorApp.folder_name;
+    const timer = setTimeout(() => {
+      handleDismissCorrection(targetFolder);
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [portalErrorApp?.folder_name]);
+
+  useEffect(() => {
+    if (!uploadMessage || uploadMessage.type !== 'error') return;
+    const timer = setTimeout(() => {
+      setUploadMessage(null);
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [uploadMessage]);
+
+  useEffect(() => {
+    if (!centeredAlert?.isOpen) return;
+    const timer = setTimeout(() => {
+      setCenteredAlert(null);
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [centeredAlert]);
 
   const getPortalErrorDetails = (app: ApplicationItem) => {
     const errType = app.error_type;
@@ -1996,6 +2283,182 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               </div>
             );
           })()}
+
+          {submissionTracker?.active && (
+            <div
+              className="voice-progress-container"
+              style={{
+                marginBottom: '16px',
+                padding: '14px 18px',
+                borderRadius: '12px',
+                border: submissionTracker.isError
+                  ? '1px solid rgba(239, 68, 68, 0.4)'
+                  : submissionTracker.ready
+                  ? '1px solid rgba(16, 185, 129, 0.35)'
+                  : submissionTracker.isMissingInfo
+                  ? '1px solid rgba(245, 158, 11, 0.45)'
+                  : '1px solid rgba(37, 99, 235, 0.28)',
+                background: submissionTracker.isError
+                  ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.04) 100%)'
+                  : submissionTracker.ready
+                  ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%)'
+                  : submissionTracker.isMissingInfo
+                  ? 'linear-gradient(135deg, rgba(254, 243, 199, 0.6) 0%, rgba(253, 230, 138, 0.15) 100%)'
+                  : 'linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%)',
+              }}
+            >
+              <div className="voice-progress-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '12px' }}>
+                <div className="voice-progress-status" style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600, fontSize: '14px', color: submissionTracker.isError ? '#dc2626' : submissionTracker.ready ? '#059669' : submissionTracker.isMissingInfo ? '#d97706' : '#1e40af' }}>
+                  {submissionTracker.isError ? (
+                    <AlertCircle style={{ width: '18px', height: '18px', color: '#ef4444', flexShrink: 0 }} />
+                  ) : submissionTracker.ready ? (
+                    <CheckCircle2 style={{ width: '18px', height: '18px', color: '#10b981', flexShrink: 0 }} />
+                  ) : submissionTracker.isMissingInfo ? (
+                    <AlertTriangle style={{ width: '18px', height: '18px', color: '#d97706', flexShrink: 0 }} />
+                  ) : (
+                    <RefreshCw style={{ width: '16px', height: '16px', color: '#2563eb', flexShrink: 0 }} className="animate-spin" />
+                  )}
+                  <div>
+                    <div>
+                      {submissionTracker.isError
+                        ? (submissionTracker.errorType === 'PORTAL_DOWNTIME'
+                            ? `Portal Facing Downtime${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                            : submissionTracker.errorType === 'PORTAL_QUOTA_EXHAUSTED'
+                            ? `50 Application Limit Reached${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                            : submissionTracker.errorType === 'INVALID_CREDENTIALS'
+                            ? `Portal Login Error: Incorrect Credentials${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                            : submissionTracker.errorType === 'ACCOUNT_LOCKED'
+                            ? `Portal Account Locked${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                            : `Portal Authentication Error${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`)
+                        : submissionTracker.ready
+                        ? `Preview Ready!${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                        : submissionTracker.isMissingInfo
+                        ? `Information Required${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                        : `File submitted, waiting for preview...${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`}
+                    </div>
+                    {!submissionTracker.ready &&
+                      submissionTracker.stageText &&
+                      submissionTracker.stageText !== 'File submitted, waiting for preview...' && (
+                      <div style={{ fontSize: '12px', fontWeight: 500, color: submissionTracker.isError ? '#b91c1c' : submissionTracker.isMissingInfo ? '#92400e' : '#475569', marginTop: '2px' }}>
+                        {submissionTracker.stageText}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span
+                    className="voice-progress-percent"
+                    style={{
+                      fontWeight: 700,
+                      fontSize: '14px',
+                      color: submissionTracker.isError ? '#dc2626' : submissionTracker.ready ? '#059669' : submissionTracker.isMissingInfo ? '#d97706' : '#2563eb',
+                      background: submissionTracker.isError ? 'rgba(239, 68, 68, 0.15)' : submissionTracker.ready ? 'rgba(16, 185, 129, 0.15)' : submissionTracker.isMissingInfo ? 'rgba(245, 158, 11, 0.18)' : 'rgba(37, 99, 235, 0.12)',
+                      padding: '3px 10px',
+                      borderRadius: '999px',
+                    }}
+                  >
+                    {submissionTracker.isError ? 'Error' : submissionTracker.ready ? '100%' : `${submissionTracker.percent}%`}
+                  </span>
+                  {submissionTracker.ready && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => onSectionChange('preview')}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 14px',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: '#ffffff',
+                          background: '#10b981',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Eye style={{ width: '14px', height: '14px' }} />
+                        <span>Open Preview</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSubmissionTracker(null);
+                          setUploadMessage(null);
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 14px',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: '#065f46',
+                          background: '#d1fae5',
+                          border: '1px solid #a7f3d0',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Plus style={{ width: '14px', height: '14px' }} />
+                        <span>Start New Application</span>
+                      </button>
+                    </>
+                  )}
+                  {submissionTracker.isError && (
+                    <button
+                      type="button"
+                      onClick={() => setSubmissionTracker(null)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 14px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: '#991b1b',
+                        background: '#fee2e2',
+                        border: '1px solid #fca5a5',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <X style={{ width: '14px', height: '14px' }} />
+                      <span>Dismiss</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div
+                className="voice-progress-track"
+                style={{
+                  width: '100%',
+                  height: '8px',
+                  borderRadius: '999px',
+                  background: 'rgba(148, 163, 184, 0.25)',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  className="voice-progress-fill"
+                  style={{
+                    width: `${submissionTracker.ready || submissionTracker.isError ? 100 : submissionTracker.percent}%`,
+                    height: '100%',
+                    borderRadius: '999px',
+                    background: submissionTracker.isError
+                      ? 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)'
+                      : submissionTracker.ready
+                      ? 'linear-gradient(90deg, #10b981 0%, #059669 100%)'
+                      : submissionTracker.isMissingInfo
+                      ? 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)'
+                      : 'linear-gradient(90deg, #2563eb 0%, #3b82f6 100%)',
+                    transition: 'width 0.45s ease',
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
           {correctionApp ? (
             <div className="correction-card">
@@ -2648,169 +3111,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           ) : (
             <div className="fresh-form-card">
 
-              {submissionTracker?.active ? (
-                <div
-                  className="voice-progress-container"
-                  style={{
-                    marginBottom: '20px',
-                    padding: '14px 18px',
-                    borderRadius: '12px',
-                    border: submissionTracker.isError
-                      ? '1px solid rgba(239, 68, 68, 0.4)'
-                      : submissionTracker.ready
-                      ? '1px solid rgba(16, 185, 129, 0.35)'
-                      : '1px solid rgba(37, 99, 235, 0.28)',
-                    background: submissionTracker.isError
-                      ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.04) 100%)'
-                      : submissionTracker.ready
-                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%)'
-                      : 'linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%)',
-                  }}
-                >
-                  <div className="voice-progress-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '12px' }}>
-                    <div className="voice-progress-status" style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600, fontSize: '14px', color: submissionTracker.isError ? '#dc2626' : submissionTracker.ready ? '#059669' : '#1e40af' }}>
-                      {submissionTracker.isError ? (
-                        <AlertCircle style={{ width: '18px', height: '18px', color: '#ef4444', flexShrink: 0 }} />
-                      ) : submissionTracker.ready ? (
-                        <CheckCircle2 style={{ width: '18px', height: '18px', color: '#10b981', flexShrink: 0 }} />
-                      ) : (
-                        <RefreshCw style={{ width: '16px', height: '16px', color: '#2563eb', flexShrink: 0 }} className="animate-spin" />
-                      )}
-                      <div>
-                        <div>
-                          {submissionTracker.isError
-                            ? (submissionTracker.errorType === 'PORTAL_DOWNTIME'
-                                ? `Portal Facing Downtime${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
-                                : submissionTracker.errorType === 'PORTAL_QUOTA_EXHAUSTED'
-                                ? `50 Application Limit Reached${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
-                                : submissionTracker.errorType === 'INVALID_CREDENTIALS'
-                                ? `Portal Login Error: Incorrect Credentials${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
-                                : submissionTracker.errorType === 'ACCOUNT_LOCKED'
-                                ? `Portal Account Locked${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
-                                : `Portal Authentication Error${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`)
-                            : submissionTracker.ready
-                            ? `Preview Ready!${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
-                            : `File submitted, waiting for preview...${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`}
-                        </div>
-                        {!submissionTracker.ready && submissionTracker.stageText && (
-                          <div style={{ fontSize: '12px', fontWeight: 500, color: submissionTracker.isError ? '#b91c1c' : '#475569', marginTop: '2px' }}>
-                            {submissionTracker.stageText}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span
-                        className="voice-progress-percent"
-                        style={{
-                          fontWeight: 700,
-                          fontSize: '14px',
-                          color: submissionTracker.isError ? '#dc2626' : submissionTracker.ready ? '#059669' : '#2563eb',
-                          background: submissionTracker.isError ? 'rgba(239, 68, 68, 0.15)' : submissionTracker.ready ? 'rgba(16, 185, 129, 0.15)' : 'rgba(37, 99, 235, 0.12)',
-                          padding: '3px 10px',
-                          borderRadius: '999px',
-                        }}
-                      >
-                        {submissionTracker.isError ? 'Error' : submissionTracker.ready ? '100%' : `${submissionTracker.percent}%`}
-                      </span>
-                      {submissionTracker.ready && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => onSectionChange('preview')}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '6px 14px',
-                              fontSize: '13px',
-                              fontWeight: 600,
-                              color: '#ffffff',
-                              background: '#10b981',
-                              border: 'none',
-                              borderRadius: '8px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <Eye style={{ width: '14px', height: '14px' }} />
-                            <span>Open Preview</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSubmissionTracker(null);
-                              setUploadMessage(null);
-                            }}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '6px 14px',
-                              fontSize: '13px',
-                              fontWeight: 600,
-                              color: '#065f46',
-                              background: '#d1fae5',
-                              border: '1px solid #a7f3d0',
-                              borderRadius: '8px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <Plus style={{ width: '14px', height: '14px' }} />
-                            <span>Start New Application</span>
-                          </button>
-                        </>
-                      )}
-                      {submissionTracker.isError && (
-                        <button
-                          type="button"
-                          onClick={() => setSubmissionTracker(null)}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '6px 14px',
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            color: '#991b1b',
-                            background: '#fee2e2',
-                            border: '1px solid #fca5a5',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <X style={{ width: '14px', height: '14px' }} />
-                          <span>Dismiss</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div
-                    className="voice-progress-track"
-                    style={{
-                      width: '100%',
-                      height: '8px',
-                      borderRadius: '999px',
-                      background: 'rgba(148, 163, 184, 0.25)',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <div
-                      className="voice-progress-fill"
-                      style={{
-                        width: `${submissionTracker.ready || submissionTracker.isError ? 100 : submissionTracker.percent}%`,
-                        height: '100%',
-                        borderRadius: '999px',
-                        background: submissionTracker.isError
-                          ? 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)'
-                          : submissionTracker.ready
-                          ? 'linear-gradient(90deg, #10b981 0%, #059669 100%)'
-                          : 'linear-gradient(90deg, #2563eb 0%, #3b82f6 100%)',
-                        transition: 'width 0.45s ease',
-                      }}
-                    />
-                  </div>
-                </div>
-              ) : uploadMessage ? (
+              {uploadMessage && !portalErrorApp && !submissionTracker?.active && (
                 <div className={`form-alert ${uploadMessage.type === 'success' ? 'alert-success' : 'alert-error'}`}>
                   {uploadMessage.type === 'success' ? (
                     <Clock className="alert-icon animate-pulse" />
@@ -2819,9 +3120,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   )}
                   <span>{uploadMessage.text}</span>
                 </div>
-              ) : null}
+              )}
 
-              {quota && quota.is_exhausted && (
+              {quota && quota.is_exhausted && !portalErrorApp && (
                 <div
                   className="status-banner-card warning"
                   style={{
@@ -2848,8 +3149,38 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               <form onSubmit={handleSubmitApplication} className="fresh-form">
                 <div className="form-grid-2">
                   <div className="input-group">
-                    <label htmlFor="portalEmail" className="input-label">
-                      Email ID <span className="required-star">*</span>
+                    <label
+                      htmlFor="portalEmail"
+                      className="input-label"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}
+                    >
+                      <span>
+                        Email ID <span className="required-star">*</span>
+                      </span>
+                      {quota && portalEmail.trim() && (
+                        <span
+                          title={`Portal ID quota: ${quota.used} of ${quota.total} applications used`}
+                          style={{
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            padding: '1px 8px',
+                            borderRadius: '999px',
+                            background: quota.is_exhausted
+                              ? 'rgba(239, 68, 68, 0.14)'
+                              : quota.used >= 40
+                              ? 'rgba(245, 158, 11, 0.14)'
+                              : 'rgba(37, 99, 235, 0.12)',
+                            color: quota.is_exhausted
+                              ? '#dc2626'
+                              : quota.used >= 40
+                              ? '#d97706'
+                              : '#2563eb',
+                            letterSpacing: '0.3px',
+                          }}
+                        >
+                          {quota.used}/{quota.total}
+                        </span>
+                      )}
                     </label>
                     <input
                       id="portalEmail"
@@ -2983,7 +3314,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   <div className="docs-boxes-grid">
                     {/* 1. Photograph Box */}
                     <div
-                      className={`doc-upload-box ${photoFile ? 'has-file' : ''} ${dragSlot === 'photo' ? 'drag-target' : ''}`}
+                      className={`doc-upload-box ${photoFile && photoValidation.status === 'valid' ? 'has-file' : ''} ${dragSlot === 'photo' ? 'drag-target' : ''}`}
+                      style={
+                        photoValidation.status === 'invalid'
+                          ? { borderColor: '#ef4444', background: 'rgba(254, 242, 242, 0.85)' }
+                          : photoValidation.status === 'validating'
+                          ? { borderColor: '#3b82f6', background: 'rgba(239, 246, 255, 0.85)' }
+                          : undefined
+                      }
                       data-drop-slot="photo"
                       onClick={() => photoInputRef.current?.click()}
                       onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'photo'; setDragSlot('photo'); }}
@@ -3013,15 +3351,30 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       />
                       <div className="doc-box-header">
                         <Camera className="doc-box-icon" />
-                        <span className="doc-box-title">Photograph</span>
+                        <span className="doc-box-title">Photograph *</span>
                       </div>
                       <div className="doc-box-content">
-                        {photoFile ? (
+                        {photoValidation.status === 'validating' ? (
+                          <div className="doc-box-empty" style={{ gap: '6px' }}>
+                            <span
+                              className="doc-box-badge"
+                              style={{ background: '#dbeafe', color: '#1d4ed8', fontWeight: 700 }}
+                            >
+                              Checking with Portal...
+                            </span>
+                            <div className="doc-box-action-hint" style={{ color: '#2563eb' }}>
+                              <RefreshCw style={{ width: '12px', height: '12px' }} className="animate-spin" />
+                              <span>Verifying ICAO</span>
+                            </div>
+                          </div>
+                        ) : photoFile && photoValidation.status === 'valid' ? (
                           <div className="doc-box-file-info">
                             <img src={URL.createObjectURL(photoFile)} alt="Photo" className="doc-box-thumb" />
                             <div className="doc-box-text-info">
                               <span className="doc-box-filename" title={photoFile.name}>{photoFile.name}</span>
-                              <span className="doc-box-filesize">{(photoFile.size / 1024).toFixed(0)} KB</span>
+                              <span className="doc-box-filesize" style={{ color: '#059669', fontWeight: 700 }}>
+                                Portal Verified ✓ ({(photoFile.size / 1024).toFixed(0)} KB)
+                              </span>
                             </div>
                             <button
                               type="button"
@@ -3034,6 +3387,19 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             >
                               <X style={{ width: '13px', height: '13px' }} />
                             </button>
+                          </div>
+                        ) : photoValidation.status === 'invalid' ? (
+                          <div className="doc-box-empty" style={{ gap: '4px' }}>
+                            <span
+                              className="doc-box-badge"
+                              style={{ background: '#fee2e2', color: '#b91c1c', fontWeight: 700 }}
+                            >
+                              Rejected by Portal
+                            </span>
+                            <div className="doc-box-action-hint" style={{ color: '#dc2626', fontWeight: 600 }}>
+                              <Upload style={{ width: '12px', height: '12px' }} />
+                              <span>Upload Another</span>
+                            </div>
                           </div>
                         ) : (
                           <div className="doc-box-empty">
@@ -3103,7 +3469,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </div>
                         ) : (
                           <div className="doc-box-empty">
-                            <span className="doc-box-badge">≤100 KB JPG</span>
+                            <span className="doc-box-badge">≤85 KB JPG</span>
                             <div className="doc-box-action-hint">
                               <Upload style={{ width: '12px', height: '12px' }} />
                               <span>Upload</span>
@@ -3172,7 +3538,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         ) : (
                           <div className="doc-box-empty">
                             <span className="doc-box-badge">
-                              {activeServiceType === 'fresh' ? 'Optional (If Any)' : 'PDF ≤1 MB'}
+                              {activeServiceType === 'fresh' ? 'Optional (If Any)' : 'PDF ≤870.4 KB'}
                             </span>
                             <div className="doc-box-action-hint">
                               <Upload style={{ width: '12px', height: '12px' }} />
@@ -3428,23 +3794,79 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 </div>
 
                 <div className="form-submit-row">
-                  <button
-                    type="submit"
-                    disabled={isUploading}
-                    className="submit-btn"
-                  >
-                    {isUploading ? (
-                      <>
-                        <RefreshCw className="submit-icon animate-spin" />
-                        <span>Uploading &amp; Processing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Send className="submit-icon" />
-                        <span>Submit Application</span>
-                      </>
-                    )}
-                  </button>
+                  {photoFile && photoValidation.status === 'valid' ? (
+                    <button
+                      type="submit"
+                      disabled={isUploading}
+                      className="submit-btn"
+                    >
+                      {isUploading ? (
+                        <>
+                          <RefreshCw className="submit-icon animate-spin" />
+                          <span>Uploading &amp; Processing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="submit-icon" />
+                          <span>Submit Application</span>
+                        </>
+                      )}
+                    </button>
+                  ) : photoValidation.status === 'validating' ? (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '10px 18px',
+                        borderRadius: '10px',
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        color: '#1e40af',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <RefreshCw style={{ width: '15px', height: '15px' }} className="animate-spin" />
+                      <span>Verifying photograph with Passport Seva Portal...</span>
+                    </div>
+                  ) : photoValidation.status === 'invalid' ? (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '10px 18px',
+                        borderRadius: '10px',
+                        background: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        color: '#b91c1c',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <AlertCircle style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                      <span>{photoValidation.message || 'This photo is not allowed by the portal. Please upload another photograph.'}</span>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '10px 18px',
+                        borderRadius: '10px',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        color: '#64748b',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                      }}
+                    >
+                      <Camera style={{ width: '15px', height: '15px', color: '#3b82f6' }} />
+                      <span>Upload an ICAO-compliant Photograph above to unlock Submit Application</span>
+                    </div>
+                  )}
                 </div>
               </form>
             </div>
@@ -3472,58 +3894,76 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               </p>
             </div>
 
-            <div className="service-filter-pills" style={{ display: 'inline-flex', background: '#f1f5f9', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0', gap: '4px' }}>
-              <button
-                type="button"
-                onClick={() => setPreviewFilter('all')}
-                style={{
-                  padding: '5px 12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  borderRadius: '7px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: previewFilter === 'all' ? '#2563eb' : 'transparent',
-                  color: previewFilter === 'all' ? '#ffffff' : '#64748b',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                All ({previews.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setPreviewFilter('reissue')}
-                style={{
-                  padding: '5px 12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  borderRadius: '7px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: previewFilter === 'reissue' ? '#2563eb' : 'transparent',
-                  color: previewFilter === 'reissue' ? '#ffffff' : '#64748b',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                Reissue ({reissueCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setPreviewFilter('fresh')}
-                style={{
-                  padding: '5px 12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  borderRadius: '7px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: previewFilter === 'fresh' ? '#059669' : 'transparent',
-                  color: previewFilter === 'fresh' ? '#ffffff' : '#64748b',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                Fresh ({freshCount})
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              {quota && (
+                <span
+                  title={`Portal ID quota: ${quota.used} of ${quota.total} applications used`}
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    padding: '5px 10px',
+                    borderRadius: '8px',
+                    background: quota.is_exhausted ? '#fef2f2' : '#eff6ff',
+                    color: quota.is_exhausted ? '#dc2626' : '#2563eb',
+                    border: `1px solid ${quota.is_exhausted ? '#fecaca' : '#bfdbfe'}`,
+                  }}
+                >
+                  {quota.used}/{quota.total}
+                </span>
+              )}
+              <div className="service-filter-pills" style={{ display: 'inline-flex', background: '#f1f5f9', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0', gap: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPreviewFilter('all')}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    borderRadius: '7px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: previewFilter === 'all' ? '#2563eb' : 'transparent',
+                    color: previewFilter === 'all' ? '#ffffff' : '#64748b',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  All ({previews.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewFilter('reissue')}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    borderRadius: '7px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: previewFilter === 'reissue' ? '#2563eb' : 'transparent',
+                    color: previewFilter === 'reissue' ? '#ffffff' : '#64748b',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Reissue ({reissueCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewFilter('fresh')}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    borderRadius: '7px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: previewFilter === 'fresh' ? '#059669' : 'transparent',
+                    color: previewFilter === 'fresh' ? '#ffffff' : '#64748b',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Fresh ({freshCount})
+                </button>
+              </div>
             </div>
           </div>
 
@@ -3617,7 +4057,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 const isUpdatingThis = voiceProcessingFolder === folderKey;
                 const isAnyUpdating = Boolean(voiceProcessingFolder);
                 const canSubmit = selection.passport && selection.declaration && !isUpdatingThis && !isAnyUpdating;
-                const isSubmittingThis = submittingArn === item.arn;
+                const isSubmittingThis = submittingArn === item.arn || reuploadingFolder === folderKey;
+                const liveSubmitPct =
+                  typeof item.progress === 'number' && item.progress > 0 && item.progress < 100
+                    ? item.progress
+                    : 18;
+                const liveSubmitStage =
+                  item.stage && item.stage !== 'Previews Ready for Confirmation'
+                    ? item.stage
+                    : 'Uploading supporting documents & submitting to Passport Seva Portal...';
 
                 return (
                   <div key={folderKey} className="preview-card">
@@ -3641,7 +4089,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           {(item.service_type || '').toLowerCase() === 'fresh' ? 'Fresh Passport' : 'Reissue Passport'}
                         </span>
                         <span className="preview-client-name" style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>{item.applicant_name}</span>
-                        <span className="status-tag-pending">Awaiting Verification</span>
+                        <span className="status-tag-pending">
+                          {isSubmittingThis ? 'Submitting to Portal...' : 'Awaiting Verification'}
+                        </span>
                       </div>
                     </div>
 
@@ -3686,7 +4136,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         ) : (
                           <button
                             type="button"
-                            disabled={voiceProcessingFolder === folderKey}
+                            disabled={voiceProcessingFolder === folderKey || isSubmittingThis}
                             onClick={() => requestMicAndRecord(folderKey)}
                             className="voice-record-btn"
                             title="Record voice note for Smart Voice Agent"
@@ -3699,7 +4149,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         <div className="voice-text-input-wrap">
                           <input
                             type="text"
-                            disabled={voiceProcessingFolder === folderKey || recordingFolder === folderKey}
+                            disabled={voiceProcessingFolder === folderKey || recordingFolder === folderKey || isSubmittingThis}
                             placeholder="Or type instructions here..."
                             value={voiceTextInputs[folderKey] || ''}
                             onChange={(e) => setVoiceTextInputs({ ...voiceTextInputs, [folderKey]: e.target.value })}
@@ -3712,7 +4162,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           />
                           <button
                             type="button"
-                            disabled={voiceProcessingFolder === folderKey || recordingFolder === folderKey || !(voiceTextInputs[folderKey] || '').trim()}
+                            disabled={voiceProcessingFolder === folderKey || recordingFolder === folderKey || isSubmittingThis || !(voiceTextInputs[folderKey] || '').trim()}
                             onClick={() => handleSendVoiceAction(folderKey, null, voiceTextInputs[folderKey])}
                             className="voice-text-send-btn"
                             title="Send text instruction"
@@ -3782,7 +4232,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                                 <Camera style={{ width: '13px', height: '13px', color: '#2563eb' }} />
                                 <span className="media-card-title">Photograph</span>
                               </div>
-                              <span className="media-card-tag">630×810 JPG (&le;250 KB)</span>
+                              <span className="media-card-tag">630×810 JPG (&le;212.5 KB)</span>
                             </div>
                             <div
                               className="media-card-preview-area"
@@ -3813,7 +4263,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                                 <PenTool style={{ width: '13px', height: '13px', color: '#2563eb' }} />
                                 <span className="media-card-title">Signature</span>
                               </div>
-                              <span className="media-card-tag">JPG &le;100 KB</span>
+                              <span className="media-card-tag">JPG &le;85 KB</span>
                             </div>
                             <div
                               className="media-card-preview-area"
@@ -3861,7 +4311,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </button>
                           <button
                             type="button"
-                            disabled={isUpdatingThis}
+                            disabled={isUpdatingThis || isSubmittingThis}
                             onClick={() => togglePreviewCheckbox(folderKey, 'passport')}
                             className="doc-checkbox-btn"
                             title="Confirm review"
@@ -3895,7 +4345,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </button>
                           <button
                             type="button"
-                            disabled={isUpdatingThis}
+                            disabled={isUpdatingThis || isSubmittingThis}
                             onClick={() => togglePreviewCheckbox(folderKey, 'declaration')}
                             className="doc-checkbox-btn"
                             title="Confirm review"
@@ -3911,11 +4361,194 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       </div>
                     </div>
 
+                    {isSubmittingThis && (
+                      <div
+                        className="voice-progress-container"
+                        style={{
+                          margin: '0 20px 14px 20px',
+                          padding: '12px 16px',
+                          borderRadius: '10px',
+                          border: '1px solid rgba(37, 99, 235, 0.28)',
+                          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%)',
+                        }}
+                      >
+                        <div className="voice-progress-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '10px' }}>
+                          <div className="voice-progress-status" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '13px', color: '#1e40af' }}>
+                            <RefreshCw style={{ width: '15px', height: '15px', color: '#2563eb', flexShrink: 0 }} className="animate-spin" />
+                            <span>{liveSubmitStage}</span>
+                          </div>
+                          <span
+                            className="voice-progress-percent"
+                            style={{
+                              fontWeight: 700,
+                              fontSize: '13px',
+                              color: '#2563eb',
+                              background: 'rgba(37, 99, 235, 0.12)',
+                              padding: '2px 9px',
+                              borderRadius: '999px',
+                            }}
+                          >
+                            {liveSubmitPct}%
+                          </span>
+                        </div>
+                        <div
+                          className="voice-progress-track"
+                          style={{
+                            width: '100%',
+                            height: '7px',
+                            borderRadius: '999px',
+                            background: 'rgba(148, 163, 184, 0.25)',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <div
+                            className="voice-progress-fill"
+                            style={{
+                              width: `${liveSubmitPct}%`,
+                              height: '100%',
+                              borderRadius: '999px',
+                              background: 'linear-gradient(90deg, #2563eb 0%, #3b82f6 100%)',
+                              transition: 'width 0.35s ease',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {(item.error_type === 'PORTAL_UPLOAD_ERROR' || item.portal_server_error || item.error_message) && !isSubmittingThis && (
+                      <div
+                        style={{
+                          margin: '0 20px 14px 20px',
+                          padding: '14px 16px',
+                          borderRadius: '10px',
+                          background: '#fef2f2',
+                          border: '1px solid #fecaca',
+                          borderLeft: '4px solid #dc2626',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                          <AlertCircle style={{ width: '18px', height: '18px', color: '#dc2626', flexShrink: 0, marginTop: '2px' }} />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: '#991b1b' }}>
+                                Portal Rejected Document Upload
+                              </span>
+                              {item.failed_upload_file && (
+                                <span
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    color: '#b91c1c',
+                                    background: '#fee2e2',
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                  }}
+                                >
+                                  File: {item.failed_upload_file}
+                                </span>
+                              )}
+                            </div>
+                            <span style={{ fontSize: '12.5px', color: '#7f1d1d', lineHeight: 1.45 }}>
+                              {item.error_message || `Portal Server Error: ${item.portal_server_error}`}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            flexWrap: 'wrap',
+                            paddingTop: '6px',
+                            borderTop: '1px dashed #fca5a5',
+                          }}
+                        >
+                          <label
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '7px 12px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              color: '#1e293b',
+                              background: '#ffffff',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '7px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Upload style={{ width: '13px', height: '13px', color: '#2563eb' }} />
+                            <span>
+                              {reuploadFiles[folderKey]
+                                ? reuploadFiles[folderKey]!.name
+                                : `Choose Replacement ${item.failed_upload_file || 'File'}`}
+                            </span>
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              style={{ display: 'none' }}
+                              onChange={(e) => {
+                                const picked = e.target.files?.[0] || null;
+                                setReuploadFiles((prev) => ({ ...prev, [folderKey]: picked }));
+                              }}
+                            />
+                          </label>
+
+                          <button
+                            type="button"
+                            disabled={!reuploadFiles[folderKey] || reuploadingFolder === folderKey || isSubmittingThis}
+                            onClick={() =>
+                              handleReuploadAndRetry(
+                                folderKey,
+                                item.arn,
+                                item.failed_upload_slot,
+                                item.failed_upload_file
+                              )
+                            }
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '7px 14px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              color: '#ffffff',
+                              background: reuploadFiles[folderKey] ? '#dc2626' : '#94a3b8',
+                              border: 'none',
+                              borderRadius: '7px',
+                              cursor: reuploadFiles[folderKey] ? 'pointer' : 'not-allowed',
+                            }}
+                          >
+                            {reuploadingFolder === folderKey ? (
+                              <>
+                                <RefreshCw style={{ width: '13px', height: '13px' }} className="animate-spin" />
+                                <span>Re-Uploading &amp; Submitting...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send style={{ width: '13px', height: '13px' }} />
+                                <span>Re-Upload &amp; Retry Submission</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="preview-card-footer">
                       <div className="review-instruction">
                         {isUpdatingThis ? (
                           <span className="instruction-text" style={{ color: '#2563eb', fontWeight: 600 }}>
                             Update in progress — Submit Application is locked until updates finish.
+                          </span>
+                        ) : isSubmittingThis ? (
+                          <span className="instruction-text" style={{ color: '#2563eb', fontWeight: 600 }}>
+                            {liveSubmitStage} ({liveSubmitPct}%)
                           </span>
                         ) : !canSubmit ? (
                           <span className="instruction-text">
@@ -3946,8 +4579,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             backgroundColor: 'rgba(239, 68, 68, 0.08)',
                             border: '1px solid rgba(239, 68, 68, 0.25)',
                             borderRadius: '8px',
-                            cursor: isUpdatingThis ? 'not-allowed' : 'pointer',
-                            opacity: isUpdatingThis ? 0.5 : 1,
+                            cursor: isUpdatingThis || isSubmittingThis ? 'not-allowed' : 'pointer',
+                            opacity: isUpdatingThis || isSubmittingThis ? 0.5 : 1,
                           }}
                         >
                           {cancellingFolder === folderKey ? (
@@ -3967,7 +4600,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           type="button"
                           disabled={!canSubmit || isSubmittingThis || cancellingFolder === folderKey || isUpdatingThis || isAnyUpdating}
                           onClick={() => handleConfirmFinalSubmit(folderKey, item.arn)}
-                          className={`final-submit-btn ${canSubmit ? 'enabled' : 'disabled'}`}
+                          className={`final-submit-btn ${canSubmit && !isSubmittingThis ? 'enabled' : 'disabled'}`}
                         >
                           {isUpdatingThis ? (
                             <>
@@ -3977,7 +4610,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           ) : isSubmittingThis ? (
                             <>
                               <RefreshCw className="submit-icon animate-spin" />
-                              <span>Submitting to Portal (Stage 10)...</span>
+                              <span>Submitting ({liveSubmitPct}%)...</span>
                             </>
                           ) : (
                             <>
@@ -4017,58 +4650,76 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 </p>
               </div>
 
-              <div className="service-filter-pills" style={{ display: 'inline-flex', background: '#f1f5f9', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0', gap: '4px' }}>
-                <button
-                  type="button"
-                  onClick={() => setSubmittedFilter('all')}
-                  style={{
-                    padding: '5px 12px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    borderRadius: '7px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: submittedFilter === 'all' ? '#2563eb' : 'transparent',
-                    color: submittedFilter === 'all' ? '#ffffff' : '#64748b',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  All ({completed.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubmittedFilter('reissue')}
-                  style={{
-                    padding: '5px 12px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    borderRadius: '7px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: submittedFilter === 'reissue' ? '#2563eb' : 'transparent',
-                    color: submittedFilter === 'reissue' ? '#ffffff' : '#64748b',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  Reissue ({reissueCount})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubmittedFilter('fresh')}
-                  style={{
-                    padding: '5px 12px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    borderRadius: '7px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: submittedFilter === 'fresh' ? '#059669' : 'transparent',
-                    color: submittedFilter === 'fresh' ? '#ffffff' : '#64748b',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  Fresh ({freshCount})
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                {quota && (
+                  <span
+                    title={`Portal ID quota: ${quota.used} of ${quota.total} applications used`}
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      padding: '5px 10px',
+                      borderRadius: '8px',
+                      background: quota.is_exhausted ? '#fef2f2' : '#eff6ff',
+                      color: quota.is_exhausted ? '#dc2626' : '#2563eb',
+                      border: `1px solid ${quota.is_exhausted ? '#fecaca' : '#bfdbfe'}`,
+                    }}
+                  >
+                    {quota.used}/{quota.total}
+                  </span>
+                )}
+                <div className="service-filter-pills" style={{ display: 'inline-flex', background: '#f1f5f9', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0', gap: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSubmittedFilter('all')}
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      borderRadius: '7px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: submittedFilter === 'all' ? '#2563eb' : 'transparent',
+                      color: submittedFilter === 'all' ? '#ffffff' : '#64748b',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    All ({completed.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSubmittedFilter('reissue')}
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      borderRadius: '7px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: submittedFilter === 'reissue' ? '#2563eb' : 'transparent',
+                      color: submittedFilter === 'reissue' ? '#ffffff' : '#64748b',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    Reissue ({reissueCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSubmittedFilter('fresh')}
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      borderRadius: '7px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: submittedFilter === 'fresh' ? '#059669' : 'transparent',
+                      color: submittedFilter === 'fresh' ? '#ffffff' : '#64748b',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    Fresh ({freshCount})
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -4081,61 +4732,98 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   {submittedFilter === 'all' ? 'No Completed Applications' : `No Completed ${submittedFilter === 'fresh' ? 'Fresh Passport' : 'Reissue'} Applications`}
                 </h3>
                 <p className="empty-desc">
-                  Once an application is verified and submitted from the Preview section, it will appear here with its official ARN and receipt.
+                  Once an application is verified and submitted from the Preview section, it will appear here with its official ARN and printable Application Form PDF.
                 </p>
               </div>
             ) : (
               <div className="completed-grid">
-                {displayedCompleted.map((item, idx) => (
-                  <div key={idx} className="completed-card">
-                    <div className="completed-card-left">
-                      <div className="completed-seal">
-                        <CheckCircle2 className="completed-icon" />
-                      </div>
-                      <div className="completed-details">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <h3 className="completed-client-name">{item.applicant_name}</h3>
-                          <span
-                            style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '2px 8px',
-                              borderRadius: '999px',
-                              background: (item.service_type || '').toLowerCase() === 'fresh' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(37, 99, 235, 0.12)',
-                              color: (item.service_type || '').toLowerCase() === 'fresh' ? '#059669' : '#2563eb',
-                              border: `1px solid ${(item.service_type || '').toLowerCase() === 'fresh' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(37, 99, 235, 0.25)'}`,
-                            }}
-                          >
-                            {(item.service_type || '').toLowerCase() === 'fresh' ? 'Fresh Passport' : 'Reissue Passport'}
-                          </span>
+                {displayedCompleted.map((item, idx) => {
+                  const pdfRelUrl = item.application_form_url || item.receipt_url;
+                  const itemKey = item.arn || item.folder_name || String(idx);
+                  const isDownloadingThis = downloadingFormKey === itemKey;
+                  return (
+                    <div key={idx} className="completed-card">
+                      <div className="completed-card-left">
+                        <div className="completed-seal">
+                          <CheckCircle2 className="completed-icon" />
                         </div>
-                        <div className="completed-meta-row">
-                          <span className="arn-badge">ARN: {item.arn}</span>
-                          {item.portal_email && (
-                            <span className="arn-badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
-                              Portal: {item.portal_email}
+                        <div className="completed-details">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <h3 className="completed-client-name">{item.applicant_name}</h3>
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                padding: '2px 8px',
+                                borderRadius: '999px',
+                                background: (item.service_type || '').toLowerCase() === 'fresh' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(37, 99, 235, 0.12)',
+                                color: (item.service_type || '').toLowerCase() === 'fresh' ? '#059669' : '#2563eb',
+                                border: `1px solid ${(item.service_type || '').toLowerCase() === 'fresh' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(37, 99, 235, 0.25)'}`,
+                              }}
+                            >
+                              {(item.service_type || '').toLowerCase() === 'fresh' ? 'Fresh Passport' : 'Reissue Passport'}
                             </span>
-                          )}
-                          <span className="submission-date">Submitted: {item.submitted_at}</span>
+                          </div>
+                          <div className="completed-meta-row">
+                            <span className="arn-badge">ARN: {item.arn}</span>
+                            {item.portal_email && (
+                              <span className="arn-badge" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
+                                Portal: {item.portal_email}
+                              </span>
+                            )}
+                            <span className="submission-date">Submitted: {item.submitted_at}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="completed-card-right">
-                      {item.receipt_url && (
-                        <button
-                          type="button"
-                          onClick={() => openPdfViewer(`Submission Receipt - ${item.applicant_name}`, item.receipt_url!)}
-                          className="receipt-btn"
-                          title="View Official Submission Receipt"
-                        >
-                          <Download className="receipt-icon" />
-                          <span>Receipt</span>
-                        </button>
-                      )}
+                      <div className="completed-card-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {pdfRelUrl && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openPdfViewer(
+                                  `Official Application Form - ${item.applicant_name}`,
+                                  pdfRelUrl
+                                )
+                              }
+                              className="receipt-btn"
+                              style={{
+                                background: '#f8fafc',
+                                color: '#1e293b',
+                                border: '1px solid #cbd5e1',
+                              }}
+                              title="Preview & Print Official Application Form PDF"
+                            >
+                              <Eye className="receipt-icon" style={{ color: '#2563eb' }} />
+                              <span>View Form</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isDownloadingThis}
+                              onClick={() =>
+                                handleDirectDownloadPdf(
+                                  `Official_Application_Form_${item.applicant_name}`,
+                                  pdfRelUrl,
+                                  itemKey
+                                )
+                              }
+                              className="receipt-btn"
+                              title="Download Official Application Form PDF directly to your Downloads folder"
+                            >
+                              {isDownloadingThis ? (
+                                <RefreshCw className="receipt-icon animate-spin" />
+                              ) : (
+                                <Download className="receipt-icon" />
+                              )}
+                              <span>{isDownloadingThis ? 'Saving...' : 'Download'}</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -4267,7 +4955,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             <p style={{ fontSize: '13.5px', color: '#475569', lineHeight: 1.5, margin: '0 0 24px 0' }}>
               {micPermissionModal.status === 'denied'
                 ? (micPermissionModal.errorMessage || 'Microphone access is blocked in your system settings. Please grant microphone permission to Foreigners Studio in Windows Privacy Settings to use Voice Agent.')
-                : 'Foreigners Studio AI Voice Agent requires microphone permission to record voice notes, review applicant details, and assist you with hands-free instructions.'
+                : 'Foreigners Studio Voice Assistant requires microphone permission to record voice notes, review applicant details, and assist you with hands-free instructions.'
               }
             </p>
 
