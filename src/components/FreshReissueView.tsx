@@ -1033,7 +1033,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const prevPreviewFoldersRef = useRef<Set<string>>(new Set());
 
   const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
-  const [isDismissing, setIsDismissing] = useState(false);
   const [cancellingFolder, setCancellingFolder] = useState<string | null>(null);
   const [cancelModalTarget, setCancelModalTarget] = useState<{
     folderName: string;
@@ -2477,6 +2476,32 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
     }
 
+    const payloadFiles = {
+      photo: photoFile,
+      signature: signFile,
+      passport: passportFile,
+      identity: identityFile,
+      residence: residenceFile,
+      supporting: infoFile,
+      files: selectedFiles,
+      marriage_cert: slotFiles.marriage_cert || undefined,
+      spouse_passport: slotFiles.spouse_passport || undefined,
+      birth_cert: slotFiles.birth_cert || undefined,
+      police_report: slotFiles.police_report || undefined,
+      annexure_f: slotFiles.annexure_f || undefined,
+      father_passport: slotFiles.father_passport || undefined,
+      mother_passport: slotFiles.mother_passport || undefined,
+      annexure_d: slotFiles.annexure_d || undefined,
+      annexure_e: slotFiles.annexure_e || undefined,
+      divorce_death_cert: slotFiles.divorce_death_cert || undefined,
+      name_change_proof: slotFiles.name_change_proof || undefined,
+      education_proof: slotFiles.education_proof || undefined,
+    };
+    const infoPayload = Object.keys(inAppInfoData).length > 0 ? JSON.stringify(inAppInfoData) : undefined;
+
+    // Immediately clear slots so uploaded documents fade away from UI without double process
+    clearDocumentSlots();
+
     try {
       setIsUploading(true);
       setUploadMessage(null);
@@ -2499,31 +2524,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         targetClientEmail,
         targetClientEmail,
         cleanPassword,
-        {
-          photo: photoFile,
-          signature: signFile,
-          passport: passportFile,
-          identity: identityFile,
-          residence: residenceFile,
-          supporting: infoFile,
-          files: selectedFiles,
-          marriage_cert: slotFiles.marriage_cert || undefined,
-          spouse_passport: slotFiles.spouse_passport || undefined,
-          birth_cert: slotFiles.birth_cert || undefined,
-          police_report: slotFiles.police_report || undefined,
-          annexure_f: slotFiles.annexure_f || undefined,
-          father_passport: slotFiles.father_passport || undefined,
-          mother_passport: slotFiles.mother_passport || undefined,
-          annexure_d: slotFiles.annexure_d || undefined,
-          annexure_e: slotFiles.annexure_e || undefined,
-          divorce_death_cert: slotFiles.divorce_death_cert || undefined,
-          name_change_proof: slotFiles.name_change_proof || undefined,
-          education_proof: slotFiles.education_proof || undefined,
-        },
+        payloadFiles,
         user?.email,
         declarationPlace,
         activeServiceType,
-        Object.keys(inAppInfoData).length > 0 ? JSON.stringify(inAppInfoData) : undefined
+        infoPayload
       );
 
       const uploadedFolder = uploadRes?.folder_name;
@@ -2541,7 +2546,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         text: 'File submitted, waiting for preview...',
         type: 'success',
       });
-      clearDocumentSlots();
       refreshAllData(targetClientEmail.toLowerCase());
     } catch (err: any) {
       const friendlyMsg = sanitizeErrorMessage(err);
@@ -2700,7 +2704,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   };
 
-  const handleDismissCorrection = async (folderName?: string) => {
+  const handleDismissCorrection = (folderName?: string) => {
     const targetFolder = folderName || correctionApp?.folder_name;
     if (!targetFolder) return;
     dismissedFoldersRef.current.add(targetFolder);
@@ -2708,17 +2712,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     setApplications(prev => prev.filter(a => a.folder_name !== targetFolder));
     setSubmissionTracker(null);
     setUploadMessage(null);
-    try {
-      setIsDismissing(true);
-      const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
-      await automationApi.dismissApplication(email, targetFolder, googleUserEmail);
-      await refreshAllData();
-    } catch (err: any) {
-      console.warn("Failed to dismiss application on server:", err);
-      await refreshAllData();
-    } finally {
-      setIsDismissing(false);
-    }
   };
 
   const handleCancelPreview = (folderName: string, applicantName?: string) => {
@@ -2923,14 +2916,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     !dismissedFoldersRef.current.has(a.folder_name)
   );
 
-  useEffect(() => {
-    if (!portalErrorApp?.folder_name) return;
-    const targetFolder = portalErrorApp.folder_name;
-    const timer = setTimeout(() => {
-      handleDismissCorrection(targetFolder);
-    }, 10000);
-    return () => clearTimeout(timer);
-  }, [portalErrorApp?.folder_name]);
 
   useEffect(() => {
     if (!uploadMessage || uploadMessage.type !== 'error') return;
@@ -3003,10 +2988,37 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         descColor: '#b91c1c'
       };
     }
+    if (errType === 'MISSING_PHOTO_OR_SIGNATURE') {
+      return {
+        title: 'PHOTOGRAPH OR SIGNATURE REQUIRED',
+        desc: `Applicant ${app.applicant_name || app.folder_name}: ${rawMsg}`,
+        badge: 'Photo / Sign Missing',
+        badgeColor: '#dc2626',
+        bg: '#fef2f2',
+        border: '#fecaca',
+        borderLeft: '#ef4444',
+        titleColor: '#991b1b',
+        descColor: '#b91c1c'
+      };
+    }
+    if (errType === 'EXTRACTION_FAILURE') {
+      return {
+        title: 'DOCUMENT EXTRACTION NOTICE',
+        desc: `Applicant ${app.applicant_name || app.folder_name}: ${rawMsg}`,
+        badge: 'Extraction Notice',
+        badgeColor: '#dc2626',
+        bg: '#fef2f2',
+        border: '#fecaca',
+        borderLeft: '#ef4444',
+        titleColor: '#991b1b',
+        descColor: '#b91c1c'
+      };
+    }
+    const isAuth = errType === 'PORTAL_LOGIN_ERROR' || (rawMsg && /login|credentials|password|auth/i.test(rawMsg));
     return {
-      title: 'PORTAL AUTHENTICATION / CONNECTION ERROR',
-      desc: `Portal error for applicant ${app.applicant_name || app.folder_name}: ${rawMsg}. Please check credentials or retry after a moment.`,
-      badge: 'Portal Error',
+      title: isAuth ? 'PORTAL LOGIN / AUTHENTICATION NOTICE' : 'APPLICATION NOTICE',
+      desc: `Notice for applicant ${app.applicant_name || app.folder_name}: ${rawMsg}`,
+      badge: isAuth ? 'Login Notice' : 'Notice',
       badgeColor: '#dc2626',
       bg: '#fef2f2',
       border: '#fecaca',
@@ -3174,7 +3186,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       {currentSection === 'form' && (
         <div className="fresh-reissue-content">
 
-          {portalErrorApp && (() => {
+          {portalErrorApp && (!submissionTracker?.active || !submissionTracker.isError) && (() => {
             const errDet = getPortalErrorDetails(portalErrorApp);
             return (
               <div 
@@ -3223,11 +3235,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   <button
                     type="button"
                     onClick={() => handleDismissCorrection(portalErrorApp.folder_name)}
-                    disabled={isDismissing}
                     className="dismiss-banner-btn"
-                    title="Dismiss and delete this application from database"
+                    title="Dismiss this notice"
                   >
-                    {isDismissing ? 'Dismissing...' : 'Dismiss'}
+                    Dismiss
                   </button>
                 </div>
               </div>
@@ -3244,9 +3255,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 border: submissionTracker.isError
                   ? '1px solid rgba(239, 68, 68, 0.4)'
                   : submissionTracker.ready
-                  ? '1px solid rgba(16, 185, 129, 0.35)'
+                  ? '1px solid rgba(16, 185, 129, 0.4)'
                   : submissionTracker.isMissingInfo
-                  ? '1px solid rgba(245, 158, 11, 0.45)'
+                  ? '1px solid rgba(245, 158, 11, 0.4)'
                   : '1px solid rgba(37, 99, 235, 0.28)',
                 background: submissionTracker.isError
                   ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.04) 100%)'
@@ -3275,11 +3286,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             ? `Portal Facing Downtime${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
                             : submissionTracker.errorType === 'PORTAL_QUOTA_EXHAUSTED'
                             ? `50 Application Limit Reached${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
-                            : submissionTracker.errorType === 'INVALID_CREDENTIALS'
+                            : submissionTracker.errorType === 'INVALID_CREDENTIALS' || submissionTracker.errorType === 'PORTAL_LOGIN_ERROR'
                             ? `Portal Login Error: Incorrect Credentials${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
                             : submissionTracker.errorType === 'ACCOUNT_LOCKED'
                             ? `Portal Account Locked${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
-                            : `Portal Authentication Error${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`)
+                            : submissionTracker.errorType === 'MISSING_PHOTO_OR_SIGNATURE'
+                            ? `Missing Photograph or Signature${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                            : submissionTracker.errorType === 'EXTRACTION_FAILURE'
+                            ? `Document Extraction Notice${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                            : `Submission Notice${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`)
                         : submissionTracker.ready
                         ? `Preview Ready!${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
                         : submissionTracker.isMissingInfo
@@ -4030,10 +4045,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   <button
                     type="button"
                     onClick={() => handleDismissCorrection(correctionApp.folder_name)}
-                    disabled={isDismissing}
                     className="dismiss-btn"
                   >
-                    {isDismissing ? 'Dismissing & Deleting...' : 'Dismiss / Upload New Instead'}
+                    Dismiss / Upload New Instead
                   </button>
                   <button
                     type="button"
@@ -4713,11 +4727,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   <button
                     type="button"
                     onClick={() => handleDismissCorrection(portalErrorApp.folder_name)}
-                    disabled={isDismissing}
                     className="dismiss-banner-btn"
-                    title="Dismiss and delete this application from database"
+                    title="Dismiss this notice"
                   >
-                    {isDismissing ? 'Dismissing...' : 'Dismiss'}
+                    Dismiss
                   </button>
                 </div>
               </div>
