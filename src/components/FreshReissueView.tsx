@@ -3186,7 +3186,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       {currentSection === 'form' && (
         <div className="fresh-reissue-content">
 
-          {portalErrorApp && (!submissionTracker?.active || !submissionTracker.isError) && (() => {
+          {portalErrorApp && !submissionTracker?.active && (() => {
             const errDet = getPortalErrorDetails(portalErrorApp);
             return (
               <div 
@@ -4677,7 +4677,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             </div>
           </div>
 
-          {portalErrorApp && (() => {
+          {portalErrorApp && !submissionTracker?.active && (() => {
             const errDet = getPortalErrorDetails(portalErrorApp);
             return (
               <div 
