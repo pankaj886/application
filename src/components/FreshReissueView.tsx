@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Upload, 
   FileText, 
@@ -77,7 +77,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [activeClientEmail, setActiveClientEmail] = useState(initialEmail || '');
   const [portalPassword, setPortalPassword] = useState(initialPassword);
   const [showPassword, setShowPassword] = useState(false);
-  const declarationPlace = 'ROME';
+  const declarationPlace = useMemo(() => {
+    const clean = (portalEmail || activeClientEmail || '').toLowerCase().trim();
+    if (clean.includes('milan') || clean.includes('milano')) return 'MILAN';
+    if (clean.includes('rome') || clean.includes('roma') || clean.includes('fondi')) return 'ROME';
+    return 'ROME';
+  }, [portalEmail, activeClientEmail]);
 
   useEffect(() => {
     const savedEmail = (localStorage.getItem(scopedEmailKey) || '').toUpperCase();
@@ -3365,30 +3370,48 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       <span>
                         Email ID <span className="required-star">*</span>
                       </span>
-                      {quota && portalEmail.trim() && (
-                        <span
-                          title={`Portal ID quota: ${quota.used} of ${quota.total} applications used`}
-                          style={{
-                            fontSize: '12px',
-                            fontWeight: 700,
-                            padding: '1px 8px',
-                            borderRadius: '999px',
-                            background: quota.is_exhausted
-                              ? 'rgba(239, 68, 68, 0.14)'
-                              : quota.used >= 40
-                              ? 'rgba(245, 158, 11, 0.14)'
-                              : 'rgba(37, 99, 235, 0.12)',
-                            color: quota.is_exhausted
-                              ? '#dc2626'
-                              : quota.used >= 40
-                              ? '#d97706'
-                              : '#2563eb',
-                            letterSpacing: '0.3px',
-                          }}
-                        >
-                          {quota.used}/{quota.total}
-                        </span>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {portalEmail.trim() && (
+                          <span
+                            title={`Consular Jurisdiction: ${declarationPlace === 'MILAN' ? 'Consulate General of India, Milan' : 'Embassy of India, Rome'} (${declarationPlace})`}
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '1px 8px',
+                              borderRadius: '999px',
+                              background: declarationPlace === 'MILAN' ? 'rgba(16, 185, 129, 0.14)' : 'rgba(99, 102, 241, 0.14)',
+                              color: declarationPlace === 'MILAN' ? '#059669' : '#4f46e5',
+                              letterSpacing: '0.3px',
+                            }}
+                          >
+                            {declarationPlace === 'MILAN' ? '📍 Milan' : '📍 Rome'}
+                          </span>
+                        )}
+                        {quota && portalEmail.trim() && (
+                          <span
+                            title={`Portal ID quota: ${quota.used} of ${quota.total} applications used`}
+                            style={{
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              padding: '1px 8px',
+                              borderRadius: '999px',
+                              background: quota.is_exhausted
+                                ? 'rgba(239, 68, 68, 0.14)'
+                                : quota.used >= 40
+                                ? 'rgba(245, 158, 11, 0.14)'
+                                : 'rgba(37, 99, 235, 0.12)',
+                              color: quota.is_exhausted
+                                ? '#dc2626'
+                                : quota.used >= 40
+                                ? '#d97706'
+                                : '#2563eb',
+                              letterSpacing: '0.3px',
+                            }}
+                          >
+                            {quota.used}/{quota.total}
+                          </span>
+                        )}
+                      </div>
                     </label>
                     <input
                       id="portalEmail"

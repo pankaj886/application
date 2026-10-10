@@ -361,6 +361,29 @@ class AutomationApiService {
     return await res.json();
   }
 
+  public async resolveConsulate(email?: string, address?: string): Promise<{
+    declaration_place: string;
+    consulate_name: string;
+    pbo_short_name: string;
+    pbo_id: string;
+  }> {
+    try {
+      const baseUrl = await this.resolveGateway();
+      const params = new URLSearchParams();
+      if (email) params.append('email', email);
+      if (address) params.append('address', address);
+      const res = await fetch(`${baseUrl}/api/resolve-consulate?${params.toString()}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (_) {}
+    const clean = (email || '').toLowerCase().trim();
+    if (clean.includes('milan') || clean.includes('milano')) {
+      return { declaration_place: 'MILAN', consulate_name: 'Consulate General of India, Milan', pbo_short_name: 'Italy - Milan', pbo_id: '123' };
+    }
+    return { declaration_place: 'ROME', consulate_name: 'Embassy of India, Rome', pbo_short_name: 'Italy - Rome', pbo_id: '122' };
+  }
+
   public async getClientStatus(clientEmail: string, userEmail?: string): Promise<ClientStatusResponse> {
     const uKey = (userEmail || '').trim().toLowerCase();
     const key = `status:${uKey}:${clientEmail.toLowerCase()}`;
