@@ -580,7 +580,10 @@ class AutomationApiService {
   ): Promise<VoiceInstructionResult> {
     const baseUrl = await this.resolveGateway();
     const fd = new FormData();
-    if (audioBlob) fd.append('audio', audioBlob, 'recording.webm');
+    if (audioBlob) {
+      const fn = (audioBlob.type || '').includes('wav') ? 'recording.wav' : 'recording.webm';
+      fd.append('audio', audioBlob, fn);
+    }
     if (textInstruction && textInstruction.trim()) fd.append('text_instruction', textInstruction.trim());
     const uKey = (userEmail || '').trim().toLowerCase();
     if (uKey) fd.append('user_email', uKey);

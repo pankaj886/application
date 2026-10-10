@@ -1333,54 +1333,114 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     await startVoiceRecording(folderName);
   };
 
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const audioPcmChunksRef = useRef<Float32Array[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerIntervalRef = useRef<any>(null);
   const recordingStartTimeRef = useRef<number>(0);
 
+  const encodeWavPcm16 = (samples: Float32Array, sampleRate: number): ArrayBuffer => {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+    const writeStr = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+    writeStr(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, 1, true); // Mono
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      offset += 2;
+    }
+    return buffer;
+  };
+
+  const cleanupAudioRecording = () => {
+    if (scriptProcessorRef.current) {
+      try {
+        scriptProcessorRef.current.disconnect();
+        scriptProcessorRef.current.onaudioprocess = null;
+      } catch (_) {}
+      scriptProcessorRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close().catch(() => {});
+      } catch (_) {}
+      audioContextRef.current = null;
+    }
+    if (audioStreamRef.current) {
+      try {
+        audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      } catch (_) {}
+      audioStreamRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (_) {}
+      mediaRecorderRef.current = null;
+    }
+    audioPcmChunksRef.current = [];
+    audioChunksRef.current = [];
+  };
+
   const startVoiceRecording = async (folderName: string) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      localStorage.setItem('fs_mic_permission_granted', 'true');
-      audioChunksRef.current = [];
-
-      let mimeType = 'audio/webm;codecs=opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        if (MediaRecorder.isTypeSupported('audio/webm')) {
-          mimeType = 'audio/webm';
-        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-          mimeType = 'audio/mp4';
-        } else {
-          mimeType = '';
+      cleanupAudioRecording();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
         }
+      });
+      localStorage.setItem('fs_mic_permission_granted', 'true');
+      audioStreamRef.current = stream;
+      audioPcmChunksRef.current = [];
+
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtxClass) {
+        const audioCtx = new AudioCtxClass();
+        audioContextRef.current = audioCtx;
+        const source = audioCtx.createMediaStreamSource(stream);
+        const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        scriptProcessorRef.current = processor;
+
+        processor.onaudioprocess = (e) => {
+          const channel = e.inputBuffer.getChannelData(0);
+          audioPcmChunksRef.current.push(new Float32Array(channel));
+        };
+
+        source.connect(processor);
+        processor.connect(audioCtx.destination);
+      } else {
+        // Fallback to MediaRecorder
+        audioChunksRef.current = [];
+        const recorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = recorder;
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+        };
+        recorder.start(250);
       }
 
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
-
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((track) => track.stop());
-        const elapsed = Date.now() - recordingStartTimeRef.current;
-        if (elapsed < 500 || audioChunksRef.current.length === 0) {
-          console.warn('Recording discarded: shorter than 500ms or empty');
-          return;
-        }
-        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
-        if (blob.size < 100) {
-          console.warn('Recording discarded: blob size too small');
-          return;
-        }
-        await handleSendVoiceAction(folderName, blob);
-      };
-
       recordingStartTimeRef.current = Date.now();
-      recorder.start(250);
       setRecordingFolder(folderName);
       setRecordingDuration(0);
 
@@ -1391,6 +1451,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     } catch (err: any) {
       console.error('Microphone error:', err);
       localStorage.removeItem('fs_mic_permission_granted');
+      cleanupAudioRecording();
       setMicPermissionModal({
         isOpen: true,
         targetFolder: null,
@@ -1408,15 +1469,45 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   };
 
-  const stopVoiceRecording = () => {
+  const stopVoiceRecording = async () => {
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
+    const targetFolder = recordingFolder;
     setRecordingFolder(null);
+
+    const elapsed = Date.now() - recordingStartTimeRef.current;
+    if (elapsed < 500) {
+      console.warn('Recording discarded: shorter than 500ms');
+      cleanupAudioRecording();
+      return;
+    }
+
+    let audioBlob: Blob | null = null;
+    if (audioContextRef.current && audioPcmChunksRef.current.length > 0) {
+      const sampleRate = audioContextRef.current.sampleRate || 16000;
+      let totalLength = 0;
+      for (const chunk of audioPcmChunksRef.current) totalLength += chunk.length;
+      if (totalLength > 100) {
+        const merged = new Float32Array(totalLength);
+        let offset = 0;
+        for (const chunk of audioPcmChunksRef.current) {
+          merged.set(chunk, offset);
+          offset += chunk.length;
+        }
+        const wavBuffer = encodeWavPcm16(merged, sampleRate);
+        audioBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+      }
+    } else if (audioChunksRef.current.length > 0) {
+      audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    }
+
+    cleanupAudioRecording();
+
+    if (targetFolder && audioBlob && audioBlob.size >= 100) {
+      await handleSendVoiceAction(targetFolder, audioBlob);
+    }
   };
 
   const handleSendVoiceAction = async (folderName: string, audioBlob?: Blob | null, textPrompt?: string) => {
