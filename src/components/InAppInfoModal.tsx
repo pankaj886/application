@@ -31,6 +31,12 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       const data = { ...initialData };
+      if (!data.application_type) {
+        data.application_type = 'NORMAL';
+      }
+      if (!data.booklet_type) {
+        data.booklet_type = '36 PAGES';
+      }
       if (serviceType === 'reissue') {
         if (!data.reissue_reason || data.reissue_reason === 'CHANGE IN EXISTING PERSONAL PARTICULARS') {
           if (data.reissue_reason === 'CHANGE IN EXISTING PERSONAL PARTICULARS') {
@@ -233,11 +239,10 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       Application Type
                     </label>
                     <select
-                      value={formData.application_type || ''}
+                      value={formData.application_type || 'NORMAL'}
                       onChange={(e) => handleChange('application_type', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
-                      <option value="">SELECT</option>
                       <option value="NORMAL">NORMAL</option>
                       <option value="TATKAAL">TATKAAL</option>
                     </select>
@@ -247,11 +252,10 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       Booklet Type
                     </label>
                     <select
-                      value={formData.booklet_type || ''}
+                      value={formData.booklet_type || '36 PAGES'}
                       onChange={(e) => handleChange('booklet_type', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
-                      <option value="">SELECT</option>
                       <option value="36 PAGES">36 PAGES</option>
                       <option value="60 PAGES">60 PAGES</option>
                     </select>

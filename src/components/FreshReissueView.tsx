@@ -833,10 +833,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   }, [serviceType]);
 
   const [showInAppInfoModal, setShowInAppInfoModal] = useState(false);
-  const [inAppInfoData, setInAppInfoData] = useState<Record<string, any>>({});
+  const [inAppInfoData, setInAppInfoData] = useState<Record<string, any>>({
+    application_type: 'NORMAL',
+    booklet_type: '36 PAGES',
+  });
   const filledParticularsKeys = useMemo(() => {
     return Object.keys(inAppInfoData).filter((k) => {
-      if (k === 'is_change_in_particulars' || k === 'reissue_reason') return false;
+      if (
+        k === 'is_change_in_particulars' ||
+        k === 'reissue_reason' ||
+        k === 'application_type' ||
+        k === 'booklet_type'
+      ) return false;
       const val = inAppInfoData[k];
       if (val === undefined || val === null) return false;
       const str = String(val).trim();
@@ -2132,7 +2140,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     setResidenceFile(null);
     setInfoFile(null);
     setSelectedFiles([]);
-    setInAppInfoData({});
+    setInAppInfoData({
+      application_type: 'NORMAL',
+      booklet_type: '36 PAGES',
+    });
     setSlotFiles({
       photo: null,
       sign: null,
