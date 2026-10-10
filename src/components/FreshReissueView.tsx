@@ -1172,7 +1172,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         // Freeze tracker at extraction % and show missing info alert — NEVER jump to 100% or clear tracker!
         setUploadMessage(null);
         setSubmissionTracker(prev => {
-          const frozenPct = prev?.percent ? Math.min(Math.max(25, prev.percent), 42) : 35;
+          const frozenPct = Math.max(prev?.percent || 35, 35);
           return {
             active: true,
             ready: false,
@@ -1216,18 +1216,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               : activeProcessingApp.status === 'EXTRACTED'
               ? 50
               : 68);
-        setSubmissionTracker(prev => ({
-          active: true,
-          ready: false,
-          isMissingInfo: false,
-          folderName: activeProcessingApp.folder_name || prev?.folderName,
-          originalFolder: (activeProcessingApp as any).original_folder || prev?.originalFolder || prev?.folderName,
-          isError: false,
-          percent: Math.min(99, Math.max(10, serverPct)),
-          stageText: activeProcessingApp.stage || 'Processing application on backend...',
-          applicantName: activeProcessingApp.applicant_name || activeProcessingApp.folder_name,
-          startedAt: prev?.startedAt || Date.now(),
-        }));
+        setSubmissionTracker(prev => {
+          const currentPct = prev?.percent || 10;
+          const targetPct = Math.min(99, Math.max(currentPct, serverPct));
+          return {
+            active: true,
+            ready: false,
+            isMissingInfo: false,
+            folderName: activeProcessingApp.folder_name || prev?.folderName,
+            originalFolder: (activeProcessingApp as any).original_folder || prev?.originalFolder || prev?.folderName,
+            isError: false,
+            percent: targetPct,
+            stageText: activeProcessingApp.stage || 'Processing application on backend...',
+            applicantName: activeProcessingApp.applicant_name || activeProcessingApp.folder_name,
+            startedAt: prev?.startedAt || Date.now(),
+          };
+        });
       } else if (matchingErrorApp) {
         setUploadMessage(null);
         setSubmissionTracker(prev => {
@@ -1240,7 +1244,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               errorType: matchingErrorApp.error_type,
               folderName: matchingErrorApp.folder_name,
               originalFolder: (matchingErrorApp as any).original_folder || prev.originalFolder,
-              percent: prev.percent || 40,
+              percent: Math.max(prev.percent || 40, 40),
               stageText: matchingErrorApp.error_message || 'Application encountered an error during submission.',
               applicantName: matchingErrorApp.applicant_name || prev.applicantName || matchingErrorApp.folder_name,
               startedAt: prev.startedAt,
