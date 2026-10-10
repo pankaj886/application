@@ -158,6 +158,72 @@ fn app_focus_window(window: tauri::Window) {
 }
 
 #[tauri::command]
+async fn check_remote_update() -> Result<String, String> {
+    let release_url = "https://github.com/pankaj886/foreigners-studio-releases/releases/latest/download/latest.json";
+    let raw_url = "https://raw.githubusercontent.com/pankaj886/foreigners-studio-releases/main/latest.json";
+
+    #[cfg(target_os = "windows")]
+    {
+        // 1. Try direct release download JSON first (always fresh, no CDN lag)
+        if let Ok(output) = create_silent_command("curl.exe")
+            .args(["-s", "-L", "--max-time", "6", release_url])
+            .output()
+        {
+            if output.status.success() {
+                let body = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if body.starts_with('{') && body.ends_with('}') && body.contains("\"version\"") {
+                    return Ok(body);
+                }
+            }
+        }
+
+        // 2. Fallback to raw githubusercontent
+        let output = create_silent_command("curl.exe")
+            .args(["-s", "-L", "--max-time", "6", raw_url])
+            .output()
+            .map_err(|e| format!("Failed to execute curl: {}", e))?;
+
+        if !output.status.success() {
+            return Err("Curl exited with error".into());
+        }
+        let body = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if body.is_empty() || !body.starts_with('{') {
+            return Err("Invalid response from update server".into());
+        }
+        Ok(body)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Ok(output) = create_silent_command("curl")
+            .args(["-s", "-L", "--max-time", "6", release_url])
+            .output()
+        {
+            if output.status.success() {
+                let body = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if body.starts_with('{') && body.ends_with('}') && body.contains("\"version\"") {
+                    return Ok(body);
+                }
+            }
+        }
+
+        let output = create_silent_command("curl")
+            .args(["-s", "-L", "--max-time", "6", raw_url])
+            .output()
+            .map_err(|e| format!("Failed to execute curl: {}", e))?;
+
+        if !output.status.success() {
+            return Err("Curl exited with error".into());
+        }
+        let body = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if body.is_empty() || !body.starts_with('{') {
+            return Err("Invalid response from update server".into());
+        }
+        Ok(body)
+    }
+}
+
+#[tauri::command]
 async fn download_installer(url: String) -> Result<String, String> {
     let temp_dir = std::env::temp_dir();
     let file_name = if url.ends_with(".dmg") {
@@ -972,6 +1038,7 @@ pub fn run() {
             app_restart,
             app_start_dragging,
             app_focus_window,
+            check_remote_update,
             download_installer,
             apply_update_and_restart,
             start_google_login,

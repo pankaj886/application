@@ -57,17 +57,10 @@ export const TitleBar: React.FC<TitleBarProps> = ({ currentPath }) => {
       if (progress !== undefined) setDownloadProgress(progress);
     });
 
-    const timer = setTimeout(() => {
-      updateService.checkForUpdates(true);
-    }, 3000);
-
-    const interval = setInterval(() => {
-      updateService.checkForUpdates(true);
-    }, 1 * 60 * 1000);
+    const cleanupWatcher = updateService.initDynamicWatcher();
 
     return () => {
-      clearTimeout(timer);
-      clearInterval(interval);
+      cleanupWatcher();
       unsubscribe();
     };
   }, []);

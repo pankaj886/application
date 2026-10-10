@@ -1,49 +1,120 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, FileText } from 'lucide-react';
+import { X, Save, FileText, RotateCcw } from 'lucide-react';
 
 interface InAppInfoModalProps {
   isOpen: boolean;
   serviceType: 'reissue' | 'fresh';
   initialData: Record<string, any>;
   onSave: (data: Record<string, any>) => void;
+  onClear?: () => void;
   onClose: () => void;
 }
+
+export const REISSUE_REASONS = [
+  { value: 'VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE', label: 'Validity Expired within 3 years / Due to expire' },
+  { value: 'VALIDITY EXPIRED MORE THAN 3 YEARS AGO', label: 'Validity Expired more than 3 years ago' },
+  { value: 'EXHAUSTION OF PAGES', label: 'Exhaustion of Pages' },
+  { value: 'DAMAGED PASSPORT', label: 'Damaged Passport' },
+  { value: 'LOST PASSPORT', label: 'Lost Passport' },
+];
 
 export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
   isOpen,
   serviceType,
   initialData,
   onSave,
+  onClear,
   onClose,
 }) => {
   const [formData, setFormData] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (isOpen) {
-      setFormData({ ...initialData });
+      const data = { ...initialData };
+      if (serviceType === 'reissue') {
+        if (!data.reissue_reason || data.reissue_reason === 'CHANGE IN EXISTING PERSONAL PARTICULARS') {
+          if (data.reissue_reason === 'CHANGE IN EXISTING PERSONAL PARTICULARS') {
+            data.is_change_in_particulars = 'Y';
+          }
+          data.reissue_reason = 'VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE';
+        }
+      }
+      setFormData(data);
     }
-  }, [isOpen, initialData]);
+  }, [isOpen, initialData, serviceType]);
 
   if (!isOpen) return null;
 
   const handleChange = (field: string, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    setFormData((prev) => {
+      const updated = { ...prev };
+      const trimmed = (value || '').trim();
+      if (!trimmed || trimmed === 'SELECT') {
+        delete updated[field];
+      } else {
+        updated[field] = trimmed;
+      }
+      return updated;
+    });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave(formData);
+  const handleClear = () => {
+    setFormData({});
+    if (onClear) {
+      onClear();
+    } else {
+      onSave({});
+    }
     onClose();
   };
 
   const isFresh = serviceType === 'fresh';
   const isChangeInParticulars =
     formData.is_change_in_particulars === 'Y' ||
-    formData.reissue_reason === 'CHANGE IN EXISTING PERSONAL PARTICULARS' ||
-    (formData.change_type && formData.change_type !== 'NOT APPLICABLE');
+    (formData.change_type && formData.change_type !== 'NOT APPLICABLE' && formData.change_type !== '');
+
+  const selectedReissueReason =
+    formData.reissue_reason &&
+    formData.reissue_reason !== 'CHANGE IN EXISTING PERSONAL PARTICULARS' &&
+    REISSUE_REASONS.some(r => r.value === formData.reissue_reason)
+      ? formData.reissue_reason
+      : 'VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE';
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalData: Record<string, any> = {};
+
+    // Only preserve fields that have genuine, non-empty, non-SELECT values
+    for (const [k, v] of Object.entries(formData)) {
+      if (v !== undefined && v !== null) {
+        const s = String(v).trim();
+        if (s !== '' && s !== 'SELECT' && s !== 'NOT APPLICABLE') {
+          finalData[k] = s;
+        }
+      }
+    }
+
+    if (serviceType === 'reissue') {
+      finalData.reissue_reason = selectedReissueReason;
+      if (isChangeInParticulars) {
+        finalData.is_change_in_particulars = 'Y';
+      } else {
+        delete finalData.is_change_in_particulars;
+        delete finalData.change_type;
+        delete finalData.change_particulars_detail;
+        delete finalData.change_in_address;
+        delete finalData.change_in_spouse;
+        delete finalData.change_in_name;
+        delete finalData.change_in_surname;
+        delete finalData.change_in_appearance;
+        delete finalData.change_in_signature;
+        delete finalData.change_in_dob;
+      }
+    }
+
+    onSave(finalData);
+    onClose();
+  };
 
   return (
     <div
@@ -148,10 +219,11 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       Applicant Category
                     </label>
                     <select
-                      value={formData.applicant_category || 'MINOR (UNDER 18 YEARS)'}
+                      value={formData.applicant_category || ''}
                       onChange={(e) => handleChange('applicant_category', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
+                      <option value="">SELECT</option>
                       <option value="MINOR (UNDER 18 YEARS)">MINOR (UNDER 18 YEARS)</option>
                       <option value="ADULT (18 YEARS & ABOVE)">ADULT (18 YEARS & ABOVE)</option>
                     </select>
@@ -161,10 +233,11 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       Application Type
                     </label>
                     <select
-                      value={formData.application_type || 'NORMAL'}
+                      value={formData.application_type || ''}
                       onChange={(e) => handleChange('application_type', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
+                      <option value="">SELECT</option>
                       <option value="NORMAL">NORMAL</option>
                       <option value="TATKAAL">TATKAAL</option>
                     </select>
@@ -174,10 +247,11 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       Booklet Type
                     </label>
                     <select
-                      value={formData.booklet_type || '36 PAGES'}
+                      value={formData.booklet_type || ''}
                       onChange={(e) => handleChange('booklet_type', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
+                      <option value="">SELECT</option>
                       <option value="36 PAGES">36 PAGES</option>
                       <option value="60 PAGES">60 PAGES</option>
                     </select>
@@ -187,10 +261,11 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       Validity Required (Minors 15-18)
                     </label>
                     <select
-                      value={formData.validity_type || 'NOT APPLICABLE (< 15 YRS)'}
+                      value={formData.validity_type || ''}
                       onChange={(e) => handleChange('validity_type', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
+                      <option value="">SELECT</option>
                       <option value="NOT APPLICABLE (< 15 YRS)">NOT APPLICABLE (&lt; 15 YRS)</option>
                       <option value="UPTO 18 YEARS OF AGE">UPTO 18 YEARS OF AGE (5 YRS)</option>
                       <option value="10 YEARS VALIDITY">10 YEARS VALIDITY</option>
@@ -201,10 +276,11 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       Non-ECR Status
                     </label>
                     <select
-                      value={formData.eligible_ecnr || 'YES (ALL MINORS ARE NON-ECR)'}
+                      value={formData.eligible_ecnr || ''}
                       onChange={(e) => handleChange('eligible_ecnr', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
+                      <option value="">SELECT</option>
                       <option value="YES (ALL MINORS ARE NON-ECR)">YES (ALL MINORS ARE NON-ECR)</option>
                       <option value="NO">NO</option>
                     </select>
@@ -247,10 +323,11 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       Citizenship By
                     </label>
                     <select
-                      value={formData.citizenship || 'DESCENT (BORN ABROAD TO INDIAN PARENTS)'}
+                      value={formData.citizenship || ''}
                       onChange={(e) => handleChange('citizenship', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
+                      <option value="">SELECT</option>
                       <option value="DESCENT (BORN ABROAD TO INDIAN PARENTS)">DESCENT (BORN ABROAD TO INDIAN PARENTS)</option>
                       <option value="BIRTH">BIRTH</option>
                       <option value="REGISTRATION">REGISTRATION</option>
@@ -424,10 +501,11 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       Application Type
                     </label>
                     <select
-                      value={formData.application_type || 'NORMAL'}
+                      value={formData.application_type || ''}
                       onChange={(e) => handleChange('application_type', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
+                      <option value="">SELECT</option>
                       <option value="NORMAL">NORMAL</option>
                       <option value="TATKAAL">TATKAAL</option>
                     </select>
@@ -437,64 +515,100 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       Booklet Type
                     </label>
                     <select
-                      value={formData.booklet_type || '36 PAGES'}
+                      value={formData.booklet_type || ''}
                       onChange={(e) => handleChange('booklet_type', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
+                      <option value="">SELECT</option>
                       <option value="36 PAGES">36 PAGES</option>
                       <option value="60 PAGES">60 PAGES</option>
                     </select>
                   </div>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Reason for Reissue
+                  <div style={{ gridColumn: 'span 2', marginTop: '4px' }}>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
+                      Reason for Reissue (Mandatory - Select One Radio)
                     </label>
-                    <select
-                      value={formData.reissue_reason || 'VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE'}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        handleChange('reissue_reason', val);
-                        if (val === 'CHANGE IN EXISTING PERSONAL PARTICULARS') {
-                          handleChange('is_change_in_particulars', 'Y');
-                          if (!formData.change_type || formData.change_type === 'NOT APPLICABLE') {
-                            handleChange('change_type', 'CHANGE IN ADDRESS');
-                          }
-                        }
-                      }}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
-                    >
-                      <option value="VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE">VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE</option>
-                      <option value="VALIDITY EXPIRED MORE THAN 3 YEARS AGO">VALIDITY EXPIRED MORE THAN 3 YEARS AGO</option>
-                      <option value="EXHAUSTION OF PAGES">EXHAUSTION OF PAGES</option>
-                      <option value="DAMAGED PASSPORT">DAMAGED PASSPORT</option>
-                      <option value="LOST PASSPORT">LOST PASSPORT</option>
-                      <option value="CHANGE IN EXISTING PERSONAL PARTICULARS">CHANGE IN EXISTING PERSONAL PARTICULARS</option>
-                    </select>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+                      {REISSUE_REASONS.map((opt) => {
+                        const isSelected = selectedReissueReason === opt.value;
+                        return (
+                          <label
+                            key={opt.value}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              padding: '8px 12px',
+                              borderRadius: '8px',
+                              border: isSelected ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                              background: isSelected ? '#eff6ff' : '#ffffff',
+                              cursor: 'pointer',
+                              fontSize: '12.5px',
+                              fontWeight: isSelected ? 600 : 500,
+                              color: isSelected ? '#1e40af' : '#334155',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              name="reissue_reason"
+                              value={opt.value}
+                              checked={isSelected}
+                              onChange={() => handleChange('reissue_reason', opt.value)}
+                              style={{ accentColor: '#2563eb', cursor: 'pointer', width: '16px', height: '16px' }}
+                            />
+                            <span>{opt.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <div style={{ gridColumn: 'span 2', marginTop: '4px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>
+                  <div style={{ gridColumn: 'span 2', marginTop: '8px', paddingTop: '10px', borderTop: '1px dashed #e2e8f0' }}>
+                    <label
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        color: isChangeInParticulars ? '#1d4ed8' : '#1e293b',
+                        background: isChangeInParticulars ? '#f0fdf4' : '#f8fafc',
+                        padding: '8px 14px',
+                        borderRadius: '8px',
+                        border: isChangeInParticulars ? '1.5px solid #86efac' : '1px solid #cbd5e1',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
                       <input
                         type="checkbox"
                         checked={isChangeInParticulars}
                         onChange={(e) => {
                           const checked = e.target.checked;
                           handleChange('is_change_in_particulars', checked ? 'Y' : 'N');
+                          // Ensure radio button selection is preserved!
+                          handleChange('reissue_reason', selectedReissueReason);
                           if (checked) {
                             if (!formData.change_type || formData.change_type === 'NOT APPLICABLE') {
                               handleChange('change_type', 'CHANGE IN ADDRESS');
+                              handleChange('change_in_address', 'Y');
                             }
                           } else {
                             handleChange('change_type', 'NOT APPLICABLE');
                             handleChange('change_particulars_detail', '');
-                            if (formData.reissue_reason === 'CHANGE IN EXISTING PERSONAL PARTICULARS') {
-                              handleChange('reissue_reason', 'VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE');
-                            }
+                            handleChange('change_in_address', 'N');
+                            handleChange('change_in_name', 'N');
+                            handleChange('change_in_surname', 'N');
+                            handleChange('change_in_spouse', 'N');
+                            handleChange('change_in_appearance', 'N');
+                            handleChange('change_in_signature', 'N');
+                            handleChange('change_in_dob', 'N');
                           }
                         }}
-                        style={{ width: '16px', height: '16px', accentColor: '#2563eb', cursor: 'pointer' }}
+                        style={{ width: '17px', height: '17px', accentColor: '#16a34a', cursor: 'pointer' }}
                       />
-                      <span>Change in Existing Personal Particulars (Address, Name, Spouse, etc.)</span>
+                      <span>Change in Existing Personal Particulars (Spouse, Address, Name, Appearance, etc.)</span>
                     </label>
                   </div>
                 </div>
@@ -514,18 +628,81 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                     }}
                   >
                     <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>
-                      Change in Personal Particulars Options:
+                      Select Particulars to Change:
                     </span>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
+                      {[
+                        { key: 'change_in_address', label: 'Address', typeValue: 'CHANGE IN ADDRESS' },
+                        { key: 'change_in_spouse', label: 'Spouse Name', typeValue: 'CHANGE IN SPOUSE NAME' },
+                        { key: 'change_in_name', label: 'Name / Surname', typeValue: 'CHANGE IN NAME / SURNAME' },
+                        { key: 'change_in_appearance', label: 'Appearance / Signature', typeValue: 'CHANGE IN APPEARANCE / SIGNATURE' },
+                        { key: 'change_in_dob', label: 'Date of Birth', typeValue: 'CHANGE IN DATE OF BIRTH' },
+                      ].map((item) => {
+                        const isChecked =
+                          formData[item.key] === 'Y' ||
+                          (formData.change_type && formData.change_type.includes(item.typeValue));
+                        return (
+                          <label
+                            key={item.key}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '6px 10px',
+                              borderRadius: '6px',
+                              border: isChecked ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                              background: isChecked ? '#eff6ff' : '#ffffff',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: isChecked ? 600 : 500,
+                              color: isChecked ? '#1d4ed8' : '#334155',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                handleChange(item.key, checked ? 'Y' : 'N');
+                                if (checked) {
+                                  handleChange('change_type', item.typeValue);
+                                  if (item.key === 'change_in_name') {
+                                    handleChange('change_in_surname', 'Y');
+                                  }
+                                }
+                              }}
+                              style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }}
+                            />
+                            <span>{item.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '4px' }}>
                       <div>
                         <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                          Particulars to Change
+                          Primary Change Category
                         </label>
                         <select
-                          value={formData.change_type || 'CHANGE IN ADDRESS'}
-                          onChange={(e) => handleChange('change_type', e.target.value)}
+                          value={formData.change_type || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            handleChange('change_type', val);
+                            if (val === 'CHANGE IN ADDRESS') handleChange('change_in_address', 'Y');
+                            if (val === 'CHANGE IN SPOUSE NAME') handleChange('change_in_spouse', 'Y');
+                            if (val === 'CHANGE IN NAME / SURNAME') {
+                              handleChange('change_in_name', 'Y');
+                              handleChange('change_in_surname', 'Y');
+                            }
+                            if (val === 'CHANGE IN APPEARANCE / SIGNATURE') {
+                              handleChange('change_in_appearance', 'Y');
+                              handleChange('change_in_signature', 'Y');
+                            }
+                            if (val === 'CHANGE IN DATE OF BIRTH') handleChange('change_in_dob', 'Y');
+                          }}
                           style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                         >
+                          <option value="">SELECT</option>
                           <option value="NOT APPLICABLE">NOT APPLICABLE</option>
                           <option value="CHANGE IN ADDRESS">CHANGE IN ADDRESS</option>
                           <option value="CHANGE IN NAME / SURNAME">CHANGE IN NAME / SURNAME</option>
@@ -541,7 +718,7 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                         </label>
                         <input
                           type="text"
-                          placeholder="e.g. New address in Italy or name modification"
+                          placeholder="e.g. New address in Italy, new spouse name, etc."
                           value={formData.change_particulars_detail || ''}
                           onChange={(e) => handleChange('change_particulars_detail', e.target.value)}
                           style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
@@ -563,10 +740,11 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       Educational Qualification
                     </label>
                     <select
-                      value={formData.educational_qualification || '10TH PASS AND ABOVE'}
+                      value={formData.educational_qualification || ''}
                       onChange={(e) => handleChange('educational_qualification', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
+                      <option value="">SELECT</option>
                       <option value="10TH PASS AND ABOVE">10TH PASS AND ABOVE</option>
                       <option value="GRADUATE AND ABOVE">GRADUATE AND ABOVE</option>
                       <option value="BETWEEN 8TH AND 9TH STANDARD">BETWEEN 8TH AND 9TH STANDARD</option>
@@ -578,10 +756,11 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       Employment Type / Profession
                     </label>
                     <select
-                      value={formData.employment_type || 'PRIVATE'}
+                      value={formData.employment_type || ''}
                       onChange={(e) => handleChange('employment_type', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
                     >
+                      <option value="">SELECT</option>
                       <option value="PRIVATE">PRIVATE</option>
                       <option value="SELF EMPLOYED">SELF EMPLOYED</option>
                       <option value="GOVERNMENT">GOVERNMENT</option>
@@ -661,46 +840,72 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
               paddingTop: '16px',
               borderTop: '1px solid #e2e8f0',
               display: 'flex',
-              justifyContent: 'flex-end',
+              alignItems: 'center',
+              justifyContent: 'space-between',
               gap: '12px',
             }}
           >
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClear}
               style={{
-                padding: '9px 18px',
-                borderRadius: '8px',
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                color: '#475569',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              style={{
-                padding: '9px 20px',
-                borderRadius: '8px',
-                border: 'none',
-                background: isFresh ? '#059669' : '#2563eb',
-                color: '#ffffff',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                boxShadow: isFresh ? '0 2px 8px rgba(5, 150, 105, 0.25)' : '0 2px 8px rgba(37, 99, 235, 0.25)',
+                gap: '6px',
+                padding: '9px 16px',
+                borderRadius: '8px',
+                border: '1px solid #fecaca',
+                background: '#fef2f2',
+                color: '#dc2626',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'background 0.15s ease',
               }}
+              title="Clear all fields and reset"
             >
-              <Save style={{ width: '15px', height: '15px' }} />
-              <span>Save Details</span>
+              <RotateCcw style={{ width: '14px', height: '14px' }} />
+              <span>Clear / Reset All</span>
             </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#475569',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                style={{
+                  padding: '9px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: isFresh ? '#059669' : '#2563eb',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: isFresh ? '0 2px 8px rgba(5, 150, 105, 0.25)' : '0 2px 8px rgba(37, 99, 235, 0.25)',
+                }}
+              >
+                <Save style={{ width: '15px', height: '15px' }} />
+                <span>Save Details</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>

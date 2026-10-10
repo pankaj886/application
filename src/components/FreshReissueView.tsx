@@ -22,7 +22,12 @@ import {
   Mic,
   Edit3,
   Plus,
-  AlertTriangle
+  AlertTriangle,
+  Heart,
+  Users,
+  Baby,
+  Award,
+  FilePlus
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -37,6 +42,771 @@ import { FreshReissueSection, UserProfile } from '../types';
 import { PdfViewerModal } from './PdfViewerModal';
 import { ImageViewerModal } from './ImageViewerModal';
 import { InAppInfoModal } from './InAppInfoModal';
+
+export type DocSlotKey =
+  | 'photo'
+  | 'sign'
+  | 'passport'
+  | 'identity'
+  | 'residence'
+  | 'info'
+  | 'marriage_cert'
+  | 'spouse_passport'
+  | 'birth_cert'
+  | 'police_report'
+  | 'annexure_f'
+  | 'father_passport'
+  | 'mother_passport'
+  | 'annexure_d'
+  | 'annexure_e'
+  | 'divorce_death_cert'
+  | 'name_change_proof'
+  | 'education_proof';
+
+export interface DocSlotDef {
+  key: DocSlotKey;
+  title: string;
+  badge: string;
+  accept: string;
+  canonicalName: string;
+  iconName: 'camera' | 'pen' | 'book' | 'id' | 'shield' | 'heart' | 'users' | 'baby' | 'file-plus' | 'award' | 'alert' | 'file';
+  description?: string;
+}
+
+export const SLOT_CATALOG: Record<DocSlotKey, DocSlotDef> = {
+  photo: {
+    key: 'photo',
+    title: 'Photograph *',
+    badge: '630×810 JPG',
+    accept: 'image/jpeg,image/png,image/webp,image/jpg',
+    canonicalName: 'photograph.jpg',
+    iconName: 'camera',
+    description: 'ICAO standard biometric photo',
+  },
+  sign: {
+    key: 'sign',
+    title: 'Signature *',
+    badge: '≤85 KB JPG',
+    accept: 'image/jpeg,image/png,image/jpg',
+    canonicalName: 'signature.jpg',
+    iconName: 'pen',
+    description: 'Specimen signature or thumb impression',
+  },
+  passport: {
+    key: 'passport',
+    title: 'Passport Copy *',
+    badge: 'PDF ≤870 KB',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'applicant_passport.pdf',
+    iconName: 'book',
+    description: 'First & last pages of current passport',
+  },
+  identity: {
+    key: 'identity',
+    title: 'Identity Proof',
+    badge: 'Permesso di Soggiorno',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'permesso_di_soggiorno.pdf',
+    iconName: 'id',
+    description: 'Permesso di soggiorno or CIE card',
+  },
+  residence: {
+    key: 'residence',
+    title: 'Residence Proof',
+    badge: 'Residenza / CIE / Ospiti',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'residence_proof.pdf',
+    iconName: 'shield',
+    description: 'Certificato di residenza, ospitalità, or bolletta',
+  },
+  marriage_cert: {
+    key: 'marriage_cert',
+    title: 'Marriage Certificate *',
+    badge: 'Apostilled / Attested',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'marriage_certificate.pdf',
+    iconName: 'heart',
+    description: 'Apostilled certificate for spouse addition',
+  },
+  spouse_passport: {
+    key: 'spouse_passport',
+    title: 'Spouse Passport',
+    badge: 'Spouse Copy PDF',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'spouse_passport.pdf',
+    iconName: 'users',
+    description: "Self-attested copy of spouse's Indian passport",
+  },
+  birth_cert: {
+    key: 'birth_cert',
+    title: 'Birth Certificate *',
+    badge: 'Estratto di Nascita',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'birth_certificate.pdf',
+    iconName: 'baby',
+    description: 'Estratto di nascita multilingue or Indian birth cert',
+  },
+  father_passport: {
+    key: 'father_passport',
+    title: "Father's Passport *",
+    badge: 'Father PPT PDF',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'father_passport.pdf',
+    iconName: 'users',
+    description: "Copy of father's Indian passport",
+  },
+  mother_passport: {
+    key: 'mother_passport',
+    title: "Mother's Passport *",
+    badge: 'Mother PPT PDF',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'mother_passport.pdf',
+    iconName: 'users',
+    description: "Copy of mother's Indian passport",
+  },
+  annexure_d: {
+    key: 'annexure_d',
+    title: 'Annexure D (Consent) *',
+    badge: 'Parent Consent',
+    accept: '.pdf,image/jpeg,image/png,image/jpg,.docx,.doc',
+    canonicalName: 'annexure_d_consent.pdf',
+    iconName: 'file-plus',
+    description: 'Parental declaration for minor passport',
+  },
+  annexure_e: {
+    key: 'annexure_e',
+    title: 'Annexure E (Declaration) *',
+    badge: 'Self Declaration',
+    accept: '.pdf,image/jpeg,image/png,image/jpg,.docx,.doc',
+    canonicalName: 'annexure_e_declaration.pdf',
+    iconName: 'file-plus',
+    description: 'Self-declaration for adult fresh passport',
+  },
+  police_report: {
+    key: 'police_report',
+    title: 'Police Report / Denuncia *',
+    badge: 'Original Denuncia',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'police_report_denuncia.pdf',
+    iconName: 'alert',
+    description: 'Official police complaint / Denuncia smarrimento',
+  },
+  annexure_f: {
+    key: 'annexure_f',
+    title: 'Annexure F (Lost/Damage) *',
+    badge: 'Loss / Damage Affidavit',
+    accept: '.pdf,image/jpeg,image/png,image/jpg,.docx,.doc',
+    canonicalName: 'annexure_f_affidavit.pdf',
+    iconName: 'alert',
+    description: 'Affidavit stating circumstances of loss or damage',
+  },
+  divorce_death_cert: {
+    key: 'divorce_death_cert',
+    title: 'Divorce / Death Cert *',
+    badge: 'Decree / Certificate',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'divorce_death_certificate.pdf',
+    iconName: 'file-plus',
+    description: 'Divorce decree or spouse death certificate for deletion',
+  },
+  name_change_proof: {
+    key: 'name_change_proof',
+    title: 'Name Change Proof *',
+    badge: 'Gazette / Deed Poll',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'name_change_proof.pdf',
+    iconName: 'file-plus',
+    description: 'Gazette notification, deed poll or two public IDs',
+  },
+  education_proof: {
+    key: 'education_proof',
+    title: 'Education Certificate',
+    badge: '10th / Degree Non-ECR',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'education_certificate.pdf',
+    iconName: 'award',
+    description: 'Matriculation or higher degree certificate for Non-ECR',
+  },
+  info: {
+    key: 'info',
+    title: 'Additional Documents',
+    badge: 'Info Sheet / Docs',
+    accept: '.docx,.doc,.pdf,.txt,image/*',
+    canonicalName: 'additional_documents.pdf',
+    iconName: 'file',
+    description: 'Client info sheet or other supporting paperwork',
+  },
+};
+
+export type ApplyingScenarioId =
+  | 'reissue_standard'
+  | 'reissue_spouse_add'
+  | 'reissue_spouse_del'
+  | 'reissue_lost'
+  | 'reissue_damaged'
+  | 'reissue_name_change'
+  | 'fresh_minor'
+  | 'fresh_adult';
+
+export interface ApplyingScenario {
+  id: ApplyingScenarioId;
+  label: string;
+  serviceType: 'reissue' | 'fresh';
+  icon: string;
+  slots: DocSlotKey[];
+  description: string;
+}
+
+export const APPLYING_SCENARIOS: ApplyingScenario[] = [
+  {
+    id: 'reissue_standard',
+    label: 'Standard Reissue (Expired / Validity)',
+    serviceType: 'reissue',
+    icon: 'book',
+    slots: ['photo', 'sign', 'passport', 'identity', 'residence', 'info'],
+    description: 'Normal passport renewal due to expiry or page exhaustion',
+  },
+  {
+    id: 'reissue_spouse_add',
+    label: 'Add / Update Spouse Name',
+    serviceType: 'reissue',
+    icon: 'heart',
+    slots: ['photo', 'sign', 'passport', 'marriage_cert', 'spouse_passport', 'identity', 'residence', 'info'],
+    description: 'Renewal with spouse endorsement (requires marriage certificate)',
+  },
+  {
+    id: 'reissue_spouse_del',
+    label: 'Delete Spouse Name',
+    serviceType: 'reissue',
+    icon: 'users',
+    slots: ['photo', 'sign', 'passport', 'divorce_death_cert', 'identity', 'residence', 'info'],
+    description: 'Deletion of spouse due to divorce decree or bereavement',
+  },
+  {
+    id: 'reissue_lost',
+    label: 'Lost Passport',
+    serviceType: 'reissue',
+    icon: 'alert',
+    slots: ['photo', 'sign', 'police_report', 'annexure_f', 'passport', 'identity', 'residence', 'info'],
+    description: 'Passport lost: requires Italian police denuncia and Annexure F',
+  },
+  {
+    id: 'reissue_damaged',
+    label: 'Damaged Passport',
+    serviceType: 'reissue',
+    icon: 'alert',
+    slots: ['photo', 'sign', 'passport', 'annexure_f', 'identity', 'residence', 'info'],
+    description: 'Passport damaged: requires copy of damaged pages and Annexure F',
+  },
+  {
+    id: 'reissue_name_change',
+    label: 'Change in Name / Surname',
+    serviceType: 'reissue',
+    icon: 'file-plus',
+    slots: ['photo', 'sign', 'passport', 'name_change_proof', 'identity', 'residence', 'info'],
+    description: 'Major/minor name change: requires Gazette or deed poll',
+  },
+  {
+    id: 'fresh_minor',
+    label: 'Fresh Minor (<18 Years)',
+    serviceType: 'fresh',
+    icon: 'baby',
+    slots: ['photo', 'sign', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'annexure_d', 'identity', 'residence', 'info'],
+    description: 'First passport for newborn or child born in Italy',
+  },
+  {
+    id: 'fresh_adult',
+    label: 'Fresh Adult (18+ Years)',
+    serviceType: 'fresh',
+    icon: 'award',
+    slots: ['photo', 'sign', 'birth_cert', 'annexure_e', 'education_proof', 'identity', 'residence', 'info'],
+    description: 'First passport for adult: requires birth cert and Annexure E',
+  },
+];
+
+export const detectSlotAndCanonicalName = (
+  file: File,
+  fallbackSlot?: DocSlotKey
+): { slot: DocSlotKey; canonicalName: string } => {
+  const originalName = file.name || '';
+  const lower = originalName.toLowerCase();
+  const ext = originalName.includes('.')
+    ? originalName.slice(originalName.lastIndexOf('.'))
+    : (file.type.startsWith('image/') ? '.jpg' : '.pdf');
+
+  // 1. Marriage Certificate
+  if (
+    lower.includes('marr') ||
+    lower.includes('marraige') ||
+    lower.includes('matrimonio') ||
+    lower.includes('spos') ||
+    lower.includes('nikah') ||
+    lower.includes('shadi') ||
+    lower.includes('vivah') ||
+    lower.includes('wedding')
+  ) {
+    return { slot: 'marriage_cert', canonicalName: `marriage_certificate${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 2. Spouse Passport
+  if (
+    (lower.includes('spouse') || lower.includes('husband') || lower.includes('wife') || lower.includes('patni') || lower.includes('pati') || lower.includes('moglie') || lower.includes('marito')) &&
+    (lower.includes('pass') || lower.includes('ppt') || lower.includes('passaporto'))
+  ) {
+    return { slot: 'spouse_passport', canonicalName: `spouse_passport${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 3. Father Passport
+  if (
+    (lower.includes('father') || lower.includes('dad') || lower.includes('padre') || lower.includes('pita') || lower.includes('papa')) &&
+    (lower.includes('pass') || lower.includes('ppt') || lower.includes('passaporto'))
+  ) {
+    return { slot: 'father_passport', canonicalName: `father_passport${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 4. Mother Passport
+  if (
+    (lower.includes('mother') || lower.includes('mom') || lower.includes('madre') || lower.includes('mata') || lower.includes('mamma')) &&
+    (lower.includes('pass') || lower.includes('ppt') || lower.includes('passaporto'))
+  ) {
+    return { slot: 'mother_passport', canonicalName: `mother_passport${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 5. Birth Certificate
+  if (
+    lower.includes('birth') ||
+    lower.includes('nascit') ||
+    lower.includes('estratto') ||
+    lower.includes('atto') ||
+    lower.includes('janm') ||
+    lower.includes('pedigree')
+  ) {
+    return { slot: 'birth_cert', canonicalName: `birth_certificate${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 6. Police Report / Denuncia
+  if (
+    lower.includes('denun') ||
+    lower.includes('police') ||
+    lower.includes('polizia') ||
+    lower.includes('carabinieri') ||
+    lower.includes('questura') ||
+    lower.includes('smarrimento') ||
+    lower.includes('furto') ||
+    lower.includes('lost_report') ||
+    lower.includes('fir')
+  ) {
+    return { slot: 'police_report', canonicalName: `police_report_denuncia${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 7. Annexure F (Lost / Damage Affidavit)
+  if (
+    lower.includes('annexure_f') ||
+    lower.includes('annex_f') ||
+    lower.includes('allegato_f') ||
+    lower.includes('affidavit_f') ||
+    lower.includes('loss_affidavit') ||
+    (lower.includes('annexure') && lower.includes('f'))
+  ) {
+    return { slot: 'annexure_f', canonicalName: `annexure_f_affidavit${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 8. Annexure D (Parental consent)
+  if (
+    lower.includes('annexure_d') ||
+    lower.includes('annex_d') ||
+    lower.includes('allegato_d') ||
+    lower.includes('consent') ||
+    lower.includes('assenso') ||
+    (lower.includes('annexure') && lower.includes('d'))
+  ) {
+    return { slot: 'annexure_d', canonicalName: `annexure_d_consent${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 9. Annexure E (Self declaration)
+  if (
+    lower.includes('annexure_e') ||
+    lower.includes('annex_e') ||
+    lower.includes('allegato_e') ||
+    (lower.includes('annexure') && lower.includes('e'))
+  ) {
+    return { slot: 'annexure_e', canonicalName: `annexure_e_declaration${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 10. Divorce / Death Certificate
+  if (
+    lower.includes('divorc') ||
+    lower.includes('divorzio') ||
+    lower.includes('death') ||
+    lower.includes('morte') ||
+    lower.includes('decesso') ||
+    lower.includes('talaq')
+  ) {
+    return { slot: 'divorce_death_cert', canonicalName: `divorce_death_certificate${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 11. Name Change Proof
+  if (
+    lower.includes('name_change') ||
+    lower.includes('change_name') ||
+    lower.includes('cambio_nome') ||
+    lower.includes('deed_poll') ||
+    lower.includes('gazette')
+  ) {
+    return { slot: 'name_change_proof', canonicalName: `name_change_proof${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 12. Education Proof
+  if (
+    lower.includes('degree') ||
+    lower.includes('diploma') ||
+    lower.includes('laurea') ||
+    lower.includes('matric') ||
+    lower.includes('10th') ||
+    lower.includes('12th') ||
+    lower.includes('marksheet') ||
+    lower.includes('school') ||
+    lower.includes('education')
+  ) {
+    return { slot: 'education_proof', canonicalName: `education_certificate${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 13. Photo
+  if (
+    lower.includes('photo') ||
+    lower.includes('foto') ||
+    lower.includes('pic') ||
+    lower.includes('portrait') ||
+    lower.includes('fototessera') ||
+    lower.includes('selfie')
+  ) {
+    return { slot: 'photo', canonicalName: 'photograph.jpg' };
+  }
+
+  // 14. Signature
+  if (
+    lower.includes('sign') ||
+    lower.includes('firma') ||
+    lower.includes('signature') ||
+    lower.includes('thumb') ||
+    lower.includes('hastakshar') ||
+    lower.includes('dastakhat')
+  ) {
+    return { slot: 'sign', canonicalName: 'signature.jpg' };
+  }
+
+  // 15. Applicant Passport
+  if (
+    lower.includes('passport') ||
+    lower.includes('passaporto') ||
+    lower.includes('ppt') ||
+    lower.includes('pass')
+  ) {
+    return { slot: 'passport', canonicalName: `applicant_passport${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 16. Permesso / Identity
+  if (
+    lower.includes('permesso') ||
+    lower.includes('pds') ||
+    lower.includes('soggiorno') ||
+    lower.includes('carta') ||
+    lower.includes('ident') ||
+    lower.includes('cie') ||
+    lower.includes('ricevuta')
+  ) {
+    return { slot: 'identity', canonicalName: `permesso_di_soggiorno${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 17. Residence Proof
+  if (
+    lower.includes('residen') ||
+    lower.includes('ospital') ||
+    lower.includes('ospiti') ||
+    lower.includes('fabbricato') ||
+    lower.includes('cessione') ||
+    lower.includes('bolletta') ||
+    lower.includes('contratto') ||
+    lower.includes('enel') ||
+    lower.includes('gas') ||
+    lower.includes('luce') ||
+    lower.includes('anagrafe') ||
+    lower.includes('famiglia')
+  ) {
+    return { slot: 'residence', canonicalName: `residence_proof${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 18. Info Sheet / Supporting
+  if (
+    lower.includes('info') ||
+    lower.includes('detail') ||
+    lower.includes('dettagli') ||
+    lower.endsWith('.docx') ||
+    lower.endsWith('.doc') ||
+    lower.endsWith('.txt')
+  ) {
+    return { slot: 'info', canonicalName: `additional_info${ext}` };
+  }
+
+  // Fallback to designated target slot if specified
+  if (fallbackSlot && SLOT_CATALOG[fallbackSlot]) {
+    const slotDef = SLOT_CATALOG[fallbackSlot];
+    return { slot: fallbackSlot, canonicalName: slotDef.canonicalName };
+  }
+
+  // Default heuristic based on mime type or extension
+  if (file.type.startsWith('image/')) {
+    return { slot: 'photo', canonicalName: 'photograph.jpg' };
+  }
+  return { slot: 'info', canonicalName: `additional_documents${ext}` };
+};
+
+export const detectSlotAndCanonicalNameAsync = async (
+  file: File,
+  fallbackSlot?: DocSlotKey
+): Promise<{ slot: DocSlotKey; canonicalName: string }> => {
+  const originalName = file.name || '';
+  const lowerName = originalName.toLowerCase();
+  const ext = originalName.includes('.')
+    ? originalName.slice(originalName.lastIndexOf('.'))
+    : (file.type.startsWith('image/') ? '.jpg' : '.pdf');
+
+  // 1. Initial fast keyword check on original filename
+  const nameDetected = detectSlotAndCanonicalName(file);
+  const isGenericImageFallback = nameDetected.slot === 'photo' &&
+    !lowerName.includes('photo') &&
+    !lowerName.includes('foto') &&
+    !lowerName.includes('pic') &&
+    !lowerName.includes('portrait') &&
+    !lowerName.includes('fototessera') &&
+    !lowerName.includes('selfie');
+  const isHighConfidenceName = nameDetected.slot !== 'info' && !isGenericImageFallback;
+
+  // 2. Uncompressed PDF content sniffing (first 128 KB)
+  const isPdf = lowerName.endsWith('.pdf') || file.type === 'application/pdf';
+  let pdfText = '';
+  if (isPdf) {
+    try {
+      const slice = file.slice(0, 131072);
+      pdfText = (await slice.text()).toLowerCase();
+    } catch (_) {}
+  }
+
+  if (pdfText) {
+    // A. Marriage Certificate
+    if (
+      pdfText.includes('matrimonio') ||
+      pdfText.includes('atto di matrimonio') ||
+      pdfText.includes('certificato di matrimonio') ||
+      pdfText.includes('marriage certificate') ||
+      pdfText.includes('registrar of marriages') ||
+      pdfText.includes('special marriage act') ||
+      pdfText.includes('hindu marriage') ||
+      pdfText.includes('anand marriage') ||
+      pdfText.includes('nikahnama') ||
+      pdfText.includes('nikah') ||
+      pdfText.includes('coniugi')
+    ) {
+      return { slot: 'marriage_cert', canonicalName: 'marriage_certificate.pdf' };
+    }
+
+    // B. Police Report / Denuncia
+    if (
+      (pdfText.includes('carabinieri') || pdfText.includes('questura') || pdfText.includes('polizia') || pdfText.includes('commissariato')) &&
+      (pdfText.includes('denuncia') || pdfText.includes('smarrimento') || pdfText.includes('furto') || pdfText.includes('verbale'))
+    ) {
+      return { slot: 'police_report', canonicalName: 'police_report_denuncia.pdf' };
+    }
+    if (pdfText.includes('denuncia') || pdfText.includes('denunzia') || pdfText.includes('police report') || pdfText.includes('fir copy')) {
+      return { slot: 'police_report', canonicalName: 'police_report_denuncia.pdf' };
+    }
+
+    // C. Annexure F (Affidavit for lost or damaged passport)
+    if (
+      pdfText.includes('annexure f') ||
+      pdfText.includes('annexure-f') ||
+      pdfText.includes('allegato f') ||
+      pdfText.includes('affidavit for a passport in lieu of lost') ||
+      pdfText.includes('lost/damaged passport')
+    ) {
+      return { slot: 'annexure_f', canonicalName: 'annexure_f_affidavit.pdf' };
+    }
+
+    // D. Annexure D (Parental consent for minor)
+    if (
+      pdfText.includes('annexure d') ||
+      pdfText.includes('annexure-d') ||
+      pdfText.includes('allegato d') ||
+      pdfText.includes('declaration by the applicant\'s parent') ||
+      pdfText.includes('parental consent')
+    ) {
+      return { slot: 'annexure_d', canonicalName: 'annexure_d_consent.pdf' };
+    }
+
+    // E. Annexure E (Self declaration for adult)
+    if (
+      pdfText.includes('annexure e') ||
+      pdfText.includes('annexure-e') ||
+      pdfText.includes('allegato e') ||
+      pdfText.includes('declaration of the applicant')
+    ) {
+      return { slot: 'annexure_e', canonicalName: 'annexure_e_declaration.pdf' };
+    }
+
+    // F. Divorce or Death Certificate
+    if (
+      pdfText.includes('divorz') ||
+      pdfText.includes('sentenza di divorzio') ||
+      pdfText.includes('certificato di morte') ||
+      pdfText.includes('decesso') ||
+      pdfText.includes('death certificate') ||
+      pdfText.includes('talaq') ||
+      pdfText.includes('dissolution of marriage')
+    ) {
+      return { slot: 'divorce_death_cert', canonicalName: 'divorce_death_certificate.pdf' };
+    }
+
+    // G. Name Change Proof
+    if (
+      pdfText.includes('deed poll') ||
+      pdfText.includes('cambio di nome') ||
+      pdfText.includes('cambio cognome') ||
+      pdfText.includes('gazette of india') ||
+      pdfText.includes('sworn affidavit for change of name')
+    ) {
+      return { slot: 'name_change_proof', canonicalName: 'name_change_proof.pdf' };
+    }
+
+    // H. Birth Certificate
+    if (
+      pdfText.includes('atto di nascita') ||
+      pdfText.includes('certificato di nascita') ||
+      pdfText.includes('estratto di nascita') ||
+      pdfText.includes('birth certificate') ||
+      (pdfText.includes('registration of birth') && pdfText.includes('date of birth'))
+    ) {
+      return { slot: 'birth_cert', canonicalName: 'birth_certificate.pdf' };
+    }
+
+    // I. Education Certificate
+    if (
+      pdfText.includes('board of secondary') ||
+      pdfText.includes('central board of secondary') ||
+      pdfText.includes('cbse') ||
+      pdfText.includes('icse') ||
+      pdfText.includes('matriculation') ||
+      pdfText.includes('marks sheet') ||
+      pdfText.includes('bachelor') ||
+      pdfText.includes('diploma') ||
+      pdfText.includes('laurea') ||
+      pdfText.includes('certificato scolastico')
+    ) {
+      return { slot: 'education_proof', canonicalName: 'education_certificate.pdf' };
+    }
+
+    // J. Residence Proof / Ospitalità / Cessione / Utility Bill
+    if (
+      pdfText.includes('certificato di residenza') ||
+      pdfText.includes('stato di famiglia') ||
+      pdfText.includes('cessione di fabbricato') ||
+      pdfText.includes('dichiarazione di ospitalita') ||
+      pdfText.includes('comunicazione di ospitalita') ||
+      pdfText.includes('contratto di locazione') ||
+      pdfText.includes('servizio elettrico') ||
+      pdfText.includes('enel energia') ||
+      pdfText.includes('italgas') ||
+      pdfText.includes('bolletta') ||
+      (pdfText.includes('comune di') && pdfText.includes('residenza'))
+    ) {
+      return { slot: 'residence', canonicalName: 'residence_proof.pdf' };
+    }
+
+    // K. Permesso di Soggiorno / Carta d'Identità
+    if (
+      pdfText.includes('permesso di soggiorno') ||
+      pdfText.includes('carta di soggiorno') ||
+      pdfText.includes('questura di') ||
+      pdfText.includes('soggiornante') ||
+      pdfText.includes('carta d\'identita') ||
+      pdfText.includes('carta di identita') ||
+      pdfText.includes('ricevuta assicurata') ||
+      (pdfText.includes('poste italiane') && pdfText.includes('stranieri'))
+    ) {
+      return { slot: 'identity', canonicalName: 'permesso_di_soggiorno.pdf' };
+    }
+
+    // L. Indian Passport
+    if (
+      pdfText.includes('republic of india') ||
+      pdfText.includes('p<ind') ||
+      pdfText.includes('nationality indian') ||
+      (pdfText.includes('passport') && (pdfText.includes('ministry of external affairs') || pdfText.includes('given name')))
+    ) {
+      if (lowerName.includes('father') || (pdfText.includes('father') && lowerName.includes('dad'))) {
+        return { slot: 'father_passport', canonicalName: 'father_passport.pdf' };
+      }
+      if (lowerName.includes('mother') || (pdfText.includes('mother') && lowerName.includes('mom'))) {
+        return { slot: 'mother_passport', canonicalName: 'mother_passport.pdf' };
+      }
+      if (lowerName.includes('spouse') || pdfText.includes('spouse') || lowerName.includes('husband') || lowerName.includes('wife')) {
+        return { slot: 'spouse_passport', canonicalName: 'spouse_passport.pdf' };
+      }
+      return { slot: 'passport', canonicalName: 'applicant_passport.pdf' };
+    }
+  }
+
+  // 3. Image aspect ratio and dimension inspection
+  const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|bmp)$/i.test(lowerName);
+  if (isImage) {
+    try {
+      const dims = await new Promise<{ width: number; height: number }>((resolve) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          resolve({ width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+          URL.revokeObjectURL(url);
+        };
+        img.onerror = () => {
+          resolve({ width: 0, height: 0 });
+          URL.revokeObjectURL(url);
+        };
+        img.src = url;
+      });
+
+      if (dims.width > 0 && dims.height > 0) {
+        const ratio = dims.width / dims.height;
+        // Wide aspect ratio: Signature (ratio >= 1.6 or height < 60% of width)
+        if (ratio >= 1.6 || dims.height <= dims.width * 0.6) {
+          return { slot: 'sign', canonicalName: 'signature.jpg' };
+        }
+        // Portrait aspect ratio ~ 0.65 to 0.95 with size <= 6MB: Photograph
+        if (ratio >= 0.65 && ratio <= 0.95 && file.size <= 6 * 1024 * 1024) {
+          if (!lowerName.includes('passport') && !lowerName.includes('permesso') && !lowerName.includes('carta')) {
+            return { slot: 'photo', canonicalName: 'photograph.jpg' };
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 4. If filename had a high-confidence match, use it
+  if (isHighConfidenceName) {
+    return nameDetected;
+  }
+
+  // 5. Fallback slot if provided and matches valid types
+  if (fallbackSlot && SLOT_CATALOG[fallbackSlot]) {
+    const slotDef = SLOT_CATALOG[fallbackSlot];
+    const targetExt = ext.toLowerCase();
+    const isTargetPdf = targetExt === '.pdf';
+    return {
+      slot: fallbackSlot,
+      canonicalName: isTargetPdf ? slotDef.canonicalName : `${slotDef.canonicalName.replace(/\.[^/.]+$/, '')}${targetExt}`,
+    };
+  }
+
+  return nameDetected;
+};
 
 interface FreshReissueViewProps {
   user: UserProfile;
@@ -64,6 +834,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const [showInAppInfoModal, setShowInAppInfoModal] = useState(false);
   const [inAppInfoData, setInAppInfoData] = useState<Record<string, any>>({});
+  const filledParticularsKeys = useMemo(() => {
+    return Object.keys(inAppInfoData).filter((k) => {
+      if (k === 'is_change_in_particulars' || k === 'reissue_reason') return false;
+      const val = inAppInfoData[k];
+      if (val === undefined || val === null) return false;
+      const str = String(val).trim();
+      return str !== '' && str !== 'SELECT' && str !== 'NOT APPLICABLE';
+    });
+  }, [inAppInfoData]);
+  const filledParticularsCount = filledParticularsKeys.length;
   const [previewFilter, setPreviewFilter] = useState<'all' | 'reissue' | 'fresh'>('all');
   const [submittedFilter, setSubmittedFilter] = useState<'all' | 'reissue' | 'fresh'>('all');
 
@@ -104,6 +884,89 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [residenceFile, setResidenceFile] = useState<File | null>(null);
   const [infoFile, setInfoFile] = useState<File | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+
+  // Dynamic Application Scenario and Dynamic Document Requirement Slots
+  const [selectedScenario, setSelectedScenario] = useState<ApplyingScenarioId>(
+    activeServiceType === 'fresh' ? 'fresh_minor' : 'reissue_standard'
+  );
+  const [dynamicallyActivatedSlots, setDynamicallyActivatedSlots] = useState<DocSlotKey[]>([]);
+  const [slotFiles, setSlotFiles] = useState<Record<DocSlotKey, File | null>>({
+    photo: null,
+    sign: null,
+    passport: null,
+    identity: null,
+    residence: null,
+    info: null,
+    marriage_cert: null,
+    spouse_passport: null,
+    birth_cert: null,
+    police_report: null,
+    annexure_f: null,
+    father_passport: null,
+    mother_passport: null,
+    annexure_d: null,
+    annexure_e: null,
+    divorce_death_cert: null,
+    name_change_proof: null,
+    education_proof: null,
+  });
+
+  const dynamicInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Sync default scenario when service type toggles
+  useEffect(() => {
+    if (activeServiceType === 'fresh') {
+      setSelectedScenario('fresh_minor');
+    } else {
+      setSelectedScenario('reissue_standard');
+    }
+  }, [activeServiceType]);
+
+  // Sync scenario when inAppInfoData changes
+  useEffect(() => {
+    if (activeServiceType === 'reissue') {
+      if (inAppInfoData.reissue_reason === 'LOST PASSPORT') {
+        setSelectedScenario('reissue_lost');
+      } else if (inAppInfoData.reissue_reason === 'DAMAGED PASSPORT') {
+        setSelectedScenario('reissue_damaged');
+      } else if (inAppInfoData.change_type === 'CHANGE IN SPOUSE NAME' || inAppInfoData.change_in_spouse === 'Y') {
+        setSelectedScenario('reissue_spouse_add');
+      } else if (inAppInfoData.change_type === 'CHANGE IN NAME / SURNAME' || inAppInfoData.change_in_name === 'Y') {
+        setSelectedScenario('reissue_name_change');
+      } else if (inAppInfoData.marital_status === 'DIVORCED' || inAppInfoData.marital_status === 'WIDOW / WIDOWER') {
+        setSelectedScenario('reissue_spouse_del');
+      } else {
+        setSelectedScenario('reissue_standard');
+      }
+    } else if (activeServiceType === 'fresh') {
+      if (inAppInfoData.applicant_category?.includes('ADULT')) {
+        setSelectedScenario('fresh_adult');
+      } else {
+        setSelectedScenario('fresh_minor');
+      }
+    }
+  }, [inAppInfoData, activeServiceType]);
+
+  // Prune unused dynamically activated slots when scenario or modal info changes
+  useEffect(() => {
+    setDynamicallyActivatedSlots(prev => prev.filter(slot => slotFiles[slot] != null));
+  }, [selectedScenario, inAppInfoData]);
+
+  const activeSlots = useMemo<DocSlotKey[]>(() => {
+    const curScenario = APPLYING_SCENARIOS.find(s => s.id === selectedScenario) || APPLYING_SCENARIOS[0];
+    const baseSlots = [...curScenario.slots];
+    for (const extraSlot of dynamicallyActivatedSlots) {
+      if (!baseSlots.includes(extraSlot)) {
+        baseSlots.push(extraSlot);
+      }
+    }
+    for (const key of Object.keys(slotFiles) as DocSlotKey[]) {
+      if (slotFiles[key] && !baseSlots.includes(key)) {
+        baseSlots.push(key);
+      }
+    }
+    return baseSlots;
+  }, [selectedScenario, dynamicallyActivatedSlots, slotFiles]);
 
   // Box Drag Over states & tracking refs
   const [dragSlot, setDragSlot] = useState<string | null>(null);
@@ -427,7 +1290,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     message: string;
     type?: 'success' | 'error';
   } | null>(null);
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   // Sleek centered permission request & notification dialog states
   const [micPermissionModal, setMicPermissionModal] = useState<{
@@ -446,74 +1308,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     title: string;
     message: string;
   } | null>(null);
-
-  const handleDownloadFillablePdf = async (filename: string) => {
-    setIsDownloadingPdf(true);
-    try {
-      let response: Response | null = null;
-      const candidates = [
-        `/templates/${filename}`,
-        `templates/${filename}`,
-        `${window.location.origin}/templates/${filename}`
-      ];
-      for (const url of candidates) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) {
-            response = res;
-            break;
-          }
-        } catch (_) {}
-      }
-      if (!response || !response.ok) {
-        throw new Error(`Failed to load template file: ${filename}`);
-      }
-      const arrayBuffer = await response.arrayBuffer();
-      const uint8 = new Uint8Array(arrayBuffer);
-
-      let savedToPath: string | null = null;
-      if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
-        try {
-          savedToPath = await invoke<string>('save_file_to_downloads', {
-            filename,
-            bytes: Array.from(uint8)
-          });
-        } catch (tauriErr) {
-          console.warn('Tauri save command failed, falling back to browser download:', tauriErr);
-        }
-      }
-
-      if (savedToPath) {
-        setDownloadNotice({
-          path: savedToPath,
-          message: `Saved successfully to Downloads (${filename})`,
-          type: 'success'
-        });
-      } else {
-        const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
-        const blobUrl = URL.createObjectURL(blob);
-        const tempLink = document.createElement('a');
-        tempLink.href = blobUrl;
-        tempLink.download = filename;
-        document.body.appendChild(tempLink);
-        tempLink.click();
-        document.body.removeChild(tempLink);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
-
-        setDownloadNotice({
-          message: `Download started for ${filename}`,
-          type: 'success'
-        });
-      }
-    } catch (err: any) {
-      setDownloadNotice({
-        message: `Failed to download PDF: ${err.message || 'Unknown error'}`,
-        type: 'error'
-      });
-    } finally {
-      setIsDownloadingPdf(false);
-    }
-  };
 
   const requestMicAndRecord = async (folderName: string) => {
     const hasGranted = localStorage.getItem('fs_mic_permission_granted') === 'true';
@@ -997,7 +1791,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   };
 
-  const MAX_TOTAL_FILES = 10;
+  const MAX_TOTAL_FILES = 15;
 
   const countTotalFiles = (
     p: File | null = filesStateRef.current.photo,
@@ -1008,7 +1802,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     inf: File | null = filesStateRef.current.info,
     selected: File[] = filesStateRef.current.selected || []
   ) => {
-    return [p, s, pass, ident, res, inf].filter(Boolean).length + selected.length;
+    const slotCount = Object.values(slotFiles).filter(Boolean).length;
+    return Math.max(slotCount, [p, s, pass, ident, res, inf].filter(Boolean).length) + selected.length;
   };
 
   const compressAndStandardizeDocument = async (file: File): Promise<File> => {
@@ -1050,15 +1845,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           for (let i = 0; i < byteString.length; i++) {
             ia[i] = byteString.charCodeAt(i);
           }
-          const standardizedFile = new File([ab], 'sign.jpg', { type: 'image/jpeg' });
+          const standardizedFile = new File([ab], 'signature.jpg', { type: 'image/jpeg' });
           filesStateRef.current.sign = standardizedFile;
           setSignFile(standardizedFile);
+          setSlotFiles(prev => ({ ...prev, sign: standardizedFile }));
         } catch (_) {}
       }
     } catch (_) {}
   };
 
-  const updateSlotFile = (slot: 'photo' | 'sign' | 'passport' | 'identity' | 'residence' | 'info', file: File | null) => {
+  const updateSlotFile = (slot: DocSlotKey, file: File | null) => {
     if (file && submissionTracker?.ready) {
       setSubmissionTracker(null);
       setUploadMessage(null);
@@ -1068,31 +1864,40 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         text: `File "${file.name}" exceeds the 10 MB maximum size limit.`,
         type: 'error',
       });
-      if (slot === 'photo' && photoInputRef.current) photoInputRef.current.value = '';
-      if (slot === 'sign' && signInputRef.current) signInputRef.current.value = '';
-      if (slot === 'passport' && passportInputRef.current) passportInputRef.current.value = '';
-      if (slot === 'identity' && identityInputRef.current) identityInputRef.current.value = '';
-      if (slot === 'residence' && residenceInputRef.current) residenceInputRef.current.value = '';
-      if (slot === 'info' && infoInputRef.current) infoInputRef.current.value = '';
+      if (dynamicInputRefs.current[slot]) dynamicInputRefs.current[slot]!.value = '';
       return;
     }
-    if (file && !filesStateRef.current[slot] && countTotalFiles() >= MAX_TOTAL_FILES) {
+    if (file && !slotFiles[slot] && !filesStateRef.current[slot as keyof typeof filesStateRef.current] && countTotalFiles() >= MAX_TOTAL_FILES) {
       setUploadMessage({
-        text: 'Maximum 10 files can be uploaded.',
+        text: `Maximum ${MAX_TOTAL_FILES} files can be uploaded.`,
         type: 'error',
       });
       return;
     }
-    filesStateRef.current[slot] = file;
+
+    // Update slotFiles map
+    setSlotFiles(prev => ({
+      ...prev,
+      [slot]: file,
+    }));
+
+    if (!file && dynamicInputRefs.current[slot]) {
+      dynamicInputRefs.current[slot]!.value = '';
+    }
+
+    // Keep individual backward-compatible states in sync
     if (slot === 'photo') {
+      filesStateRef.current.photo = file;
       setPhotoFile(file);
       if (!file && photoInputRef.current) photoInputRef.current.value = '';
       triggerPortalPhotoValidation(file);
     } else if (slot === 'sign') {
+      filesStateRef.current.sign = file;
       setSignFile(file);
       if (!file && signInputRef.current) signInputRef.current.value = '';
       if (file) triggerPortalSignatureValidation(file);
     } else if (slot === 'passport') {
+      filesStateRef.current.passport = file;
       setPassportFile(file);
       if (!file && passportInputRef.current) passportInputRef.current.value = '';
       if (file) {
@@ -1100,10 +1905,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           if (comp !== file) {
             filesStateRef.current.passport = comp;
             setPassportFile(comp);
+            setSlotFiles(prev => ({ ...prev, passport: comp }));
           }
         });
       }
     } else if (slot === 'identity') {
+      filesStateRef.current.identity = file;
       setIdentityFile(file);
       if (!file && identityInputRef.current) identityInputRef.current.value = '';
       if (file) {
@@ -1111,10 +1918,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           if (comp !== file) {
             filesStateRef.current.identity = comp;
             setIdentityFile(comp);
+            setSlotFiles(prev => ({ ...prev, identity: comp }));
           }
         });
       }
     } else if (slot === 'residence') {
+      filesStateRef.current.residence = file;
       setResidenceFile(file);
       if (!file && residenceInputRef.current) residenceInputRef.current.value = '';
       if (file) {
@@ -1122,10 +1931,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           if (comp !== file) {
             filesStateRef.current.residence = comp;
             setResidenceFile(comp);
+            setSlotFiles(prev => ({ ...prev, residence: comp }));
           }
         });
       }
     } else if (slot === 'info') {
+      filesStateRef.current.info = file;
       setInfoFile(file);
       if (!file && infoInputRef.current) infoInputRef.current.value = '';
       if (file && (file.name.toLowerCase().endsWith('.pdf') || file.type.startsWith('image/'))) {
@@ -1133,13 +1944,23 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           if (comp !== file) {
             filesStateRef.current.info = comp;
             setInfoFile(comp);
+            setSlotFiles(prev => ({ ...prev, info: comp }));
+          }
+        });
+      }
+    } else {
+      // Dynamic slots
+      if (file && (file.name.toLowerCase().endsWith('.pdf') || file.type.startsWith('image/'))) {
+        compressAndStandardizeDocument(file).then(comp => {
+          if (comp !== file) {
+            setSlotFiles(prev => ({ ...prev, [slot]: comp }));
           }
         });
       }
     }
   };
 
-  const autoCategorizeFiles = (incoming: File[]) => {
+  const routeIncomingFiles = async (incoming: File[], preferredSlot?: DocSlotKey) => {
     if (!incoming || incoming.length === 0) return;
     if (submissionTracker?.ready) {
       setSubmissionTracker(null);
@@ -1154,254 +1975,105 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       });
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+
+    let validIncoming = incoming.filter(f => f.size <= MAX_FILE_SIZE_BYTES);
+    if (validIncoming.length === 0) return;
+
     const currentTotal = countTotalFiles();
     if (currentTotal >= MAX_TOTAL_FILES) {
       setUploadMessage({
-        text: 'Maximum 10 files can be uploaded.',
+        text: `Maximum ${MAX_TOTAL_FILES} files can be uploaded.`,
         type: 'error',
       });
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
     const remainingSlots = MAX_TOTAL_FILES - currentTotal;
-    let validIncoming = incoming.filter(f => f.size <= MAX_FILE_SIZE_BYTES);
     if (validIncoming.length > remainingSlots) {
       setUploadMessage({
-        text: `Maximum 10 files can be uploaded. Accepting first ${remainingSlots} files.`,
+        text: `Maximum ${MAX_TOTAL_FILES} files can be uploaded. Accepting first ${remainingSlots} files.`,
         type: 'error',
       });
       validIncoming = validIncoming.slice(0, remainingSlots);
     }
-    if (validIncoming.length === 0) return;
 
-    const current = filesStateRef.current;
-    let p = current.photo;
-    let s = current.sign;
-    let pass = current.passport;
-    let ident = current.identity;
-    let res = current.residence;
-    let inf = current.info;
-    const extras: File[] = [];
+    // Step 1: Real-time async detection with PDF text sniffing, image aspect ratio, and canonical auto-renaming
+    const processedList: Array<{ original: File; processed: File; slot: DocSlotKey }> = [];
+    const targetSlotsToActivate = new Set<DocSlotKey>();
 
     for (const f of validIncoming) {
-      const lower = f.name.toLowerCase();
-      if (lower.includes('photo') || lower.includes('fototessera') || lower.includes('picture') || lower.includes('portrait')) {
-        if (!p || f.size > p.size) {
-          p = f;
-        }
-      } else if (lower.includes('sign') || lower.includes('signature') || lower.includes('firma')) {
-        if (!s || f.size > s.size) {
-          s = f;
-        }
-      } else if (!pass && (lower.includes('pass') || lower.includes('passport') || lower.includes('passaporto'))) {
-        pass = f;
-      } else if (!ident && (
-        lower.includes('permesso') || 
-        lower.includes('pds') || 
-        lower.includes('soggiorno') || 
-        lower.includes('cie') || 
-        lower.includes('carta') || 
-        lower.includes('identity') || 
-        lower.includes('identita')
-      )) {
-        ident = f;
-      } else if (!res && (
-        lower.includes('residen') || 
-        lower.includes('certificato') || 
-        lower.includes('ospiti') || 
-        lower.includes('ospitalita') || 
-        lower.includes('fabbricato') || 
-        lower.includes('cessione') || 
-        lower.includes('affitto') || 
-        lower.includes('locazione') || 
-        lower.includes('bolletta') ||
-        lower.includes('contratto') ||
-        lower.includes('anagrafe') ||
-        lower.includes('famiglia')
-      )) {
-        res = f;
-      } else if (!inf && (
-        lower.includes('info') || 
-        lower.includes('detail') || 
-        lower.includes('dettagli') || 
-        lower.endsWith('.docx') || 
-        lower.endsWith('.doc') || 
-        lower.includes('support') || 
-        lower.includes('annexure') || 
-        lower.includes('necessity') ||
-        lower.endsWith('.txt')
-      )) {
-        inf = f;
-      } else {
-        if (activeServiceType === 'fresh') {
-          if (!ident && lower.endsWith('.pdf')) {
-            ident = f;
-          } else if (!res && lower.endsWith('.pdf')) {
-            res = f;
-          } else if (!p && lower.match(/\.(jpg|jpeg|png|webp)$/)) {
-            p = f;
-          } else if (!s && lower.match(/\.(jpg|jpeg|png)$/)) {
-            s = f;
-          } else if (!inf) {
-            inf = f;
-          } else if (!pass && lower.endsWith('.pdf')) {
-            pass = f;
-          } else {
-            extras.push(f);
-          }
-        } else {
-          if (!pass && lower.endsWith('.pdf')) {
-            pass = f;
-          } else if (!p && lower.match(/\.(jpg|jpeg|png|webp)$/)) {
-            p = f;
-          } else if (!ident && lower.endsWith('.pdf')) {
-            ident = f;
-          } else if (!res && lower.endsWith('.pdf')) {
-            res = f;
-          } else if (!s && lower.match(/\.(jpg|jpeg|png)$/)) {
-            s = f;
-          } else if (!inf) {
-            inf = f;
-          } else {
-            extras.push(f);
-          }
-        }
-      }
-    }
+      // Only use preferredSlot if single file was dropped
+      const fallback = validIncoming.length === 1 ? preferredSlot : undefined;
+      const detected = await detectSlotAndCanonicalNameAsync(f, fallback);
 
-    if (p !== current.photo) {
-      filesStateRef.current.photo = p;
-      setPhotoFile(p);
-      triggerPortalPhotoValidation(p);
-    }
-    if (s !== current.sign) {
-      filesStateRef.current.sign = s;
-      setSignFile(s);
-      if (s) triggerPortalSignatureValidation(s);
-    }
-    if (pass !== current.passport) {
-      filesStateRef.current.passport = pass;
-      setPassportFile(pass);
-      if (pass) {
-        compressAndStandardizeDocument(pass).then(comp => {
-          if (comp !== pass) {
-            filesStateRef.current.passport = comp;
-            setPassportFile(comp);
-          }
-        });
-      }
-    }
-    if (ident !== current.identity) {
-      filesStateRef.current.identity = ident;
-      setIdentityFile(ident);
-      if (ident) {
-        compressAndStandardizeDocument(ident).then(comp => {
-          if (comp !== ident) {
-            filesStateRef.current.identity = comp;
-            setIdentityFile(comp);
-          }
-        });
-      }
-    }
-    if (res !== current.residence) {
-      filesStateRef.current.residence = res;
-      setResidenceFile(res);
-      if (res) {
-        compressAndStandardizeDocument(res).then(comp => {
-          if (comp !== res) {
-            filesStateRef.current.residence = comp;
-            setResidenceFile(comp);
-          }
-        });
-      }
-    }
-    if (inf !== current.info) {
-      filesStateRef.current.info = inf;
-      setInfoFile(inf);
-      if (inf && (inf.name.toLowerCase().endsWith('.pdf') || inf.type.startsWith('image/'))) {
-        compressAndStandardizeDocument(inf).then(comp => {
-          if (comp !== inf) {
-            filesStateRef.current.info = comp;
-            setInfoFile(comp);
-          }
-        });
-      }
-    }
-
-    if (extras.length > 0) {
-      setSelectedFiles(prev => {
-        const existingKeys = new Set(prev.map(item => `${item.name}_${item.size}`));
-        const toAdd = extras.filter(item => !existingKeys.has(`${item.name}_${item.size}`));
-        const currentSlotCount = [p, s, pass, ident, res, inf].filter(Boolean).length;
-        const availableForExtras = Math.max(0, MAX_TOTAL_FILES - currentSlotCount);
-        const capped = [...prev, ...toAdd].slice(0, availableForExtras);
-        filesStateRef.current.selected = capped;
-        toAdd.forEach(extraFile => {
-          compressAndStandardizeDocument(extraFile).then(compressed => {
-            if (compressed !== extraFile) {
-              setSelectedFiles(currList => {
-                const updated = currList.map(item => (item === extraFile || item.name === extraFile.name ? compressed : item));
-                filesStateRef.current.selected = updated;
-                return updated;
-              });
-            }
+      let canonicalFile = f;
+      if (f.name !== detected.canonicalName) {
+        try {
+          canonicalFile = new File([f], detected.canonicalName, {
+            type: f.type || (detected.canonicalName.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
+            lastModified: f.lastModified || Date.now(),
           });
-        });
-        return capped;
+        } catch (_) {
+          canonicalFile = f;
+        }
+      }
+
+      processedList.push({ original: f, processed: canonicalFile, slot: detected.slot });
+      targetSlotsToActivate.add(detected.slot);
+    }
+
+    // Step 2: Dynamically activate any hidden slots so their boxes immediately appear
+    setDynamicallyActivatedSlots(prev => {
+      const updated = [...prev];
+      for (const s of targetSlotsToActivate) {
+        if (!updated.includes(s)) updated.push(s);
+      }
+      return updated;
+    });
+
+    // Step 3: Put each processed file into its proper slot
+    for (const item of processedList) {
+      updateSlotFile(item.slot, item.processed);
+    }
+
+    // Step 4: Show user-friendly feedback
+    const renamedCount = processedList.filter(p => p.processed.name !== p.original.name).length;
+    if (processedList.length > 1 || renamedCount > 0) {
+      const summaryMsg = processedList
+        .map(p => `${p.original.name} ➔ ${p.processed.name} (${SLOT_CATALOG[p.slot]?.title || p.slot})`)
+        .join(', ');
+      setUploadMessage({
+        text: `Auto-categorized & renamed: ${summaryMsg}`,
+        type: 'success',
       });
     }
 
-    // Intelligently refine slots and document roles using Vertex & learned semantic knowledge
+    // Step 5: In parallel, run semantic AI model classifier on backend
     automationApi.classifyDocuments(validIncoming, activeServiceType)
       .then(res => {
         if (!res || !res.success || !res.classifications || res.classifications.length === 0) return;
         res.classifications.forEach(item => {
-          const matchedFile = validIncoming.find(f => f.name === item.filename);
-          if (!matchedFile) return;
+          const matched = processedList.find(p => p.original.name === item.filename);
+          if (!matched) return;
 
-          const recName = item.recommended_name || matchedFile.name;
-          const renamedFile = (recName !== matchedFile.name)
-            ? new File([matchedFile], recName, { type: matchedFile.type })
-            : matchedFile;
-
-          if (item.target_slot === 'photo' && !filesStateRef.current.photo) {
-            filesStateRef.current.photo = renamedFile;
-            setPhotoFile(renamedFile);
-            triggerPortalPhotoValidation(renamedFile);
-          } else if (item.target_slot === 'sign' && !filesStateRef.current.sign) {
-            filesStateRef.current.sign = renamedFile;
-            setSignFile(renamedFile);
-            triggerPortalSignatureValidation(renamedFile);
-          } else if (item.target_slot === 'passport' && !filesStateRef.current.passport) {
-            filesStateRef.current.passport = renamedFile;
-            setPassportFile(renamedFile);
-            compressAndStandardizeDocument(renamedFile).then(comp => {
-              filesStateRef.current.passport = comp;
-              setPassportFile(comp);
-            });
-          } else if (item.target_slot === 'identity' && !filesStateRef.current.identity) {
-            filesStateRef.current.identity = renamedFile;
-            setIdentityFile(renamedFile);
-            compressAndStandardizeDocument(renamedFile).then(comp => {
-              filesStateRef.current.identity = comp;
-              setIdentityFile(comp);
-            });
-          } else if (item.target_slot === 'residence' && !filesStateRef.current.residence) {
-            filesStateRef.current.residence = renamedFile;
-            setResidenceFile(renamedFile);
-            compressAndStandardizeDocument(renamedFile).then(comp => {
-              filesStateRef.current.residence = comp;
-              setResidenceFile(comp);
-            });
-          } else if (item.target_slot === 'info' && !filesStateRef.current.info) {
-            filesStateRef.current.info = renamedFile;
-            setInfoFile(renamedFile);
+          const recName = item.recommended_name || matched.processed.name;
+          const target = item.target_slot as DocSlotKey;
+          if (target && SLOT_CATALOG[target] && target !== matched.slot) {
+            const refined = (recName !== matched.processed.name)
+              ? new File([matched.processed], recName, { type: matched.processed.type })
+              : matched.processed;
+            setDynamicallyActivatedSlots(prev => prev.includes(target) ? prev : [...prev, target]);
+            updateSlotFile(target, refined);
           }
         });
       })
       .catch(err => {
         console.warn('[SEMANTIC ENGINE NOTICE]', err);
       });
+  };
+
+  const autoCategorizeFiles = (incoming: File[]) => {
+    routeIncomingFiles(incoming);
   };
 
   const handleFileDrop = (e: React.DragEvent) => {
@@ -1461,6 +2133,28 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     setInfoFile(null);
     setSelectedFiles([]);
     setInAppInfoData({});
+    setSlotFiles({
+      photo: null,
+      sign: null,
+      passport: null,
+      identity: null,
+      residence: null,
+      info: null,
+      marriage_cert: null,
+      spouse_passport: null,
+      birth_cert: null,
+      police_report: null,
+      annexure_f: null,
+      father_passport: null,
+      mother_passport: null,
+      annexure_d: null,
+      annexure_e: null,
+      divorce_death_cert: null,
+      name_change_proof: null,
+      education_proof: null,
+    });
+    setDynamicallyActivatedSlots([]);
+    setSelectedScenario(activeServiceType === 'fresh' ? 'fresh_minor' : 'reissue_standard');
     if (photoInputRef.current) photoInputRef.current.value = '';
     if (signInputRef.current) signInputRef.current.value = '';
     if (passportInputRef.current) passportInputRef.current.value = '';
@@ -1468,6 +2162,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (residenceInputRef.current) residenceInputRef.current.value = '';
     if (infoInputRef.current) infoInputRef.current.value = '';
     if (fileInputRef.current) fileInputRef.current.value = '';
+    Object.keys(dynamicInputRefs.current).forEach((k) => {
+      if (dynamicInputRefs.current[k]) {
+        dynamicInputRefs.current[k]!.value = '';
+      }
+    });
     setSubmissionTracker(null);
     setUploadMessage(null);
   };
@@ -1571,13 +2270,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               }
             }
             if (loadedFiles.length > 0) {
-              if (loadedFiles.length > 1) {
-                autoCategorizeFiles(loadedFiles);
-              } else if (targetSlot && ['photo', 'sign', 'passport', 'identity', 'residence', 'info'].includes(targetSlot)) {
-                updateSlotFile(targetSlot as any, loadedFiles[0]);
-              } else {
-                autoCategorizeFiles(loadedFiles);
-              }
+              routeIncomingFiles(loadedFiles, targetSlot as any);
             }
           }
         }
@@ -1622,13 +2315,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
       if (currentSection === 'form' && !correctionApp && e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
         const droppedFiles = Array.from(e.dataTransfer.files);
-        if (droppedFiles.length > 1) {
-          autoCategorizeFiles(droppedFiles);
-        } else if (targetSlot && ['photo', 'sign', 'passport', 'identity', 'residence', 'info'].includes(targetSlot)) {
-          updateSlotFile(targetSlot as any, droppedFiles[0]);
-        } else {
-          autoCategorizeFiles(droppedFiles);
-        }
+        routeIncomingFiles(droppedFiles, targetSlot as any);
       }
     };
 
@@ -1727,13 +2414,52 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       return;
     }
 
-    if (activeServiceType === 'reissue' && !passportFile) {
-      const msg = 'Please upload the applicant’s current Passport copy for Reissue application.';
-      setUploadMessage({
-        text: msg,
-        type: 'error',
-      });
-      return;
+    if (activeServiceType === 'reissue') {
+      if (selectedScenario === 'reissue_lost' && !slotFiles.police_report) {
+        setUploadMessage({
+          text: 'Police Report / Denuncia is mandatory for Lost Passport reissue.',
+          type: 'error',
+        });
+        return;
+      }
+      if (selectedScenario === 'reissue_spouse_add' && !slotFiles.marriage_cert) {
+        setUploadMessage({
+          text: 'Marriage Certificate is required for adding/updating Spouse Name.',
+          type: 'error',
+        });
+        return;
+      }
+      if (selectedScenario === 'reissue_spouse_del' && !slotFiles.divorce_death_cert) {
+        setUploadMessage({
+          text: 'Divorce Decree or Death Certificate is required for deleting Spouse Name.',
+          type: 'error',
+        });
+        return;
+      }
+      if (selectedScenario !== 'reissue_lost' && !passportFile) {
+        const msg = 'Please upload the applicant’s current Passport copy for Reissue application.';
+        setUploadMessage({
+          text: msg,
+          type: 'error',
+        });
+        return;
+      }
+    } else {
+      // Fresh application
+      if (!slotFiles.birth_cert) {
+        setUploadMessage({
+          text: 'Birth Certificate (Estratto di Nascita) is mandatory for Fresh passport application.',
+          type: 'error',
+        });
+        return;
+      }
+      if (selectedScenario === 'fresh_minor' && (!slotFiles.father_passport || !slotFiles.mother_passport)) {
+        setUploadMessage({
+          text: 'Father and Mother Passport copies are required for Minor Fresh passport.',
+          type: 'error',
+        });
+        return;
+      }
     }
 
     try {
@@ -1766,6 +2492,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           residence: residenceFile,
           supporting: infoFile,
           files: selectedFiles,
+          marriage_cert: slotFiles.marriage_cert || undefined,
+          spouse_passport: slotFiles.spouse_passport || undefined,
+          birth_cert: slotFiles.birth_cert || undefined,
+          police_report: slotFiles.police_report || undefined,
+          annexure_f: slotFiles.annexure_f || undefined,
+          father_passport: slotFiles.father_passport || undefined,
+          mother_passport: slotFiles.mother_passport || undefined,
+          annexure_d: slotFiles.annexure_d || undefined,
+          annexure_e: slotFiles.annexure_e || undefined,
+          divorce_death_cert: slotFiles.divorce_death_cert || undefined,
+          name_change_proof: slotFiles.name_change_proof || undefined,
+          education_proof: slotFiles.education_proof || undefined,
         },
         user?.email,
         declarationPlace,
@@ -1788,23 +2526,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         text: 'File submitted, waiting for preview...',
         type: 'success',
       });
-      photoValidationSeqRef.current++;
-      setPhotoValidation({ status: 'idle' });
-      setPhotoFile(null);
-      setSignFile(null);
-      setPassportFile(null);
-      setIdentityFile(null);
-      setResidenceFile(null);
-      setInfoFile(null);
-      setSelectedFiles([]);
-      setInAppInfoData({});
-      if (photoInputRef.current) photoInputRef.current.value = '';
-      if (signInputRef.current) signInputRef.current.value = '';
-      if (passportInputRef.current) passportInputRef.current.value = '';
-      if (identityInputRef.current) identityInputRef.current.value = '';
-      if (residenceInputRef.current) residenceInputRef.current.value = '';
-      if (infoInputRef.current) infoInputRef.current.value = '';
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      clearDocumentSlots();
       refreshAllData(targetClientEmail.toLowerCase());
     } catch (err: any) {
       const friendlyMsg = sanitizeErrorMessage(err);
@@ -2798,10 +3520,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           <select
                             id="corrGender"
                             className="form-input"
-                            value={correctionFormData["GENDER"] || "MALE"}
+                            value={correctionFormData["GENDER"] || ""}
                             onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "GENDER": e.target.value }))}
                             required
                           >
+                            <option value="">SELECT</option>
                             <option value="MALE">MALE</option>
                             <option value="FEMALE">FEMALE</option>
                             <option value="TRANSGENDER">TRANSGENDER</option>
@@ -2851,10 +3574,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           <select
                             id="corrQualification"
                             className="form-input"
-                            value={correctionFormData["Educational qualification"] || "10TH PASS AND ABOVE"}
+                            value={correctionFormData["Educational qualification"] || ""}
                             onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Educational qualification": e.target.value }))}
                             required
                           >
+                            <option value="">SELECT</option>
                             <option value="GRADUATE AND ABOVE">GRADUATE AND ABOVE</option>
                             <option value="10TH PASS AND ABOVE">10TH PASS AND ABOVE</option>
                             <option value="BETWEEN 8TH AND 9TH STANDARD">BETWEEN 8TH AND 9TH STANDARD</option>
@@ -2871,10 +3595,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           <select
                             id="corrEmployment"
                             className="form-input"
-                            value={correctionFormData["Employment type"] || "PRIVATE"}
+                            value={correctionFormData["Employment type"] || ""}
                             onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Employment type": e.target.value }))}
                             required
                           >
+                            <option value="">SELECT</option>
                             <option value="PRIVATE">PRIVATE</option>
                             <option value="GOVERNMENT">GOVERNMENT</option>
                             <option value="SELF EMPLOYED">SELF EMPLOYED</option>
@@ -2898,7 +3623,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           <select
                             id="corrMarital"
                             className="form-input"
-                            value={correctionFormData["Marital status"] || "SINGLE"}
+                            value={correctionFormData["Marital status"] || ""}
                             onChange={(e) => {
                               const val = e.target.value;
                               setCorrectionFormData(prev => ({
@@ -2910,6 +3635,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             }}
                             required
                           >
+                            <option value="">SELECT</option>
                             <option value="SINGLE">SINGLE</option>
                             <option value="MARRIED">MARRIED</option>
                             <option value="WIDOW/ WIDOWER">WIDOW/ WIDOWER</option>
@@ -3469,518 +4195,242 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       flexWrap: 'wrap',
-                      gap: '10px',
-                      margin: '10px 0 14px 0',
-                      padding: '10px 14px',
-                      borderRadius: '10px',
+                      gap: '12px',
+                      margin: '10px 0 16px 0',
+                      padding: '12px 16px',
+                      borderRadius: '12px',
                       background: activeServiceType === 'fresh' ? '#f0fdf4' : '#f8fafc',
                       border: activeServiceType === 'fresh' ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <FileText style={{ width: '16px', height: '16px', color: activeServiceType === 'fresh' ? '#059669' : '#2563eb' }} />
-                      <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>
-                        Mandatory Info Form ({activeServiceType === 'fresh' ? 'Fresh / Minor Form' : 'Reissue Form'}):
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <FileText style={{ width: '18px', height: '18px', color: activeServiceType === 'fresh' ? '#059669' : '#2563eb' }} />
+                      <div>
+                        <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1e293b' }}>
+                          Application Reason &amp; Mandatory Details ({activeServiceType === 'fresh' ? 'Fresh Passport' : 'Passport Reissue'})
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                          Selected Reason: <strong style={{ color: '#0f172a' }}>{APPLYING_SCENARIOS.find(s => s.id === selectedScenario)?.label || 'Standard'}</strong>
+                          {filledParticularsCount > 0 && ` • ${filledParticularsCount} ${filledParticularsCount === 1 ? 'particular' : 'particulars'} saved`}
+                        </div>
+                      </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadFillablePdf(activeServiceType === 'fresh' ? 'Fresh_Passport_Info_Form.pdf' : 'Reissue_Passport_Info_Form.pdf')}
-                        disabled={isDownloadingPdf}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '6px 12px',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          borderRadius: '8px',
-                          background: '#ffffff',
-                          color: '#334155',
-                          border: '1px solid #cbd5e1',
-                          cursor: isDownloadingPdf ? 'not-allowed' : 'pointer',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                        }}
-                        title="Download official fillable AcroForm PDF directly to your PC"
-                      >
-                        {isDownloadingPdf ? (
-                          <RefreshCw style={{ width: '13px', height: '13px', color: '#2563eb' }} className="animate-spin" />
-                        ) : (
-                          <Download style={{ width: '13px', height: '13px', color: '#2563eb' }} />
-                        )}
-                        <span>{isDownloadingPdf ? 'Downloading...' : 'Download Fillable PDF'}</span>
-                      </button>
-
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <button
                         type="button"
                         onClick={() => setShowInAppInfoModal(true)}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          padding: '6px 14px',
-                          fontSize: '12px',
+                          gap: '8px',
+                          padding: '8px 16px',
+                          fontSize: '13px',
                           fontWeight: 600,
                           borderRadius: '8px',
                           border: 'none',
-                          background: Object.keys(inAppInfoData).length > 0 ? '#059669' : (activeServiceType === 'fresh' ? '#10b981' : '#2563eb'),
+                          background: filledParticularsCount > 0 ? '#059669' : (activeServiceType === 'fresh' ? '#10b981' : '#2563eb'),
                           color: '#ffffff',
                           cursor: 'pointer',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          transition: 'all 0.2s ease',
                         }}
-                        title="Fill the additional details directly inside this application"
+                        title="Select application reason and enter applicant details in the app"
                       >
-                        <Edit3 style={{ width: '13px', height: '13px' }} />
+                        <Edit3 style={{ width: '14px', height: '14px' }} />
                         <span>
-                          {Object.keys(inAppInfoData).length > 0
-                            ? `✓ Info Saved (${Object.keys(inAppInfoData).length} fields)`
-                            : 'Fill Additional Info'}
+                          {filledParticularsCount > 0
+                            ? `✓ Reason & Info Configured (${filledParticularsCount} ${filledParticularsCount === 1 ? 'detail' : 'details'})`
+                            : 'Fill Info & Application Reason'}
                         </span>
                       </button>
                     </div>
                   </div>
 
                   <div className="docs-boxes-grid">
-                    {/* 1. Photograph Box */}
-                    <div
-                      className={`doc-upload-box ${photoFile && photoValidation.status === 'valid' ? 'has-file' : ''} ${dragSlot === 'photo' ? 'drag-target' : ''}`}
-                      style={
-                        photoValidation.status === 'invalid'
-                          ? { borderColor: '#ef4444', background: 'rgba(254, 242, 242, 0.85)' }
-                          : photoValidation.status === 'validating'
-                          ? { borderColor: '#3b82f6', background: 'rgba(239, 246, 255, 0.85)' }
-                          : undefined
-                      }
-                      data-drop-slot="photo"
-                      onClick={() => photoInputRef.current?.click()}
-                      onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'photo'; setDragSlot('photo'); }}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = 'photo'; }}
-                      onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === 'photo') { dragSlotRef.current = null; setDragSlot(null); } }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        lastDropTimeRef.current = Date.now();
-                        dragSlotRef.current = null;
-                        setDragSlot(null);
-                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                          if (e.dataTransfer.files.length > 1) {
-                            autoCategorizeFiles(Array.from(e.dataTransfer.files));
-                          } else {
-                            updateSlotFile('photo', e.dataTransfer.files[0]);
-                          }
+                    {activeSlots.map((slotKey) => {
+                      const slotDef = SLOT_CATALOG[slotKey];
+                      if (!slotDef) return null;
+                      const file = slotFiles[slotKey];
+                      const isPhoto = slotKey === 'photo';
+                      const isSign = slotKey === 'sign';
+                      const hasFile = isPhoto
+                        ? photoFile && photoValidation.status === 'valid'
+                        : Boolean(file);
+
+                      const renderSlotIcon = () => {
+                        switch (slotDef.iconName) {
+                          case 'camera': return <Camera className="doc-box-icon" />;
+                          case 'pen': return <PenTool className="doc-box-icon" />;
+                          case 'book': return <BookOpen className="doc-box-icon" />;
+                          case 'id': return <FileCheck className="doc-box-icon" />;
+                          case 'shield': return <ShieldCheck className="doc-box-icon" />;
+                          case 'heart': return <Heart className="doc-box-icon" style={{ color: '#ec4899' }} />;
+                          case 'users': return <Users className="doc-box-icon" style={{ color: '#8b5cf6' }} />;
+                          case 'baby': return <Baby className="doc-box-icon" style={{ color: '#06b6d4' }} />;
+                          case 'award': return <Award className="doc-box-icon" style={{ color: '#f59e0b' }} />;
+                          case 'file-plus': return <FilePlus className="doc-box-icon" style={{ color: '#10b981' }} />;
+                          case 'alert': return <AlertTriangle className="doc-box-icon" style={{ color: '#ef4444' }} />;
+                          default: return <FileText className="doc-box-icon" />;
                         }
-                      }}
-                    >
-                      <input
-                        ref={photoInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/jpg"
-                        style={{ display: 'none' }}
-                        onChange={(e) => { if (e.target.files?.[0]) updateSlotFile('photo', e.target.files[0]); }}
-                      />
-                      <div className="doc-box-header">
-                        <Camera className="doc-box-icon" />
-                        <span className="doc-box-title">Photograph *</span>
-                      </div>
-                      <div className="doc-box-content">
-                        {photoValidation.status === 'validating' ? (
-                          <div className="doc-box-empty" style={{ gap: '6px' }}>
-                            <span
-                              className="doc-box-badge"
-                              style={{ background: '#dbeafe', color: '#1d4ed8', fontWeight: 700 }}
-                            >
-                              Checking with Portal...
+                      };
+
+                      return (
+                        <div
+                          key={slotKey}
+                          className={`doc-upload-box ${hasFile ? 'has-file' : ''} ${dragSlot === slotKey ? 'drag-target' : ''}`}
+                          style={
+                            isPhoto && photoValidation.status === 'invalid'
+                              ? { borderColor: '#ef4444', background: 'rgba(254, 242, 242, 0.85)' }
+                              : isPhoto && photoValidation.status === 'validating'
+                              ? { borderColor: '#3b82f6', background: 'rgba(239, 246, 255, 0.85)' }
+                              : undefined
+                          }
+                          data-drop-slot={slotKey}
+                          onClick={() => dynamicInputRefs.current[slotKey]?.click()}
+                          onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = slotKey; setDragSlot(slotKey); }}
+                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = slotKey; }}
+                          onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === slotKey) { dragSlotRef.current = null; setDragSlot(null); } }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            lastDropTimeRef.current = Date.now();
+                            dragSlotRef.current = null;
+                            setDragSlot(null);
+                            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                              routeIncomingFiles(Array.from(e.dataTransfer.files), slotKey);
+                            }
+                          }}
+                        >
+                          <input
+                            ref={(el) => {
+                              dynamicInputRefs.current[slotKey] = el;
+                              if (slotKey === 'photo') (photoInputRef as any).current = el;
+                              if (slotKey === 'sign') (signInputRef as any).current = el;
+                              if (slotKey === 'passport') (passportInputRef as any).current = el;
+                              if (slotKey === 'identity') (identityInputRef as any).current = el;
+                              if (slotKey === 'residence') (residenceInputRef as any).current = el;
+                              if (slotKey === 'info') (infoInputRef as any).current = el;
+                            }}
+                            type="file"
+                            multiple
+                            accept={slotDef.accept}
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files.length > 0) {
+                                routeIncomingFiles(Array.from(e.target.files), slotKey);
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                          <div className="doc-box-header">
+                            {renderSlotIcon()}
+                            <span className="doc-box-title">
+                              {slotKey === 'passport' && activeServiceType === 'fresh'
+                                ? 'Previous PPT (Optional)'
+                                : slotDef.title}
                             </span>
-                            <div className="doc-box-action-hint" style={{ color: '#2563eb' }}>
-                              <RefreshCw style={{ width: '12px', height: '12px' }} className="animate-spin" />
-                              <span>Verifying ICAO</span>
-                            </div>
                           </div>
-                        ) : photoFile && photoValidation.status === 'valid' ? (
-                          <div className="doc-box-file-info">
-                            <img src={URL.createObjectURL(photoFile)} alt="Photo" className="doc-box-thumb" />
-                            <div className="doc-box-text-info">
-                              <span className="doc-box-filename" title={photoFile.name}>{photoFile.name}</span>
-                              <span className="doc-box-filesize" style={{ color: '#059669', fontWeight: 700 }}>
-                                Portal Verified ✓ ({(photoFile.size / 1024).toFixed(0)} KB)
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              className="doc-box-remove-btn"
-                              title="Remove photograph"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateSlotFile('photo', null);
-                              }}
-                            >
-                              <X style={{ width: '13px', height: '13px' }} />
-                            </button>
+                          <div className="doc-box-content">
+                            {isPhoto && photoValidation.status === 'validating' ? (
+                              <div className="doc-box-empty" style={{ gap: '6px' }}>
+                                <span className="doc-box-badge" style={{ background: '#dbeafe', color: '#1d4ed8', fontWeight: 700 }}>
+                                  Checking with Portal...
+                                </span>
+                                <div className="doc-box-action-hint" style={{ color: '#2563eb' }}>
+                                  <RefreshCw style={{ width: '12px', height: '12px' }} className="animate-spin" />
+                                  <span>Verifying ICAO</span>
+                                </div>
+                              </div>
+                            ) : isPhoto && photoFile && photoValidation.status === 'valid' ? (
+                              <div className="doc-box-file-info">
+                                <img src={URL.createObjectURL(photoFile)} alt="Photo" className="doc-box-thumb" />
+                                <div className="doc-box-text-info">
+                                  <span className="doc-box-filename" title={photoFile.name}>{photoFile.name}</span>
+                                  <span className="doc-box-filesize" style={{ color: '#059669', fontWeight: 700 }}>
+                                    Portal Verified ✓ ({(photoFile.size / 1024).toFixed(0)} KB)
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="doc-box-remove-btn"
+                                  title="Remove photograph"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateSlotFile('photo', null);
+                                  }}
+                                >
+                                  <X style={{ width: '13px', height: '13px' }} />
+                                </button>
+                              </div>
+                            ) : isPhoto && photoValidation.status === 'invalid' ? (
+                              <div className="doc-box-empty" style={{ gap: '4px' }}>
+                                <span className="doc-box-badge" style={{ background: '#fee2e2', color: '#b91c1c', fontWeight: 700 }}>
+                                  Rejected by Portal
+                                </span>
+                                <div className="doc-box-action-hint" style={{ color: '#dc2626', fontWeight: 600 }}>
+                                  <Upload style={{ width: '12px', height: '12px' }} />
+                                  <span>Upload Another</span>
+                                </div>
+                              </div>
+                            ) : isSign && file ? (
+                              <div className="doc-box-file-info">
+                                <img src={URL.createObjectURL(file)} alt="Signature" className="doc-box-thumb" />
+                                <div className="doc-box-text-info">
+                                  <span className="doc-box-filename" title={file.name}>{file.name}</span>
+                                  <span className="doc-box-filesize">{(file.size / 1024).toFixed(0)} KB</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="doc-box-remove-btn"
+                                  title="Remove signature"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateSlotFile('sign', null);
+                                  }}
+                                >
+                                  <X style={{ width: '13px', height: '13px' }} />
+                                </button>
+                              </div>
+                            ) : file ? (
+                              <div className="doc-box-file-info">
+                                <FileText style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
+                                <div className="doc-box-text-info">
+                                  <span className="doc-box-filename" title={file.name}>{file.name}</span>
+                                  <span className="doc-box-filesize">{(file.size / 1024).toFixed(0)} KB</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="doc-box-remove-btn"
+                                  title={`Remove ${slotDef.title}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateSlotFile(slotKey, null);
+                                  }}
+                                >
+                                  <X style={{ width: '13px', height: '13px' }} />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="doc-box-empty">
+                                <span className="doc-box-badge">
+                                  {slotKey === 'info' && Object.keys(inAppInfoData).length > 0
+                                    ? 'Filled In-App ✓'
+                                    : slotKey === 'passport' && activeServiceType === 'fresh'
+                                    ? 'Optional (If Any)'
+                                    : slotDef.badge}
+                                </span>
+                                <div className="doc-box-action-hint">
+                                  <Upload style={{ width: '12px', height: '12px' }} />
+                                  <span>Upload</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        ) : photoValidation.status === 'invalid' ? (
-                          <div className="doc-box-empty" style={{ gap: '4px' }}>
-                            <span
-                              className="doc-box-badge"
-                              style={{ background: '#fee2e2', color: '#b91c1c', fontWeight: 700 }}
-                            >
-                              Rejected by Portal
-                            </span>
-                            <div className="doc-box-action-hint" style={{ color: '#dc2626', fontWeight: 600 }}>
-                              <Upload style={{ width: '12px', height: '12px' }} />
-                              <span>Upload Another</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="doc-box-empty">
-                            <span className="doc-box-badge">630×810 JPG</span>
-                            <div className="doc-box-action-hint">
-                              <Upload style={{ width: '12px', height: '12px' }} />
-                              <span>Upload</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 2. Signature Box */}
-                    <div
-                      className={`doc-upload-box ${signFile ? 'has-file' : ''} ${dragSlot === 'sign' ? 'drag-target' : ''}`}
-                      data-drop-slot="sign"
-                      onClick={() => signInputRef.current?.click()}
-                      onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'sign'; setDragSlot('sign'); }}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = 'sign'; }}
-                      onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === 'sign') { dragSlotRef.current = null; setDragSlot(null); } }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        lastDropTimeRef.current = Date.now();
-                        dragSlotRef.current = null;
-                        setDragSlot(null);
-                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                          if (e.dataTransfer.files.length > 1) {
-                            autoCategorizeFiles(Array.from(e.dataTransfer.files));
-                          } else {
-                            updateSlotFile('sign', e.dataTransfer.files[0]);
-                          }
-                        }
-                      }}
-                    >
-                      <input
-                        ref={signInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/jpg"
-                        style={{ display: 'none' }}
-                        onChange={(e) => { if (e.target.files?.[0]) updateSlotFile('sign', e.target.files[0]); }}
-                      />
-                      <div className="doc-box-header">
-                        <PenTool className="doc-box-icon" />
-                        <span className="doc-box-title">Signature</span>
-                      </div>
-                      <div className="doc-box-content">
-                        {signFile ? (
-                          <div className="doc-box-file-info">
-                            <img src={URL.createObjectURL(signFile)} alt="Signature" className="doc-box-thumb" />
-                            <div className="doc-box-text-info">
-                              <span className="doc-box-filename" title={signFile.name}>{signFile.name}</span>
-                              <span className="doc-box-filesize">{(signFile.size / 1024).toFixed(0)} KB</span>
-                            </div>
-                            <button
-                              type="button"
-                              className="doc-box-remove-btn"
-                              title="Remove signature"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateSlotFile('sign', null);
-                              }}
-                            >
-                              <X style={{ width: '13px', height: '13px' }} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="doc-box-empty">
-                            <span className="doc-box-badge">≤85 KB JPG</span>
-                            <div className="doc-box-action-hint">
-                              <Upload style={{ width: '12px', height: '12px' }} />
-                              <span>Upload</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 3. Passport Copy Box */}
-                    <div
-                      className={`doc-upload-box ${passportFile ? 'has-file' : ''} ${dragSlot === 'passport' ? 'drag-target' : ''}`}
-                      data-drop-slot="passport"
-                      onClick={() => passportInputRef.current?.click()}
-                      onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'passport'; setDragSlot('passport'); }}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = 'passport'; }}
-                      onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === 'passport') { dragSlotRef.current = null; setDragSlot(null); } }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        lastDropTimeRef.current = Date.now();
-                        dragSlotRef.current = null;
-                        setDragSlot(null);
-                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                          if (e.dataTransfer.files.length > 1) {
-                            autoCategorizeFiles(Array.from(e.dataTransfer.files));
-                          } else {
-                            updateSlotFile('passport', e.dataTransfer.files[0]);
-                          }
-                        }
-                      }}
-                    >
-                      <input
-                        ref={passportInputRef}
-                        type="file"
-                        accept=".pdf,image/jpeg,image/png,image/jpg"
-                        style={{ display: 'none' }}
-                        onChange={(e) => { if (e.target.files?.[0]) updateSlotFile('passport', e.target.files[0]); }}
-                      />
-                      <div className="doc-box-header">
-                        <BookOpen className="doc-box-icon" />
-                        <span className="doc-box-title">
-                          {activeServiceType === 'fresh' ? 'Previous PPT (Optional)' : 'Passport Copy *'}
-                        </span>
-                      </div>
-                      <div className="doc-box-content">
-                        {passportFile ? (
-                          <div className="doc-box-file-info">
-                            <FileText style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
-                            <div className="doc-box-text-info">
-                              <span className="doc-box-filename" title={passportFile.name}>{passportFile.name}</span>
-                              <span className="doc-box-filesize">{(passportFile.size / 1024).toFixed(0)} KB</span>
-                            </div>
-                            <button
-                              type="button"
-                              className="doc-box-remove-btn"
-                              title="Remove passport copy"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateSlotFile('passport', null);
-                              }}
-                            >
-                              <X style={{ width: '13px', height: '13px' }} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="doc-box-empty">
-                            <span className="doc-box-badge">
-                              {activeServiceType === 'fresh' ? 'Optional (If Any)' : 'PDF ≤870.4 KB'}
-                            </span>
-                            <div className="doc-box-action-hint">
-                              <Upload style={{ width: '12px', height: '12px' }} />
-                              <span>Upload</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 4. Identity Proof Box */}
-                    <div
-                      className={`doc-upload-box ${identityFile ? 'has-file' : ''} ${dragSlot === 'identity' ? 'drag-target' : ''}`}
-                      data-drop-slot="identity"
-                      onClick={() => identityInputRef.current?.click()}
-                      onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'identity'; setDragSlot('identity'); }}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = 'identity'; }}
-                      onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === 'identity') { dragSlotRef.current = null; setDragSlot(null); } }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        lastDropTimeRef.current = Date.now();
-                        dragSlotRef.current = null;
-                        setDragSlot(null);
-                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                          if (e.dataTransfer.files.length > 1) {
-                            autoCategorizeFiles(Array.from(e.dataTransfer.files));
-                          } else {
-                            updateSlotFile('identity', e.dataTransfer.files[0]);
-                          }
-                        }
-                      }}
-                    >
-                      <input
-                        ref={identityInputRef}
-                        type="file"
-                        accept=".pdf,image/jpeg,image/png,image/jpg"
-                        style={{ display: 'none' }}
-                        onChange={(e) => { if (e.target.files?.[0]) updateSlotFile('identity', e.target.files[0]); }}
-                      />
-                      <div className="doc-box-header">
-                        <FileCheck className="doc-box-icon" />
-                        <span className="doc-box-title">Identity Proof</span>
-                      </div>
-                      <div className="doc-box-content">
-                        {identityFile ? (
-                          <div className="doc-box-file-info">
-                            <FileText style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
-                            <div className="doc-box-text-info">
-                              <span className="doc-box-filename" title={identityFile.name}>{identityFile.name}</span>
-                              <span className="doc-box-filesize">{(identityFile.size / 1024).toFixed(0)} KB</span>
-                            </div>
-                            <button
-                              type="button"
-                              className="doc-box-remove-btn"
-                              title="Remove identity proof"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateSlotFile('identity', null);
-                              }}
-                            >
-                              <X style={{ width: '13px', height: '13px' }} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="doc-box-empty">
-                            <span className="doc-box-badge">Permesso di Soggiorno</span>
-                            <div className="doc-box-action-hint">
-                              <Upload style={{ width: '12px', height: '12px' }} />
-                              <span>Upload</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 5. Residence Proof Box */}
-                    <div
-                      className={`doc-upload-box ${residenceFile ? 'has-file' : ''} ${dragSlot === 'residence' ? 'drag-target' : ''}`}
-                      data-drop-slot="residence"
-                      onClick={() => residenceInputRef.current?.click()}
-                      onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'residence'; setDragSlot('residence'); }}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = 'residence'; }}
-                      onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === 'residence') { dragSlotRef.current = null; setDragSlot(null); } }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        lastDropTimeRef.current = Date.now();
-                        dragSlotRef.current = null;
-                        setDragSlot(null);
-                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                          if (e.dataTransfer.files.length > 1) {
-                            autoCategorizeFiles(Array.from(e.dataTransfer.files));
-                          } else {
-                            updateSlotFile('residence', e.dataTransfer.files[0]);
-                          }
-                        }
-                      }}
-                    >
-                      <input
-                        ref={residenceInputRef}
-                        type="file"
-                        accept=".pdf,image/jpeg,image/png,image/jpg"
-                        style={{ display: 'none' }}
-                        onChange={(e) => { if (e.target.files?.[0]) updateSlotFile('residence', e.target.files[0]); }}
-                      />
-                      <div className="doc-box-header">
-                        <ShieldCheck className="doc-box-icon" />
-                        <span className="doc-box-title">Residence Proof</span>
-                      </div>
-                      <div className="doc-box-content">
-                        {residenceFile ? (
-                          <div className="doc-box-file-info">
-                            <FileText style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
-                            <div className="doc-box-text-info">
-                              <span className="doc-box-filename" title={residenceFile.name}>{residenceFile.name}</span>
-                              <span className="doc-box-filesize">{(residenceFile.size / 1024).toFixed(0)} KB</span>
-                            </div>
-                            <button
-                              type="button"
-                              className="doc-box-remove-btn"
-                              title="Remove residence proof"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateSlotFile('residence', null);
-                              }}
-                            >
-                              <X style={{ width: '13px', height: '13px' }} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="doc-box-empty">
-                            <span className="doc-box-badge">Residenza / CIE / Ospiti</span>
-                            <div className="doc-box-action-hint">
-                              <Upload style={{ width: '12px', height: '12px' }} />
-                              <span>Upload</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 6. Info Box */}
-                    <div
-                      className={`doc-upload-box ${infoFile ? 'has-file' : ''} ${dragSlot === 'info' ? 'drag-target' : ''}`}
-                      data-drop-slot="info"
-                      onClick={() => infoInputRef.current?.click()}
-                      onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = 'info'; setDragSlot('info'); }}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = 'info'; }}
-                      onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === 'info') { dragSlotRef.current = null; setDragSlot(null); } }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        lastDropTimeRef.current = Date.now();
-                        dragSlotRef.current = null;
-                        setDragSlot(null);
-                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                          if (e.dataTransfer.files.length > 1) {
-                            autoCategorizeFiles(Array.from(e.dataTransfer.files));
-                          } else {
-                            updateSlotFile('info', e.dataTransfer.files[0]);
-                          }
-                        }
-                      }}
-                    >
-                      <input
-                        ref={infoInputRef}
-                        type="file"
-                        accept=".docx,.doc,.pdf,.txt,image/*"
-                        style={{ display: 'none' }}
-                        onChange={(e) => { if (e.target.files?.[0]) updateSlotFile('info', e.target.files[0]); }}
-                      />
-                      <div className="doc-box-header">
-                        <FileText className="doc-box-icon" />
-                        <span className="doc-box-title">
-                          Additional Documents
-                        </span>
-                      </div>
-                      <div className="doc-box-content">
-                        {infoFile ? (
-                          <div className="doc-box-file-info">
-                            <FileText style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
-                            <div className="doc-box-text-info">
-                              <span className="doc-box-filename" title={infoFile.name}>{infoFile.name}</span>
-                              <span className="doc-box-filesize">{(infoFile.size / 1024).toFixed(0)} KB</span>
-                            </div>
-                            <button
-                              type="button"
-                              className="doc-box-remove-btn"
-                              title="Remove info document"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateSlotFile('info', null);
-                              }}
-                            >
-                              <X style={{ width: '13px', height: '13px' }} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="doc-box-empty">
-                            <span className="doc-box-badge">
-                              {Object.keys(inAppInfoData).length > 0 ? 'Filled In-App ✓' : 'Fillable PDF / Doc'}
-                            </span>
-                            <div className="doc-box-action-hint">
-                              <Upload style={{ width: '12px', height: '12px' }} />
-                              <span>Upload</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {/* Compact Batch Dropstrip */}
@@ -5133,6 +5583,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         serviceType={activeServiceType}
         initialData={inAppInfoData}
         onSave={(saved) => setInAppInfoData(saved)}
+        onClear={clearDocumentSlots}
         onClose={() => setShowInAppInfoModal(false)}
       />
 

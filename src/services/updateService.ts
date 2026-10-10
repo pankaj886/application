@@ -33,6 +33,8 @@ class UpdateService {
   private progressPercent: number = 0;
   private fallbackDownloadUrl: string | null = null;
   private installerPath: string | null = null;
+  private lastCheckTimestamp: number = 0;
+  private isCheckingBusy: boolean = false;
 
   public subscribe(cb: (status: UpdateStatus, info?: UpdateInfo, progress?: number) => void) {
     this.listeners.add(cb);
@@ -70,8 +72,33 @@ class UpdateService {
 
     const isWindows = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows');
 
+    // 1. Native Rust command via curl (zero browser sandbox, zero CORS restrictions, zero rate-limit)
     try {
-      const res = await fetch('https://github.com/pankaj886/foreigners-studio-releases/releases/latest/download/latest.json', {
+      const nativeJson = await invoke<string>('check_remote_update');
+      if (nativeJson) {
+        const data = JSON.parse(nativeJson);
+        if (data.version && isNewerVersion(data.version, currentVersion)) {
+          if (isWindows && data.platforms?.['windows-x86_64']?.url) {
+            this.fallbackDownloadUrl = data.platforms['windows-x86_64'].url;
+          } else if (!isWindows && data.platforms?.['darwin-universal']?.url) {
+            this.fallbackDownloadUrl = data.platforms['darwin-universal'].url;
+          }
+
+          return {
+            version: data.version,
+            currentVersion,
+            notes: data.notes || 'New release update available.',
+            date: data.pub_date,
+          };
+        }
+      }
+    } catch (nativeErr) {
+      // Continue to next checks
+    }
+
+    // 2. Direct GitHub release download latest.json (Direct redirect, no CDN cache)
+    try {
+      const res = await fetch(`https://github.com/pankaj886/foreigners-studio-releases/releases/latest/download/latest.json?_t=${Date.now()}`, {
         cache: 'no-store'
       });
       if (res.ok) {
@@ -91,53 +118,63 @@ class UpdateService {
           };
         }
       }
-    } catch {
-    }
+    } catch {}
 
+    // 3. Raw githubusercontent fallback
     try {
-      const apiRes = await fetch('https://api.github.com/repos/pankaj886/foreigners-studio-releases/releases/latest', {
-        headers: { 'Accept': 'application/vnd.github.v3+json' },
+      const rawRes = await fetch(`https://raw.githubusercontent.com/pankaj886/foreigners-studio-releases/main/latest.json?_t=${Date.now()}`, {
         cache: 'no-store'
       });
-      if (apiRes.ok) {
-        const release = await apiRes.json();
-        const tag = (release.tag_name || '').replace(/^v/, '');
-        if (tag && isNewerVersion(tag, currentVersion)) {
-          if (Array.isArray(release.assets)) {
-            if (isWindows) {
-              const exeAsset = release.assets.find((a: any) =>
-                typeof a.name === 'string' &&
-                a.name.endsWith('.exe') &&
-                !a.name.toLowerCase().includes('uninstall')
-              );
-              if (exeAsset) this.fallbackDownloadUrl = exeAsset.browser_download_url;
-            } else {
-              const dmgAsset = release.assets.find((a: any) =>
-                typeof a.name === 'string' && a.name.endsWith('.dmg')
-              );
-              if (dmgAsset) this.fallbackDownloadUrl = dmgAsset.browser_download_url;
-            }
+      if (rawRes.ok) {
+        const data = await rawRes.json();
+        if (data.version && isNewerVersion(data.version, currentVersion)) {
+          if (isWindows && data.platforms?.['windows-x86_64']?.url) {
+            this.fallbackDownloadUrl = data.platforms['windows-x86_64'].url;
+          } else if (!isWindows && data.platforms?.['darwin-universal']?.url) {
+            this.fallbackDownloadUrl = data.platforms['darwin-universal'].url;
           }
 
           return {
-            version: tag,
+            version: data.version,
             currentVersion,
-            notes: release.name || release.body || 'New release update available.',
-            date: release.published_at,
+            notes: data.notes || 'New release update available.',
+            date: data.pub_date,
           };
         }
       }
-    } catch {
-    }
+    } catch {}
 
     return null;
   }
 
   public async checkForUpdates(silent: boolean = true): Promise<boolean> {
+    if (this.status === 'downloading' || this.status === 'restarting' || this.status === 'ready') {
+      return false;
+    }
+    if (this.isCheckingBusy) {
+      return false;
+    }
+
+    this.isCheckingBusy = true;
+    this.lastCheckTimestamp = Date.now();
+
     try {
       this.status = 'checking';
       this.notify();
 
+      // 1. Primary check: Native high-speed check via Rust curl backend
+      const remoteInfo = await this.checkRemoteRelease();
+      if (remoteInfo) {
+        this.updateInfo = remoteInfo;
+        this.status = 'available';
+        this.notify();
+
+        await this.downloadUpdate();
+        this.isCheckingBusy = false;
+        return true;
+      }
+
+      // 2. Tauri plugin-updater check fallback
       let update: Update | null = null;
       try {
         update = await check();
@@ -160,21 +197,13 @@ class UpdateService {
         this.notify();
 
         await this.downloadUpdate();
-        return true;
-      }
-
-      const remoteInfo = await this.checkRemoteRelease();
-      if (remoteInfo) {
-        this.updateInfo = remoteInfo;
-        this.status = 'available';
-        this.notify();
-
-        await this.downloadUpdate();
+        this.isCheckingBusy = false;
         return true;
       }
 
       this.status = 'idle';
       this.notify();
+      this.isCheckingBusy = false;
       return false;
     } catch (err) {
       if (!silent) {
@@ -182,6 +211,7 @@ class UpdateService {
       }
       this.status = 'idle';
       this.notify();
+      this.isCheckingBusy = false;
       return false;
     }
   }
@@ -281,6 +311,56 @@ class UpdateService {
         window.location.reload();
       }
     }
+  }
+
+  /**
+   * Initializes dynamic, event-driven update detection.
+   * - Fires immediately on application boot (0 artificial delay).
+   * - Dynamically triggers on window focus, visibility change, network online, and custom events.
+   * - Continuously monitors adaptively in the background without fixed 1-minute blind polling.
+   */
+  public initDynamicWatcher(): () => void {
+    // 1. Immediate trigger on application startup (zero delay)
+    this.checkForUpdates(true).catch(() => {});
+
+    const debouncedCheck = () => {
+      // Prevent redundant checks if checked within the last 10 seconds
+      if (Date.now() - this.lastCheckTimestamp > 10000 && this.status !== 'ready' && this.status !== 'downloading') {
+        this.checkForUpdates(true).catch(() => {});
+      }
+    };
+
+    // 2. Event-driven triggers
+    const onFocus = () => debouncedCheck();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        debouncedCheck();
+      }
+    };
+    const onOnline = () => debouncedCheck();
+    const onCustomTrigger = () => {
+      this.checkForUpdates(false).catch(() => {});
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('fs:trigger-update-check', onCustomTrigger);
+
+    // 3. Adaptive background watcher (monitors for new releases every 30s dynamically)
+    const monitorInterval = setInterval(() => {
+      if (this.status !== 'ready' && this.status !== 'downloading' && this.status !== 'restarting') {
+        this.checkForUpdates(true).catch(() => {});
+      }
+    }, 30000);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('fs:trigger-update-check', onCustomTrigger);
+      clearInterval(monitorInterval);
+    };
   }
 
   public simulateUpdateReady(mockVersion: string = '1.0.8'): void {

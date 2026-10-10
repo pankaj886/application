@@ -55,7 +55,20 @@ export interface CategorizedUploadFiles {
   identity?: File | null;
   residence?: File | null;
   supporting?: File | null;
+  marriage_cert?: File | null;
+  spouse_passport?: File | null;
+  divorce_death_cert?: File | null;
+  police_report?: File | null;
+  annexure_f?: File | null;
+  birth_cert?: File | null;
+  father_passport?: File | null;
+  mother_passport?: File | null;
+  annexure_d?: File | null;
+  annexure_e?: File | null;
+  name_change_proof?: File | null;
+  education_proof?: File | null;
   files?: File[];
+  [slotKey: string]: any;
 }
 
 export interface PreviewItem {
@@ -246,31 +259,39 @@ class AutomationApiService {
   private async fetchWithAutoRetry(path: string, options: RequestInit = {}): Promise<Response> {
     let baseUrl = await this.resolveGateway();
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    let url = `${baseUrl}${cleanPath}`;
+
+    const makeFetch = async (base: string) => {
+      const cleanBase = base.replace(/\/+$/, '');
+      return await fetch(`${cleanBase}${cleanPath}`, options);
+    };
 
     try {
-      const res = await fetch(url, options);
-      if (res.status >= 500) {
-        throw new Error('Error Connecting to Server');
+      const res = await makeFetch(baseUrl);
+      if (res.status >= 502 && res.status <= 504 && baseUrl !== LOCAL_FALLBACK_URL) {
+        throw new Error('Cloudflare gateway error');
       }
       return res;
     } catch (_) {
-      baseUrl = await this.resolveGateway(true);
-      url = `${baseUrl}${cleanPath}`;
+      // First try local server directly if we weren't already using it
+      if (baseUrl !== LOCAL_FALLBACK_URL) {
+        try {
+          const localRes = await makeFetch(LOCAL_FALLBACK_URL);
+          this.activeBaseUrl = LOCAL_FALLBACK_URL;
+          return localRes;
+        } catch (_) {}
+      }
+
+      // Then try resolving gateway afresh
       try {
-        const retryRes = await fetch(url, options);
-        if (retryRes.status >= 500) {
-          throw new Error('Error Connecting to Server');
-        }
+        baseUrl = await this.resolveGateway(true);
+        const retryRes = await makeFetch(baseUrl);
         return retryRes;
       } catch (_) {
         if (baseUrl !== LOCAL_FALLBACK_URL) {
           try {
-            const localRes = await fetch(`${LOCAL_FALLBACK_URL}${cleanPath}`, options);
-            if (localRes.status < 500) {
-              this.activeBaseUrl = LOCAL_FALLBACK_URL;
-              return localRes;
-            }
+            const localRes = await makeFetch(LOCAL_FALLBACK_URL);
+            this.activeBaseUrl = LOCAL_FALLBACK_URL;
+            return localRes;
           } catch (_) {}
         }
         throw new Error('Error Connecting to Server');
@@ -314,48 +335,68 @@ class AutomationApiService {
       if (Array.isArray(files)) {
         for (const file of files) fd.append('files', file);
       } else if (files && typeof files === 'object') {
-        if (files.photo) fd.append('photo', files.photo);
-        if (files.signature) fd.append('signature', files.signature);
-        if (files.passport) fd.append('passport', files.passport);
-        if (files.identity) fd.append('identity', files.identity);
-        if (files.residence) fd.append('residence', files.residence);
-        if (files.supporting) fd.append('supporting', files.supporting);
-        if (files.files && Array.isArray(files.files)) {
-          for (const f of files.files) fd.append('files', f);
-        }
+        Object.entries(files).forEach(([key, val]) => {
+          if (key === 'files' && Array.isArray(val)) {
+            for (const f of val) {
+              if (f instanceof File) fd.append('files', f);
+            }
+          } else if (val instanceof File) {
+            fd.append(key, val);
+          }
+        });
       }
       return fd;
     };
 
-    let url = `${baseUrl}/api/upload`;
-    let res: Response;
+    const tryUpload = async (targetBase: string): Promise<Response> => {
+      const clean = targetBase.replace(/\/+$/, '');
+      return await fetch(`${clean}/api/upload`, { method: 'POST', body: buildFormData() });
+    };
+
+    let res: Response | null = null;
+
+    // 1. Try active base URL
     try {
-      res = await fetch(url, { method: 'POST', body: buildFormData() });
-      if (res.status >= 500) throw new Error('Error Connecting to Server');
+      res = await tryUpload(baseUrl);
+      if (res.status >= 502 && res.status <= 504 && baseUrl !== LOCAL_FALLBACK_URL) {
+        res = null; // Cloudflare bad gateway -> fallback to local
+      }
     } catch (_) {
-      baseUrl = await this.resolveGateway(true);
-      url = `${baseUrl}/api/upload`;
+      res = null;
+    }
+
+    // 2. If failed and active wasn't local, try local immediately
+    if (!res && baseUrl !== LOCAL_FALLBACK_URL) {
       try {
-        res = await fetch(url, { method: 'POST', body: buildFormData() });
-        if (res.status >= 500) throw new Error('Error Connecting to Server');
-      } catch (_) {
-        if (baseUrl !== LOCAL_FALLBACK_URL) {
-          try {
-            res = await fetch(`${LOCAL_FALLBACK_URL}/api/upload`, { method: 'POST', body: buildFormData() });
-            if (res.status >= 500) throw new Error('Error Connecting to Server');
-            this.activeBaseUrl = LOCAL_FALLBACK_URL;
-          } catch (_) {
-            throw new Error('Error Connecting to Server');
-          }
-        } else {
-          throw new Error('Error Connecting to Server');
+        const localRes = await tryUpload(LOCAL_FALLBACK_URL);
+        if (localRes.ok || localRes.status < 500) {
+          this.activeBaseUrl = LOCAL_FALLBACK_URL;
+          res = localRes;
         }
+      } catch (_) {}
+    }
+
+    // 3. If still no response, refresh gateway and retry
+    if (!res) {
+      try {
+        baseUrl = await this.resolveGateway(true);
+        res = await tryUpload(baseUrl);
+      } catch (_) {}
+    }
+
+    // 4. Final attempt on local fallback
+    if (!res) {
+      try {
+        res = await tryUpload(LOCAL_FALLBACK_URL);
+        this.activeBaseUrl = LOCAL_FALLBACK_URL;
+      } catch (_) {
+        throw new Error('Error Connecting to Server. Please ensure background automation runner is active.');
       }
     }
 
     if (!res.ok) {
       const errJson = await res.json().catch(() => null);
-      throw new Error(parseErrorDetail(errJson, 'Upload failed'));
+      throw new Error(parseErrorDetail(errJson, `Server error (${res.status})`));
     }
 
     return await res.json();
@@ -754,8 +795,28 @@ class AutomationApiService {
       filename: string;
       role: string;
       recommended_name: string;
-      target_slot: 'photo' | 'sign' | 'passport' | 'identity' | 'residence' | 'info' | 'extra';
       confidence: number;
+      target_slot:
+        | 'photo'
+        | 'sign'
+        | 'passport'
+        | 'identity'
+        | 'residence'
+        | 'marriage_cert'
+        | 'spouse_passport'
+        | 'divorce_death_cert'
+        | 'police_report'
+        | 'annexure_f'
+        | 'birth_cert'
+        | 'father_passport'
+        | 'mother_passport'
+        | 'annexure_d'
+        | 'annexure_e'
+        | 'name_change_proof'
+        | 'education_proof'
+        | 'info'
+        | 'extra'
+        | string;
       reasoning: string;
       size_kb?: number;
       page_count?: number;
