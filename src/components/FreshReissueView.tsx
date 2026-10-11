@@ -1909,7 +1909,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         "Given NAME": ed["Given NAME"] || ed["given_name"] || "",
         "SURNAME": ed["SURNAME"] || ed["surname"] || "",
         "Date of birth": ed["Date of birth"] || ed["dob"] || "",
-        "Place of birth": ed["Place of birth"] || ed["pob"] || "",
+        "Place of birth": (ed["Place of birth"] || ed["pob"] || "").replace(/,/g, ' ').replace(/[^a-zA-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase(),
         "GENDER": ed["GENDER"] || ed["gender"] || "MALE",
         "Father's name": ed["Father's name"] || ed["father"] || "",
         "Mother's name": ed["Mother's name"] || ed["mother"] || "",
@@ -2823,6 +2823,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
       if (correctionFormData["Marital status"] !== undefined) {
         finalData["Marital status"] = (correctionFormData["Marital status"] || "").trim() || "SINGLE";
+      }
+
+      if (correctionFormData["Place of birth"] !== undefined || finalData["Place of birth"] !== undefined) {
+        const rawPob = String(correctionFormData["Place of birth"] || finalData["Place of birth"] || "");
+        finalData["Place of birth"] = rawPob.replace(/,/g, ' ').replace(/[^a-zA-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
       }
 
       if (finalData["Marital status"] === "MARRIED") {
@@ -3758,7 +3763,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             className="form-input"
                             placeholder="e.g. JAIPUR"
                             value={correctionFormData["Place of birth"] || ""}
-                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Place of birth": e.target.value.toUpperCase() }))}
+                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "Place of birth": e.target.value.replace(/,/g, ' ').replace(/[^a-zA-Z0-9\s]/g, ' ').toUpperCase() }))}
                             required
                           />
                         </div>
