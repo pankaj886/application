@@ -54,11 +54,10 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => {
       const updated = { ...prev };
-      const trimmed = (value || '').trim();
-      if (!trimmed || trimmed === 'SELECT') {
+      if (value === '' || value === 'SELECT') {
         delete updated[field];
       } else {
-        updated[field] = trimmed;
+        updated[field] = value;
       }
       return updated;
     });
@@ -214,26 +213,12 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
         <form onSubmit={handleSubmit} style={{ overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {isFresh ? (
             <>
-              {/* FRESH: Classification */}
+              {/* FRESH: Service Details */}
               <div>
                 <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  1. Service &amp; Applicant Classification
+                  1. Service Details
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Applicant Category
-                    </label>
-                    <select
-                      value={formData.applicant_category || ''}
-                      onChange={(e) => handleChange('applicant_category', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
-                    >
-                      <option value="">SELECT</option>
-                      <option value="MINOR (UNDER 18 YEARS)">MINOR (UNDER 18 YEARS)</option>
-                      <option value="ADULT (18 YEARS & ABOVE)">ADULT (18 YEARS & ABOVE)</option>
-                    </select>
-                  </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
                       Application Type
@@ -260,104 +245,15 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       <option value="60 PAGES">60 PAGES</option>
                     </select>
                   </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Validity Required (Minors 15-18)
-                    </label>
-                    <select
-                      value={formData.validity_type || ''}
-                      onChange={(e) => handleChange('validity_type', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
-                    >
-                      <option value="">SELECT</option>
-                      <option value="NOT APPLICABLE (< 15 YRS)">NOT APPLICABLE (&lt; 15 YRS)</option>
-                      <option value="UPTO 18 YEARS OF AGE">UPTO 18 YEARS OF AGE (5 YRS)</option>
-                      <option value="10 YEARS VALIDITY">10 YEARS VALIDITY</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Non-ECR Status
-                    </label>
-                    <select
-                      value={formData.eligible_ecnr || ''}
-                      onChange={(e) => handleChange('eligible_ecnr', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
-                    >
-                      <option value="">SELECT</option>
-                      <option value="YES (ALL MINORS ARE NON-ECR)">YES (ALL MINORS ARE NON-ECR)</option>
-                      <option value="NO">NO</option>
-                    </select>
-                  </div>
                 </div>
               </div>
 
-              {/* FRESH: Place of Birth */}
+              {/* FRESH: Indian Police Station */}
               <div>
                 <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  2. Birthplace &amp; Citizenship Particulars
+                  2. Indian Police Station
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      City / Town of Birth
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Rome, Latina, Fondi"
-                      value={formData.birth_place || ''}
-                      onChange={(e) => handleChange('birth_place', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Country of Birth
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="ITALY"
-                      value={formData.country_of_birth || 'ITALY'}
-                      onChange={(e) => handleChange('country_of_birth', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Citizenship By
-                    </label>
-                    <select
-                      value={formData.citizenship || ''}
-                      onChange={(e) => handleChange('citizenship', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
-                    >
-                      <option value="">SELECT</option>
-                      <option value="DESCENT (BORN ABROAD TO INDIAN PARENTS)">DESCENT (BORN ABROAD TO INDIAN PARENTS)</option>
-                      <option value="BIRTH">BIRTH</option>
-                      <option value="REGISTRATION">REGISTRATION</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* FRESH: Address & Police Station */}
-              <div>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  3. Italian Residence &amp; Indian Police Station
-                </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Italian Residence Address
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Via Roma 12, 00100 Roma (RM)"
-                      value={formData.italian_address || ''}
-                      onChange={(e) => handleChange('italian_address', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
-                  </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
                       Indian Police Station
@@ -371,62 +267,12 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                     />
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginTop: '12px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Village / Town (India)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. VPO Kang Mai"
-                      value={formData.indian_address_village || ''}
-                      onChange={(e) => handleChange('indian_address_village', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      District (India)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Hoshiarpur"
-                      value={formData.indian_address_district || ''}
-                      onChange={(e) => handleChange('indian_address_district', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      State (India)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Punjab"
-                      value={formData.indian_address_state || ''}
-                      onChange={(e) => handleChange('indian_address_state', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      PIN Code (India)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="6 digits"
-                      value={formData.indian_address_pin || ''}
-                      onChange={(e) => handleChange('indian_address_pin', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                </div>
               </div>
 
-              {/* FRESH: Contact & Emergency */}
+              {/* FRESH: Parent Contact Details */}
               <div>
                 <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  4. Parent Contact Details
+                  3. Parent Contact Details
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
                   <div>
@@ -462,30 +308,6 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                       placeholder="client@email.com"
                       value={formData.email_id || ''}
                       onChange={(e) => handleChange('email_id', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Emergency Contact Person &amp; Mobile
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Name & contact"
-                      value={formData.emergency_contact_name_address || ''}
-                      onChange={(e) => handleChange('emergency_contact_name_address', e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                      Visible Distinguishing Mark (if any)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Mole on forehead"
-                      value={formData.visible_mark || ''}
-                      onChange={(e) => handleChange('visible_mark', e.target.value)}
                       style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
                     />
                   </div>

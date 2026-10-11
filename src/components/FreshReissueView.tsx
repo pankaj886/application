@@ -103,30 +103,30 @@ export const SLOT_CATALOG: Record<DocSlotKey, DocSlotDef> = {
   },
   identity: {
     key: 'identity',
-    title: 'Identity Proof',
-    badge: 'Permesso di Soggiorno',
+    title: 'Residence Permit',
+    badge: 'PDS/renewal slip/visa',
     accept: '.pdf,image/jpeg,image/png,image/jpg',
-    canonicalName: 'permesso_di_soggiorno.pdf',
+    canonicalName: 'pds.pdf',
     iconName: 'id',
-    description: 'Permesso di soggiorno or CIE card',
+    description: 'Permesso di soggiorno (plastic card or postal kit receipt)',
   },
   residence: {
     key: 'residence',
-    title: 'Residence Proof',
+    title: 'Address Proof',
     badge: 'Residenza / CIE / Ospiti',
     accept: '.pdf,image/jpeg,image/png,image/jpg',
-    canonicalName: 'residence_proof.pdf',
+    canonicalName: 'residenza.pdf',
     iconName: 'shield',
-    description: 'Certificato di residenza, ospitalità, or bolletta',
+    description: "Certificato di residenza, CIE (Carta d'Identità), ospitalità, or bolletta",
   },
   marriage_cert: {
     key: 'marriage_cert',
     title: 'Marriage Certificate *',
-    badge: 'Apostilled / Attested',
+    badge: 'Marriage Certificate',
     accept: '.pdf,image/jpeg,image/png,image/jpg',
     canonicalName: 'marriage_certificate.pdf',
     iconName: 'heart',
-    description: 'Apostilled certificate for spouse addition',
+    description: 'Copy of marriage certificate',
   },
   spouse_passport: {
     key: 'spouse_passport',
@@ -140,29 +140,29 @@ export const SLOT_CATALOG: Record<DocSlotKey, DocSlotDef> = {
   birth_cert: {
     key: 'birth_cert',
     title: 'Birth Certificate *',
-    badge: 'Estratto di Nascita',
+    badge: 'Estratto di nascita by comune/hospital',
     accept: '.pdf,image/jpeg,image/png,image/jpg',
     canonicalName: 'birth_certificate.pdf',
     iconName: 'baby',
-    description: 'Estratto di nascita multilingue or Indian birth cert',
+    description: 'Estratto di nascita by comune/hospital',
   },
   father_passport: {
     key: 'father_passport',
-    title: "Father's Passport *",
-    badge: 'Father PPT PDF',
+    title: "Father's Document *",
+    badge: 'Passport/PDS/C.C.I.E./Ospiti',
     accept: '.pdf,image/jpeg,image/png,image/jpg',
-    canonicalName: 'father_passport.pdf',
+    canonicalName: 'father_document.pdf',
     iconName: 'users',
-    description: "Copy of father's Indian passport",
+    description: 'Passport/PDS/C.C.I.E./Ospiti',
   },
   mother_passport: {
     key: 'mother_passport',
-    title: "Mother's Passport *",
-    badge: 'Mother PPT PDF',
+    title: "Mother's Document *",
+    badge: 'Passport/PDS/C.C.I.E./Ospiti',
     accept: '.pdf,image/jpeg,image/png,image/jpg',
-    canonicalName: 'mother_passport.pdf',
+    canonicalName: 'mother_document.pdf',
     iconName: 'users',
-    description: "Copy of mother's Indian passport",
+    description: 'Passport/PDS/C.C.I.E./Ospiti',
   },
   annexure_d: {
     key: 'annexure_d',
@@ -308,19 +308,19 @@ export const APPLYING_SCENARIOS: ApplyingScenario[] = [
   },
   {
     id: 'fresh_minor',
-    label: 'Fresh Minor (<18 Years)',
+    label: 'Fresh Passport',
     serviceType: 'fresh',
     icon: 'baby',
-    slots: ['photo', 'sign', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'annexure_d', 'identity', 'residence', 'info'],
-    description: 'First passport for newborn or child born in Italy',
+    slots: ['photo', 'sign', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'info'],
+    description: 'Fresh passport application for applicant born abroad / in Italy',
   },
   {
     id: 'fresh_adult',
-    label: 'Fresh Adult (18+ Years)',
+    label: 'Fresh Passport',
     serviceType: 'fresh',
     icon: 'award',
-    slots: ['photo', 'sign', 'birth_cert', 'annexure_e', 'education_proof', 'identity', 'residence', 'info'],
-    description: 'First passport for adult: requires birth cert and Annexure E',
+    slots: ['photo', 'sign', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'info'],
+    description: 'Fresh passport application for applicant born abroad / in Italy',
   },
 ];
 
@@ -333,6 +333,33 @@ export const detectSlotAndCanonicalName = (
   const ext = originalName.includes('.')
     ? originalName.slice(originalName.lastIndexOf('.'))
     : (file.type.startsWith('image/') ? '.jpg' : '.pdf');
+
+  // Explicit slot targeting: if dropped or uploaded into signature, it must be signature.jpg
+  if (fallbackSlot === 'sign') {
+    return { slot: 'sign', canonicalName: 'signature.jpg' };
+  }
+  // If dropped or uploaded into residence
+  if (fallbackSlot === 'residence') {
+    const isCie = lower.includes('cie') || lower.includes('carta_ident') || lower.includes('carta_d_ident') || lower.includes("carta d'ident") || lower.includes('carta di ident') || lower.includes('identita') || lower.includes('identità') || (lower.includes('carta') && !lower.includes('soggiorno'));
+    return {
+      slot: 'residence',
+      canonicalName: isCie ? `cie${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` : `residenza${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}`,
+    };
+  }
+
+  // CIE / Carta d'Identità: STRICTLY Proof of Residence (NEVER Identity Proof / Permesso di Soggiorno)
+  if (
+    lower.includes('cie') ||
+    lower.includes('carta_ident') ||
+    lower.includes('carta_d_ident') ||
+    lower.includes("carta d'ident") ||
+    lower.includes('carta di ident') ||
+    lower.includes('identita') ||
+    lower.includes('identità') ||
+    (lower.includes('carta') && !lower.includes('soggiorno'))
+  ) {
+    return { slot: 'residence', canonicalName: `cie${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
 
   // 1. Marriage Certificate
   if (
@@ -356,20 +383,18 @@ export const detectSlotAndCanonicalName = (
     return { slot: 'spouse_passport', canonicalName: `spouse_passport${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
   }
 
-  // 3. Father Passport
+  // 3. Father Document (Passport / PDS / CIE / Ospiti)
   if (
-    (lower.includes('father') || lower.includes('dad') || lower.includes('padre') || lower.includes('pita') || lower.includes('papa')) &&
-    (lower.includes('pass') || lower.includes('ppt') || lower.includes('passaporto'))
+    lower.includes('father') || lower.includes('dad') || lower.includes('padre') || lower.includes('pita') || lower.includes('papa')
   ) {
-    return { slot: 'father_passport', canonicalName: `father_passport${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+    return { slot: 'father_passport', canonicalName: `father_document${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
   }
 
-  // 4. Mother Passport
+  // 4. Mother Document (Passport / PDS / CIE / Ospiti)
   if (
-    (lower.includes('mother') || lower.includes('mom') || lower.includes('madre') || lower.includes('mata') || lower.includes('mamma')) &&
-    (lower.includes('pass') || lower.includes('ppt') || lower.includes('passaporto'))
+    lower.includes('mother') || lower.includes('mom') || lower.includes('madre') || lower.includes('mata') || lower.includes('mamma')
   ) {
-    return { slot: 'mother_passport', canonicalName: `mother_passport${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+    return { slot: 'mother_passport', canonicalName: `mother_document${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
   }
 
   // 5. Birth Certificate
@@ -411,7 +436,7 @@ export const detectSlotAndCanonicalName = (
     return { slot: 'annexure_f', canonicalName: `annexure_f_affidavit${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
   }
 
-  // 8. Annexure D (Parental consent)
+  // 8. Annexure D (Parental consent -> routes to Additional Supporting Documents)
   if (
     lower.includes('annexure_d') ||
     lower.includes('annex_d') ||
@@ -420,7 +445,7 @@ export const detectSlotAndCanonicalName = (
     lower.includes('assenso') ||
     (lower.includes('annexure') && lower.includes('d'))
   ) {
-    return { slot: 'annexure_d', canonicalName: `annexure_d_consent${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+    return { slot: 'info', canonicalName: `annexure_d_consent${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
   }
 
   // 9. Annexure E (Self declaration)
@@ -505,20 +530,33 @@ export const detectSlotAndCanonicalName = (
     return { slot: 'passport', canonicalName: `applicant_passport${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
   }
 
-  // 16. Permesso / Identity
+  // 16. Permesso / Identity (Permesso di Soggiorno ONLY)
   if (
     lower.includes('permesso') ||
     lower.includes('pds') ||
     lower.includes('soggiorno') ||
-    lower.includes('carta') ||
-    lower.includes('ident') ||
-    lower.includes('cie') ||
-    lower.includes('ricevuta')
+    lower.includes('ricevuta') ||
+    lower.includes('assicurat') ||
+    lower.includes('kit_post')
   ) {
     return { slot: 'identity', canonicalName: `permesso_di_soggiorno${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
   }
 
-  // 17. Residence Proof
+  // 17. Italian Carta d'Identità (CIE) -> STRICTLY Proof of Residence
+  if (
+    lower.includes('cie') ||
+    lower.includes('carta_ident') ||
+    lower.includes('carta_d_ident') ||
+    lower.includes("carta d'ident") ||
+    lower.includes('carta di ident') ||
+    lower.includes('identita') ||
+    lower.includes('identità') ||
+    (lower.includes('carta') && !lower.includes('soggiorno'))
+  ) {
+    return { slot: 'residence', canonicalName: `cie${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 18. Residence Proof (Residenza, Ospitalità, Cessione, Lease, Utility, Anagrafe)
   if (
     lower.includes('residen') ||
     lower.includes('ospital') ||
@@ -533,7 +571,7 @@ export const detectSlotAndCanonicalName = (
     lower.includes('anagrafe') ||
     lower.includes('famiglia')
   ) {
-    return { slot: 'residence', canonicalName: `residence_proof${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+    return { slot: 'residence', canonicalName: `residenza${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
   }
 
   // 18. Info Sheet / Supporting
@@ -571,8 +609,38 @@ export const detectSlotAndCanonicalNameAsync = async (
     ? originalName.slice(originalName.lastIndexOf('.'))
     : (file.type.startsWith('image/') ? '.jpg' : '.pdf');
 
+  // Explicit slot targeting: if dropped or uploaded into signature, it must be signature.jpg
+  if (fallbackSlot === 'sign') {
+    return { slot: 'sign', canonicalName: 'signature.jpg' };
+  }
+  // If dropped or uploaded into residence
+  if (fallbackSlot === 'residence') {
+    const isCie = lowerName.includes('cie') || lowerName.includes('carta_ident') || lowerName.includes('carta_d_ident') || lowerName.includes("carta d'ident") || lowerName.includes('carta di ident') || lowerName.includes('identita') || lowerName.includes('identità') || (lowerName.includes('carta') && !lowerName.includes('soggiorno'));
+    return {
+      slot: 'residence',
+      canonicalName: isCie ? ((lowerName.endsWith('.pdf') || file.type === 'application/pdf') ? 'cie.pdf' : `cie${ext}`) : ((lowerName.endsWith('.pdf') || file.type === 'application/pdf') ? 'residenza.pdf' : `residenza${ext}`),
+    };
+  }
+
+  // CIE / Carta d'Identità: STRICTLY Proof of Residence (NEVER Identity Proof / Permesso di Soggiorno)
+  if (
+    lowerName.includes('cie') ||
+    lowerName.includes('carta_ident') ||
+    lowerName.includes('carta_d_ident') ||
+    lowerName.includes("carta d'ident") ||
+    lowerName.includes('carta di ident') ||
+    lowerName.includes('identita') ||
+    lowerName.includes('identità') ||
+    (lowerName.includes('carta') && !lowerName.includes('soggiorno'))
+  ) {
+    return {
+      slot: 'residence',
+      canonicalName: (lowerName.endsWith('.pdf') || file.type === 'application/pdf') ? 'cie.pdf' : `cie${ext}`,
+    };
+  }
+
   // 1. Initial fast keyword check on original filename
-  const nameDetected = detectSlotAndCanonicalName(file);
+  const nameDetected = detectSlotAndCanonicalName(file, fallbackSlot);
   const isGenericImageFallback = nameDetected.slot === 'photo' &&
     !lowerName.includes('photo') &&
     !lowerName.includes('foto') &&
@@ -632,7 +700,7 @@ export const detectSlotAndCanonicalNameAsync = async (
       return { slot: 'annexure_f', canonicalName: 'annexure_f_affidavit.pdf' };
     }
 
-    // D. Annexure D (Parental consent for minor)
+    // D. Annexure D (Parental consent for minor -> routes to Additional Documents)
     if (
       pdfText.includes('annexure d') ||
       pdfText.includes('annexure-d') ||
@@ -640,7 +708,7 @@ export const detectSlotAndCanonicalNameAsync = async (
       pdfText.includes('declaration by the applicant\'s parent') ||
       pdfText.includes('parental consent')
     ) {
-      return { slot: 'annexure_d', canonicalName: 'annexure_d_consent.pdf' };
+      return { slot: 'info', canonicalName: 'annexure_d_consent.pdf' };
     }
 
     // E. Annexure E (Self declaration for adult)
@@ -704,7 +772,19 @@ export const detectSlotAndCanonicalNameAsync = async (
       return { slot: 'education_proof', canonicalName: 'education_certificate.pdf' };
     }
 
-    // J. Residence Proof / Ospitalità / Cessione / Utility Bill
+    // J. Italian Carta d'Identità (CIE) -> STRICTLY Proof of Residence
+    if (
+      pdfText.includes("carta d'identita") ||
+      pdfText.includes("carta di identita") ||
+      pdfText.includes("carta d'identità") ||
+      pdfText.includes("carta di identità") ||
+      pdfText.includes("carta d’identit") ||
+      (pdfText.includes('repubblica italiana') && (pdfText.includes('identita') || pdfText.includes('identità')))
+    ) {
+      return { slot: 'residence', canonicalName: 'cie.pdf' };
+    }
+
+    // J2. Residence Proof / Ospitalità / Cessione / Utility Bill / Anagrafe
     if (
       pdfText.includes('certificato di residenza') ||
       pdfText.includes('stato di famiglia') ||
@@ -718,17 +798,15 @@ export const detectSlotAndCanonicalNameAsync = async (
       pdfText.includes('bolletta') ||
       (pdfText.includes('comune di') && pdfText.includes('residenza'))
     ) {
-      return { slot: 'residence', canonicalName: 'residence_proof.pdf' };
+      return { slot: 'residence', canonicalName: 'residenza.pdf' };
     }
 
-    // K. Permesso di Soggiorno / Carta d'Identità
+    // K. Permesso di Soggiorno (ONLY)
     if (
       pdfText.includes('permesso di soggiorno') ||
       pdfText.includes('carta di soggiorno') ||
       pdfText.includes('questura di') ||
       pdfText.includes('soggiornante') ||
-      pdfText.includes('carta d\'identita') ||
-      pdfText.includes('carta di identita') ||
       pdfText.includes('ricevuta assicurata') ||
       (pdfText.includes('poste italiane') && pdfText.includes('stranieri'))
     ) {
@@ -742,11 +820,11 @@ export const detectSlotAndCanonicalNameAsync = async (
       pdfText.includes('nationality indian') ||
       (pdfText.includes('passport') && (pdfText.includes('ministry of external affairs') || pdfText.includes('given name')))
     ) {
-      if (lowerName.includes('father') || (pdfText.includes('father') && lowerName.includes('dad'))) {
-        return { slot: 'father_passport', canonicalName: 'father_passport.pdf' };
+      if (lowerName.includes('father') || lowerName.includes('dad') || lowerName.includes('padre') || (pdfText.includes('father') && lowerName.includes('dad'))) {
+        return { slot: 'father_passport', canonicalName: 'father_document.pdf' };
       }
-      if (lowerName.includes('mother') || (pdfText.includes('mother') && lowerName.includes('mom'))) {
-        return { slot: 'mother_passport', canonicalName: 'mother_passport.pdf' };
+      if (lowerName.includes('mother') || lowerName.includes('mom') || lowerName.includes('madre') || (pdfText.includes('mother') && lowerName.includes('mom'))) {
+        return { slot: 'mother_passport', canonicalName: 'mother_document.pdf' };
       }
       if (lowerName.includes('spouse') || pdfText.includes('spouse') || lowerName.includes('husband') || lowerName.includes('wife')) {
         return { slot: 'spouse_passport', canonicalName: 'spouse_passport.pdf' };
@@ -947,11 +1025,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         setSelectedScenario('reissue_standard');
       }
     } else if (activeServiceType === 'fresh') {
-      if (inAppInfoData.applicant_category?.includes('ADULT')) {
-        setSelectedScenario('fresh_adult');
-      } else {
-        setSelectedScenario('fresh_minor');
-      }
+      setSelectedScenario('fresh_minor');
     }
   }, [inAppInfoData, activeServiceType]);
 
@@ -980,6 +1054,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [dragSlot, setDragSlot] = useState<string | null>(null);
   const dragSlotRef = useRef<string | null>(null);
   const lastDropTimeRef = useRef<number>(0);
+  const lastDropFingerprintRef = useRef<string>('');
+
+  const isDuplicateDropEvent = (files: File[]) => {
+    const now = Date.now();
+    const fp = files.map(f => `${f.name}:${f.size}`).join('|');
+    if (now - lastDropTimeRef.current < 1500 && fp && fp === lastDropFingerprintRef.current) {
+      return true;
+    }
+    lastDropTimeRef.current = now;
+    lastDropFingerprintRef.current = fp;
+    return false;
+  };
 
   const filesStateRef = useRef({
     photo: photoFile,
@@ -1004,6 +1090,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   }, [photoFile, signFile, passportFile, identityFile, residenceFile, infoFile, selectedFiles]);
 
   const [isUploading, setIsUploading] = useState(false);
+  const isUploadingRef = useRef(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   type SubmissionTrackerState = {
@@ -1099,6 +1186,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setQuota(null);
       return;
     }
+
+    const activeTracker = submissionTrackerRef.current;
+    if (isUploadingRef.current || (activeTracker?.active && !activeTracker.folderName && Date.now() - activeTracker.startedAt < 45000)) {
+      // Application upload is currently in flight over the network.
+      // Maintain active uploading progress bar and prevent background polling from clearing it.
+      return;
+    }
     try {
       const [statusRes, prevs, comps] = await Promise.all([
         automationApi.getClientStatus(targetEmail, googleUserEmail).catch(() => ({ client_email: targetEmail, applications: [], quota: undefined })),
@@ -1164,7 +1258,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         : undefined;
 
       if (!matchingErrorApp && activeTracker?.active && !activeTracker.ready && !activeProcessingApp && !matchingPreview && !matchingCorrectionApp) {
-        matchingErrorApp = apps.find(a => a.status === 'ERROR');
+        if (activeTracker.folderName) {
+          matchingErrorApp = apps.find(a => a.status === 'ERROR' && matchesTrackerFolder(a));
+        }
       }
 
       if (matchingCorrectionApp) {
@@ -1253,7 +1349,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         });
       } else {
         setSubmissionTracker(prev => {
-          if (prev && Date.now() - prev.startedAt > 15000 && !prev.folderName && !prev.ready && !prev.isMissingInfo) {
+          if (isUploadingRef.current) return prev;
+          if (prev && Date.now() - prev.startedAt > 30000 && !prev.folderName && !prev.ready && !prev.isMissingInfo) {
             return null;
           }
           return prev;
@@ -1299,8 +1396,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [downloadNotice, setDownloadNotice] = useState<{
     path?: string;
     message: string;
-    type?: 'success' | 'error';
+    type?: 'success' | 'error' | 'loading';
   } | null>(null);
+
+  // Auto-dismiss download confirmation toast after 10 seconds
+  useEffect(() => {
+    if (downloadNotice && downloadNotice.type !== 'loading') {
+      const timer = setTimeout(() => {
+        setDownloadNotice(null);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [downloadNotice]);
 
   // Sleek centered permission request & notification dialog states
   const [micPermissionModal, setMicPermissionModal] = useState<{
@@ -2158,12 +2265,31 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           const matched = processedList.find(p => p.original.name === item.filename);
           if (!matched) return;
 
-          const recName = item.recommended_name || matched.processed.name;
+          // SAFEGUARD 1: Anything placed into 'sign' must NEVER be re-routed or duplicated into 'info' or any other slot!
+          if (matched.slot === 'sign') return;
+
+          // SAFEGUARD 2: If the user targeted a slot via preferredSlot, preserve user's choice!
+          if (preferredSlot && matched.slot === preferredSlot) return;
+
           const target = item.target_slot as DocSlotKey;
-          if (target && SLOT_CATALOG[target] && target !== matched.slot) {
+
+          // SAFEGUARD 3: Never downgrade an assigned document to 'info' or 'extra' (Additional Documents)
+          if (!target || target === 'info' || (item.target_slot as string) === 'extra') return;
+
+          // SAFEGUARD 4: CIE / Residence proof must NEVER be moved to 'identity'
+          if (matched.slot === 'residence' && target === 'identity') return;
+
+          // SAFEGUARD 5: 'identity' slot is STRICTLY reserved for Permesso di Soggiorno only
+          if (target === 'identity' && item.role !== 'pds') return;
+
+          // SAFEGUARD 6: If moving between valid primary slots:
+          if (SLOT_CATALOG[target] && target !== matched.slot) {
+            const recName = item.recommended_name || matched.processed.name;
             const refined = (recName !== matched.processed.name)
               ? new File([matched.processed], recName, { type: matched.processed.type })
               : matched.processed;
+            // Clear previous slot to NEVER leave duplicates!
+            updateSlotFile(matched.slot, null);
             setDynamicallyActivatedSlots(prev => prev.includes(target) ? prev : [...prev, target]);
             updateSlotFile(target, refined);
           }
@@ -2182,10 +2308,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(false);
-    if (Date.now() - lastDropTimeRef.current < 400) return;
-    lastDropTimeRef.current = Date.now();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      autoCategorizeFiles(Array.from(e.dataTransfer.files));
+      const filesArr = Array.from(e.dataTransfer.files);
+      if (isDuplicateDropEvent(filesArr)) return;
+      autoCategorizeFiles(filesArr);
     }
   };
 
@@ -2215,7 +2341,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     });
   };
 
-  const clearDocumentSlots = () => {
+  const clearDocumentSlots = (preserveTracker = false) => {
     photoValidationSeqRef.current++;
     setPhotoValidation({ status: 'idle' });
     filesStateRef.current = {
@@ -2272,11 +2398,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         dynamicInputRefs.current[k]!.value = '';
       }
     });
-    setSubmissionTracker(null);
-    setUploadMessage(null);
+    if (!preserveTracker && !isUploadingRef.current && !submissionTrackerRef.current?.active) {
+      setSubmissionTracker(null);
+      setUploadMessage(null);
+    }
   };
 
   const handleEmailBlur = () => {
+    if (isUploadingRef.current || submissionTrackerRef.current?.active) {
+      return;
+    }
     const trimmed = portalEmail.trim().toUpperCase();
     if (trimmed !== activeClientEmail) {
       clearDocumentSlots();
@@ -2325,12 +2456,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           setDragSlot(null);
         } else if (event.payload.type === 'drop') {
           setIsDragActive(false);
-          if (Date.now() - lastDropTimeRef.current < 400) {
-            dragSlotRef.current = null;
-            setDragSlot(null);
-            return;
-          }
-          lastDropTimeRef.current = Date.now();
           let targetSlot = dragSlotRef.current;
           const dropPos = (event.payload as any).position;
           if (dropPos && typeof dropPos.x === 'number' && typeof dropPos.y === 'number') {
@@ -2375,6 +2500,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               }
             }
             if (loadedFiles.length > 0) {
+              if (isDuplicateDropEvent(loadedFiles)) return;
               routeIncomingFiles(loadedFiles, targetSlot as any);
             }
           }
@@ -2412,14 +2538,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       e.preventDefault();
       e.stopPropagation();
       setIsDragActive(false);
-      if (Date.now() - lastDropTimeRef.current < 400) return;
-      lastDropTimeRef.current = Date.now();
       const targetSlot = dragSlotRef.current;
       dragSlotRef.current = null;
       setDragSlot(null);
 
       if (currentSection === 'form' && !correctionApp && e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
         const droppedFiles = Array.from(e.dataTransfer.files);
+        if (isDuplicateDropEvent(droppedFiles)) return;
         routeIncomingFiles(droppedFiles, targetSlot as any);
       }
     };
@@ -2558,9 +2683,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         });
         return;
       }
-      if (selectedScenario === 'fresh_minor' && (!slotFiles.father_passport || !slotFiles.mother_passport)) {
+      if (!slotFiles.father_passport || !slotFiles.mother_passport) {
         setUploadMessage({
-          text: 'Father and Mother Passport copies are required for Minor Fresh passport.',
+          text: "Father and Mother documents (Passport/PDS/C.C.I.E./Ospiti) are required for Fresh passport application.",
           type: 'error',
         });
         return;
@@ -2591,7 +2716,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     const infoPayload = Object.keys(inAppInfoData).length > 0 ? JSON.stringify(inAppInfoData) : undefined;
 
     // Immediately clear slots so uploaded documents fade away from UI without double process
-    clearDocumentSlots();
+    clearDocumentSlots(true);
+    isUploadingRef.current = true;
 
     try {
       setIsUploading(true);
@@ -2647,6 +2773,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       });
     } finally {
       setIsUploading(false);
+      isUploadingRef.current = false;
     }
   };
 
@@ -2925,6 +3052,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const handleDirectDownloadPdf = async (title: string, relativeUrl: string, itemKey: string) => {
     if (downloadingFormKey) return;
     setDownloadingFormKey(itemKey);
+    setDownloadNotice({
+      message: 'Your file is being downloaded...',
+      type: 'loading',
+    });
     try {
       const baseUrl = await automationApi.resolveGateway();
       const cleanRel = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
@@ -4415,11 +4546,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           onDrop={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            lastDropTimeRef.current = Date.now();
                             dragSlotRef.current = null;
                             setDragSlot(null);
                             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                              routeIncomingFiles(Array.from(e.dataTransfer.files), slotKey);
+                              const filesArr = Array.from(e.dataTransfer.files);
+                              if (isDuplicateDropEvent(filesArr)) return;
+                              routeIncomingFiles(filesArr, slotKey);
                             }
                           }}
                         >
@@ -5925,7 +6057,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           fontWeight: 500,
           border: '1px solid #334155'
         }}>
-          {downloadNotice.type === 'error' ? (
+          {downloadNotice.type === 'loading' ? (
+            <RefreshCw className="animate-spin" style={{ width: '18px', height: '18px', color: '#60a5fa', flexShrink: 0 }} />
+          ) : downloadNotice.type === 'error' ? (
             <AlertCircle style={{ width: '18px', height: '18px', color: '#ef4444', flexShrink: 0 }} />
           ) : (
             <CheckCircle2 style={{ width: '18px', height: '18px', color: '#10b981', flexShrink: 0 }} />
