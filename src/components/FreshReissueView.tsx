@@ -71,7 +71,17 @@ export const isUserUploadedDocument = (fileName: string): boolean => {
     clean === 'passport_preview.pdf' ||
     clean === 'self_declaration_preview.pdf' ||
     clean === 'submission_receipt.pdf' ||
-    clean === 'application_form.pdf'
+    clean === 'application_form.pdf' ||
+    clean === 'father_cie.pdf' ||
+    clean === 'father_pds.pdf' ||
+    clean === 'mother_cie.pdf' ||
+    clean === 'mother_pds.pdf' ||
+    clean === 'father_documents.pdf' ||
+    clean === 'mother_documents.pdf' ||
+    clean === 'parents_documents.pdf' ||
+    clean === 'parents_marriage_certificate.pdf' ||
+    clean === 'combined_supporting.pdf' ||
+    clean === 'passport_supporting.pdf'
   ) {
     return false;
   }
@@ -1219,8 +1229,30 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         return false;
       }
 
-      // 3. Only show drafts that are NOT in preview yet and NOT submitted
-      return true;
+      // 3. Exclude background processing / queued / in-flight states (unless a slot upload failed)
+      if (
+        !app.failed_upload_slot &&
+        (status === 'UPLOADED' ||
+        status === 'QUEUED' ||
+        status === 'EXTRACTING' ||
+        status === 'EXTRACTED' ||
+        status === 'FILLING_PORTAL' ||
+        status === 'PROCESSING' ||
+        status === 'UPLOADING')
+      ) {
+        return false;
+      }
+
+      // 4. In drafts, it must show ONLY when information is required into that application
+      const requiresInfo = Boolean(
+        status === 'NEEDS_CORRECTION' ||
+        status === 'PORTAL_FORM_ERROR' ||
+        status === 'MISSING_MANDATORY_DATA' ||
+        app.failed_upload_slot ||
+        (Array.isArray(app.missing_fields) && app.missing_fields.length > 0)
+      );
+
+      return requiresInfo;
     });
   }, [applications, previews, completed]);
 
@@ -1303,13 +1335,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         if (!activeTracker) return false;
         const tf = (activeTracker.folderName || '').trim().toLowerCase();
         const of = (activeTracker.originalFolder || '').trim().toLowerCase();
-        const an = (activeTracker.applicantName || '').trim().toLowerCase();
         const itemFolder = (item.folder_name || '').trim().toLowerCase();
         const itemOrig = ((item as any).original_folder || '').trim().toLowerCase();
-        const itemName = (item.applicant_name || '').trim().toLowerCase();
-        if (tf && (itemFolder === tf || itemOrig === tf || itemName === tf)) return true;
-        if (of && (itemFolder === of || itemOrig === of || itemName === of)) return true;
-        if (an && (itemName === an || itemFolder === an)) return true;
+        // Strictly match by exact folder name or original folder name — NEVER match by applicant_name to avoid cross-folder collisions
+        if (tf && (itemFolder === tf || itemOrig === tf)) return true;
+        if (of && (itemFolder === of || itemOrig === of)) return true;
         return false;
       };
 
@@ -5738,14 +5768,17 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 const isAnyUpdating = Boolean(voiceProcessingFolder);
                 const canSubmit = selection.passport && selection.declaration && !isUpdatingThis && !isAnyUpdating;
                 const isSubmittingThis = submittingArn === item.arn || reuploadingFolder === folderKey;
+                const appMatch = applications.find(a => a.folder_name === item.folder_name || (item.arn && a.arn === item.arn));
+                const liveProgress = (typeof appMatch?.progress === 'number' && appMatch.progress > 0) ? appMatch.progress : item.progress;
+                const liveStage = appMatch?.stage || item.stage;
                 const liveSubmitPct =
-                  typeof item.progress === 'number' && item.progress > 0 && item.progress < 100
-                    ? item.progress
-                    : 18;
+                  typeof liveProgress === 'number' && liveProgress > 0 && liveProgress <= 100
+                    ? liveProgress
+                    : 90;
                 const liveSubmitStage =
-                  item.stage && item.stage !== 'Previews Ready for Confirmation'
-                    ? item.stage
-                    : 'Uploading supporting documents & submitting to Passport Seva Portal...';
+                  liveStage && liveStage !== 'Previews Ready for Confirmation' && !liveStage.toLowerCase().includes('previews ready')
+                    ? liveStage
+                    : 'Submitting application to Passport Seva Portal...';
 
                 return (
                   <div key={folderKey} className="preview-card">

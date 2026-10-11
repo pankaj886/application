@@ -106,9 +106,39 @@ export function App() {
           automationApi.getCompletedApplications(activeEmail, gEmail).catch(() => []),
           automationApi.getClientStatus(activeEmail, gEmail).catch(() => ({ client_email: activeEmail, applications: [] })),
         ]);
-        const drafts = (statusRes?.applications || []).filter((a: any) =>
-          !a.has_passport_preview && a.status !== 'COMPLETED' && a.status !== 'PENDING_CONFIRMATION'
-        );
+        const drafts = (statusRes?.applications || []).filter((a: any) => {
+          const status = (a?.status || '').toUpperCase();
+          if (
+            a.has_passport_preview ||
+            a.is_in_preview ||
+            status === 'COMPLETED' ||
+            status === 'SUBMITTED' ||
+            status === 'DISMISSED' ||
+            status === 'PENDING_CONFIRMATION' ||
+            status === 'PREVIEW_READY'
+          ) {
+            return false;
+          }
+          if (
+            !a.failed_upload_slot &&
+            (status === 'UPLOADED' ||
+            status === 'QUEUED' ||
+            status === 'EXTRACTING' ||
+            status === 'EXTRACTED' ||
+            status === 'FILLING_PORTAL' ||
+            status === 'PROCESSING' ||
+            status === 'UPLOADING')
+          ) {
+            return false;
+          }
+          return Boolean(
+            status === 'NEEDS_CORRECTION' ||
+            status === 'PORTAL_FORM_ERROR' ||
+            status === 'MISSING_MANDATORY_DATA' ||
+            a.failed_upload_slot ||
+            (Array.isArray(a.missing_fields) && a.missing_fields.length > 0)
+          );
+        });
         setDraftCount(drafts.length);
         setPreviewCount(prevs.length);
         setCompletedCount(comps.length);
