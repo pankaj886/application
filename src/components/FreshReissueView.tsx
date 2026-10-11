@@ -1746,9 +1746,43 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     voiceProcessingFolder,
   ]);
 
-  const correctionApp = applications.find(
-    app => (app.status === 'NEEDS_CORRECTION' || (app.status === 'ERROR' && (app.error_type === 'PORTAL_FORM_ERROR' || app.error_type === 'STAGE1_7_FAILED'))) && app.folder_name !== dismissedCorrectionFolder
-  );
+  const correctionApp = (() => {
+    // If an upload or application submission is actively in flight / tracking
+    if (submissionTracker?.active) {
+      // If it hasn't entered missing info / correction state, NEVER show correction card for another app!
+      if (!submissionTracker.isMissingInfo) {
+        return undefined;
+      }
+      // If it IS in missing info state, find ONLY the matching tracked application
+      const tf = (submissionTracker.folderName || '').trim().toLowerCase();
+      const of = (submissionTracker.originalFolder || '').trim().toLowerCase();
+      const an = (submissionTracker.applicantName || '').trim().toLowerCase();
+      return applications.find(app => {
+        if (app.folder_name === dismissedCorrectionFolder) return false;
+        if (app.status !== 'NEEDS_CORRECTION' && !(app.status === 'ERROR' && (app.error_type === 'PORTAL_FORM_ERROR' || app.error_type === 'STAGE1_7_FAILED'))) return false;
+        const fn = (app.folder_name || '').trim().toLowerCase();
+        const orig = ((app as any).original_folder || '').trim().toLowerCase();
+        const apn = (app.applicant_name || '').trim().toLowerCase();
+        if (tf && (fn === tf || orig === tf || apn === tf)) return true;
+        if (of && (fn === of || orig === of || apn === of)) return true;
+        if (an && (apn === an || fn === an)) return true;
+        return false;
+      });
+    }
+
+    // When no active submission is in progress, find first valid correction application that actually requires action
+    return applications.find(app => {
+      if (app.folder_name === dismissedCorrectionFolder) return false;
+      const isNeedsCorr = app.status === 'NEEDS_CORRECTION';
+      const isFormErr = app.status === 'ERROR' && (app.error_type === 'PORTAL_FORM_ERROR' || app.error_type === 'STAGE1_7_FAILED');
+      if (!isNeedsCorr && !isFormErr) return false;
+      // Filter out corrupted/ghost items that have no missing fields and no portal error
+      if (isNeedsCorr && (!app.missing_fields || app.missing_fields.length === 0) && app.error_type === 'MISSING_PHOTO_OR_SIGNATURE') {
+        return false;
+      }
+      return true;
+    });
+  })();
 
   const formatMissingFieldLabel = (fieldName: string): string => {
     const clean = (fieldName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -3665,8 +3699,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               <div className="missing-fields-banner">
                 <AlertCircle className="missing-alert-icon" />
                 <div className="missing-content">
-                  <span className="missing-title">Some information from your side was missing and we suggested these values. Please review or edit before submitting.</span>
-                  {correctionApp.error_message && (
+                  <span className="missing-title">
+                    {correctionApp.error_type === 'PORTAL_FORM_ERROR' || correctionApp.error_type === 'STAGE1_7_FAILED'
+                      ? 'Portal Submission Error — Action Required'
+                      : 'Missing Mandatory Details — Please Review & Complete'}
+                  </span>
+                  {correctionApp.error_message &&
+                    correctionApp.error_message !== 'Some information from your side was missing and we suggested these values. Please review or edit before submitting.' &&
+                    !correctionApp.error_message.includes('Some information from your side was missing') && (
                     <span className="missing-error-msg">{correctionApp.error_message}</span>
                   )}
                   {correctionApp.missing_fields && correctionApp.missing_fields.length > 0 && (
@@ -4263,8 +4303,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 )}
 
                 {!hasGeneralMissing && !hasIndianAddressMissing && !hasItalianAddressMissing && !hasPassportMissing && otherMissingFields.length === 0 && (
-                  <div className="empty-correction-notice" style={{ padding: '16px', color: '#94a3b8', textAlign: 'center' }}>
-                    All required fields appear to be present. Click Save to continue.
+                  <div className="empty-correction-notice" style={{ padding: '16px', color: '#64748b', textAlign: 'center', fontSize: '13px' }}>
+                    {correctionApp.error_type === 'PORTAL_FORM_ERROR' || correctionApp.error_type === 'STAGE1_7_FAILED'
+                      ? 'Portal form reported an issue. Click below to verify and retry submission.'
+                      : 'All required fields are verified. Click Save & Start Filling Form to resume.'}
                   </div>
                 )}
 
