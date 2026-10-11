@@ -45,6 +45,8 @@ export interface ApplicationItem {
   has_passport_preview?: boolean;
   has_declaration_preview?: boolean;
   has_receipt?: boolean;
+  is_in_preview?: boolean;
+  is_submitted?: boolean;
   service_type?: string;
   updated_at?: string;
 }

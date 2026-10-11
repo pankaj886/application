@@ -1146,13 +1146,49 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [selectedDraftFolder, setSelectedDraftFolder] = useState<string | null>(null);
 
   const draftApplications = useMemo<ApplicationItem[]>(() => {
+    // Collect all folder names and ARNs of applications that are already in preview or submitted
+    const previewFolderSet = new Set((previews || []).map(p => (p.folder_name || '').trim().toLowerCase()));
+    const completedFolderSet = new Set((completed || []).map(c => (c.folder_name || '').trim().toLowerCase()));
+    const completedArnSet = new Set((completed || []).map(c => (c.arn || '').trim().toLowerCase()).filter(Boolean));
+
     return applications.filter(app => {
-      if (dismissedFoldersRef.current.has(app.folder_name)) return false;
+      const fName = (app.folder_name || '').trim();
+      const folderKey = fName.toLowerCase();
+      if (dismissedFoldersRef.current.has(fName) || dismissedFoldersRef.current.has(folderKey)) {
+        return false;
+      }
+
       const status = (app.status || '').toUpperCase();
-      if (status === 'PREVIEW_READY' || status === 'SUBMITTED' || status === 'DISMISSED') return false;
+
+      // 1. Exclude anything already submitted or completed
+      if (
+        status === 'COMPLETED' ||
+        status === 'SUBMITTED' ||
+        status === 'DISMISSED' ||
+        Boolean(app.is_submitted) ||
+        Boolean(app.has_receipt) ||
+        completedFolderSet.has(folderKey) ||
+        (app.arn && completedArnSet.has(app.arn.trim().toLowerCase()))
+      ) {
+        return false;
+      }
+
+      // 2. Exclude anything that is already in Preview
+      if (
+        status === 'PENDING_CONFIRMATION' ||
+        status === 'PREVIEW_READY' ||
+        Boolean(app.is_in_preview) ||
+        Boolean(app.has_passport_preview) ||
+        Boolean(app.has_declaration_preview) ||
+        previewFolderSet.has(folderKey)
+      ) {
+        return false;
+      }
+
+      // 3. Only show drafts that are NOT in preview yet and NOT submitted
       return true;
     });
-  }, [applications]);
+  }, [applications, previews, completed]);
 
   const [previewSelections, setPreviewSelections] = useState<{
     [key: string]: { passport: boolean; declaration: boolean };
@@ -1243,46 +1279,39 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         return false;
       };
 
-      let activeProcessingApp = activeTracker
-        ? apps.find(a =>
-            ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status) &&
-            matchesTrackerFolder(a)
-          )
-        : undefined;
-
-      if (!activeProcessingApp && (!activeTracker || (activeTracker.active && !activeTracker.ready))) {
-        activeProcessingApp = apps.find(a => ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status));
+      // ONLY track an application if the user currently initiated an active submission in this session!
+      if (!activeTracker || !activeTracker.active) {
+        return;
       }
 
-      // Check if an application requires correction (missing information)
-      const matchingCorrectionApp = activeTracker
-        ? apps.find(a => a.status === 'NEEDS_CORRECTION' && matchesTrackerFolder(a))
-        : apps.find(a => a.status === 'NEEDS_CORRECTION');
+      // If the currently tracked folder was explicitly dismissed, abort tracker immediately
+      if (activeTracker.folderName && (dismissedFoldersRef.current.has(activeTracker.folderName) || dismissedFoldersRef.current.has(activeTracker.folderName.toLowerCase()))) {
+        submissionTrackerRef.current = null;
+        _setSubmissionTracker(null);
+        return;
+      }
+
+      const activeProcessingApp = apps.find(a =>
+        ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status) &&
+        matchesTrackerFolder(a)
+      );
+
+      // Check if this specific tracked application requires correction (missing information)
+      const matchingCorrectionApp = apps.find(a => a.status === 'NEEDS_CORRECTION' && matchesTrackerFolder(a));
 
       const currentPreviewFolders = new Set((prevs || []).map(p => p.folder_name));
       prevPreviewFoldersRef.current = currentPreviewFolders;
 
       // Find matching preview strictly for this application
-      let matchingPreview: PreviewItem | undefined = undefined;
-      if (activeTracker) {
-        matchingPreview = (prevs || []).find(p => matchesTrackerFolder(p));
-        if (!matchingPreview) {
-          const readyApp = apps.find(a => a.status === 'PENDING_CONFIRMATION' && matchesTrackerFolder(a));
-          if (readyApp) {
-            matchingPreview = (prevs || []).find(p => p.folder_name === readyApp.folder_name);
-          }
+      let matchingPreview = (prevs || []).find(p => matchesTrackerFolder(p));
+      if (!matchingPreview) {
+        const readyApp = apps.find(a => a.status === 'PENDING_CONFIRMATION' && matchesTrackerFolder(a));
+        if (readyApp) {
+          matchingPreview = (prevs || []).find(p => p.folder_name === readyApp.folder_name);
         }
       }
 
-      let matchingErrorApp = activeTracker
-        ? apps.find(a => a.status === 'ERROR' && matchesTrackerFolder(a))
-        : undefined;
-
-      if (!matchingErrorApp && activeTracker?.active && !activeTracker.ready && !activeProcessingApp && !matchingPreview && !matchingCorrectionApp) {
-        if (activeTracker.folderName) {
-          matchingErrorApp = apps.find(a => a.status === 'ERROR' && matchesTrackerFolder(a));
-        }
-      }
+      const matchingErrorApp = apps.find(a => a.status === 'ERROR' && matchesTrackerFolder(a));
 
       if (matchingCorrectionApp) {
         // Freeze tracker at extraction % and show missing info alert — NEVER jump to 100% or clear tracker!
@@ -2955,25 +2984,26 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   };
 
   const handleDismissCorrection = (folderName?: string) => {
-    const targetFolder = folderName || submissionTracker?.folderName || correctionApp?.folder_name;
-    // 1. Immediately abort active tracker and draft selection so UI updates synchronously in this exact single click
-    setSubmissionTracker(null);
+    const targetFolder = folderName || submissionTrackerRef.current?.folderName || submissionTracker?.folderName || correctionApp?.folder_name;
+    // 1. Immediately abort active tracker, upload message and draft selection so UI updates synchronously in this exact single click
+    submissionTrackerRef.current = null;
+    _setSubmissionTracker(null);
     setUploadMessage(null);
     setSelectedDraftFolder(null);
 
-    // 2. Clear document slots if dismissing from new application form or active tracker
-    if (!folderName || folderName === submissionTracker?.folderName) {
-      clearDocumentSlots(false);
-    }
+    // 2. Clear document slots completely so form is ready for a new clean upload
+    clearDocumentSlots(false);
 
     if (targetFolder) {
-      dismissedFoldersRef.current.add(targetFolder);
-      setDismissedCorrectionFolder(targetFolder);
-      setApplications(prev => prev.filter(a => a.folder_name !== targetFolder));
+      const cleanKey = targetFolder.trim();
+      dismissedFoldersRef.current.add(cleanKey);
+      dismissedFoldersRef.current.add(cleanKey.toLowerCase());
+      setDismissedCorrectionFolder(cleanKey);
+      setApplications(prev => prev.filter(a => (a.folder_name || '').trim().toLowerCase() !== cleanKey.toLowerCase()));
 
       // 3. Fire async non-blocking delete to server
       const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
-      automationApi.dismissApplication(email, targetFolder, googleUserEmail).catch(err => {
+      automationApi.dismissApplication(email, cleanKey, googleUserEmail).catch(err => {
         console.warn('Server dismiss warning:', err);
       });
     }
@@ -3498,65 +3528,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       {currentSection === 'form' && (
         <div className="fresh-reissue-content">
 
-          {portalErrorApp && !submissionTracker?.active && (() => {
-            const errDet = getPortalErrorDetails(portalErrorApp);
-            return (
-              <div 
-                className="wrong-creds-banner" 
-                style={{ 
-                  background: errDet.bg, 
-                  borderColor: errDet.border, 
-                  borderLeftColor: errDet.borderLeft 
-                }}
-              >
-                <div className="wrong-creds-left">
-                  <AlertCircle className="wrong-creds-icon" style={{ color: errDet.badgeColor }} />
-                </div>
-                <div className="wrong-creds-body">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className="wrong-creds-title" style={{ color: errDet.titleColor }}>{errDet.title}</span>
-                    <span 
-                      style={{ 
-                        fontSize: '11px', 
-                        fontWeight: 700, 
-                        color: errDet.badgeColor, 
-                        background: 'rgba(0,0,0,0.06)', 
-                        padding: '2px 8px', 
-                        borderRadius: '999px',
-                        textTransform: 'uppercase'
-                      }}
-                    >
-                      {errDet.badge}
-                    </span>
-                  </div>
-                  <span className="wrong-creds-desc" style={{ color: errDet.descColor }}>
-                    {errDet.desc}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto', alignSelf: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={handleManualRefresh}
-                    disabled={isManualRefreshing}
-                    className="dismiss-banner-btn"
-                    style={{ background: '#ffffff', color: '#374151', borderColor: '#d1d5db' }}
-                    title="Check portal status and retry"
-                  >
-                    {isManualRefreshing ? 'Checking...' : 'Check Status'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDismissCorrection(portalErrorApp.folder_name)}
-                    className="dismiss-banner-btn"
-                    title="Dismiss this notice"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
-
           {submissionTracker?.active && (
             <div
               className="voice-progress-container"
@@ -3712,12 +3683,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (submissionTracker.folderName) {
-                            handleDismissCorrection(submissionTracker.folderName);
-                          } else {
-                            setSubmissionTracker(null);
-                          }
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDismissCorrection(submissionTracker.folderName);
                         }}
                         style={{
                           display: 'inline-flex',
@@ -3741,12 +3710,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   {submissionTracker.isError && (
                     <button
                       type="button"
-                      onClick={() => {
-                        if (submissionTracker.folderName) {
-                          handleDismissCorrection(submissionTracker.folderName);
-                        } else {
-                          setSubmissionTracker(null);
-                        }
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDismissCorrection(submissionTracker.folderName);
                       }}
                       style={{
                         display: 'inline-flex',
