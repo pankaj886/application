@@ -1,6 +1,6 @@
 export type NavigationTab = 'services' | 'passport' | 'fresh-reissue';
 
-export type FreshReissueSection = 'form' | 'preview' | 'submitted';
+export type FreshReissueSection = 'form' | 'drafts' | 'preview' | 'submitted';
 
 export interface UserProfile {
   email: string;

@@ -17,6 +17,7 @@ export function App() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<NavigationTab>('services');
   const [freshReissueSection, setFreshReissueSection] = useState<FreshReissueSection>('form');
+  const [draftCount, setDraftCount] = useState<number>(0);
   const [previewCount, setPreviewCount] = useState<number>(0);
   const [completedCount, setCompletedCount] = useState<number>(0);
   const [passportServiceType, setPassportServiceType] = useState<'reissue' | 'fresh'>('reissue');
@@ -86,6 +87,7 @@ export function App() {
       try {
         const gEmail = user?.email?.trim().toLowerCase() || '';
         if (!gEmail) {
+          setDraftCount(0);
           setPreviewCount(0);
           setCompletedCount(0);
           return;
@@ -94,14 +96,20 @@ export function App() {
         const storedPortalEmail = localStorage.getItem(scopedKey)?.trim().toLowerCase();
         const activeEmail = storedPortalEmail || '';
         if (!activeEmail) {
+          setDraftCount(0);
           setPreviewCount(0);
           setCompletedCount(0);
           return;
         }
-        const [prevs, comps] = await Promise.all([
+        const [prevs, comps, statusRes] = await Promise.all([
           automationApi.getPendingPreviews(activeEmail, gEmail).catch(() => []),
           automationApi.getCompletedApplications(activeEmail, gEmail).catch(() => []),
+          automationApi.getClientStatus(activeEmail, gEmail).catch(() => ({ client_email: activeEmail, applications: [] })),
         ]);
+        const drafts = (statusRes?.applications || []).filter((a: any) =>
+          !a.has_passport_preview && a.status !== 'COMPLETED' && a.status !== 'PENDING_CONFIRMATION'
+        );
+        setDraftCount(drafts.length);
         setPreviewCount(prevs.length);
         setCompletedCount(comps.length);
       } catch (_) {}
@@ -245,9 +253,11 @@ export function App() {
     : (activeTab === 'fresh-reissue'
         ? (freshReissueSection === 'preview'
             ? `Services / Passport / ${serviceLabel} / Preview`
-            : (freshReissueSection === 'submitted'
-                ? `Services / Passport / ${serviceLabel} / Submitted`
-                : `Services / Passport / ${serviceLabel}`))
+            : (freshReissueSection === 'drafts'
+                ? `Services / Passport / ${serviceLabel} / Drafts`
+                : (freshReissueSection === 'submitted'
+                    ? `Services / Passport / ${serviceLabel} / Submitted`
+                    : `Services / Passport / ${serviceLabel}`)))
         : (activeTab === 'passport' ? 'Services / Passport' : 'Services'));
 
   return (
@@ -277,6 +287,7 @@ export function App() {
             freshReissueSection={freshReissueSection}
             onFreshReissueSectionChange={(sec) => setFreshReissueSection(sec)}
             passportServiceType={passportServiceType}
+            draftCount={draftCount}
             previewCount={previewCount}
             completedCount={completedCount}
           />

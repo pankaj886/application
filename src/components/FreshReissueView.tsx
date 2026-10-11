@@ -27,7 +27,8 @@ import {
   Users,
   Baby,
   Award,
-  FilePlus
+  FilePlus,
+  ArrowLeft
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -1132,6 +1133,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [applications, setApplications] = useState<ApplicationItem[]>([]);
   const [previews, setPreviews] = useState<PreviewItem[]>([]);
   const [completed, setCompleted] = useState<CompletedItem[]>([]);
+  const [selectedDraftFolder, setSelectedDraftFolder] = useState<string | null>(null);
+
+  const draftApplications = useMemo<ApplicationItem[]>(() => {
+    return applications.filter(app => {
+      if (dismissedFoldersRef.current.has(app.folder_name)) return false;
+      const status = (app.status || '').toUpperCase();
+      if (status === 'PREVIEW_READY' || status === 'SUBMITTED' || status === 'DISMISSED') return false;
+      return true;
+    });
+  }, [applications]);
 
   const [previewSelections, setPreviewSelections] = useState<{
     [key: string]: { passport: boolean; declaration: boolean };
@@ -1747,41 +1758,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   ]);
 
   const correctionApp = (() => {
-    // If an upload or application submission is actively in flight / tracking
-    if (submissionTracker?.active) {
-      // If it hasn't entered missing info / correction state, NEVER show correction card for another app!
-      if (!submissionTracker.isMissingInfo) {
-        return undefined;
-      }
-      // If it IS in missing info state, find ONLY the matching tracked application
-      const tf = (submissionTracker.folderName || '').trim().toLowerCase();
-      const of = (submissionTracker.originalFolder || '').trim().toLowerCase();
-      const an = (submissionTracker.applicantName || '').trim().toLowerCase();
-      return applications.find(app => {
-        if (app.folder_name === dismissedCorrectionFolder) return false;
-        if (app.status !== 'NEEDS_CORRECTION' && !(app.status === 'ERROR' && (app.error_type === 'PORTAL_FORM_ERROR' || app.error_type === 'STAGE1_7_FAILED'))) return false;
-        const fn = (app.folder_name || '').trim().toLowerCase();
-        const orig = ((app as any).original_folder || '').trim().toLowerCase();
-        const apn = (app.applicant_name || '').trim().toLowerCase();
-        if (tf && (fn === tf || orig === tf || apn === tf)) return true;
-        if (of && (fn === of || orig === of || apn === of)) return true;
-        if (an && (apn === an || fn === an)) return true;
-        return false;
-      });
+    // When on Drafts section, return the currently selected draft application
+    if (currentSection === 'drafts' && selectedDraftFolder) {
+      return applications.find(app => app.folder_name === selectedDraftFolder && !dismissedFoldersRef.current.has(app.folder_name));
     }
-
-    // When no active submission is in progress, find first valid correction application that actually requires action
-    return applications.find(app => {
-      if (app.folder_name === dismissedCorrectionFolder) return false;
-      const isNeedsCorr = app.status === 'NEEDS_CORRECTION';
-      const isFormErr = app.status === 'ERROR' && (app.error_type === 'PORTAL_FORM_ERROR' || app.error_type === 'STAGE1_7_FAILED');
-      if (!isNeedsCorr && !isFormErr) return false;
-      // Filter out corrupted/ghost items that have no missing fields and no portal error
-      if (isNeedsCorr && (!app.missing_fields || app.missing_fields.length === 0) && app.error_type === 'MISSING_PHOTO_OR_SIGNATURE') {
-        return false;
-      }
-      return true;
-    });
+    return undefined;
   })();
 
   const formatMissingFieldLabel = (fieldName: string): string => {
@@ -2949,6 +2930,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         text: 'File submitted, waiting for preview...',
         type: 'success',
       });
+      setSelectedDraftFolder(null);
+      onSectionChange('form');
       refreshAllData();
     } catch (err: any) {
       const friendlyMsg = sanitizeErrorMessage(err);
@@ -2962,13 +2945,28 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   };
 
   const handleDismissCorrection = (folderName?: string) => {
-    const targetFolder = folderName || correctionApp?.folder_name;
-    if (!targetFolder) return;
-    dismissedFoldersRef.current.add(targetFolder);
-    setDismissedCorrectionFolder(targetFolder);
-    setApplications(prev => prev.filter(a => a.folder_name !== targetFolder));
+    const targetFolder = folderName || submissionTracker?.folderName || correctionApp?.folder_name;
+    // 1. Immediately abort active tracker and draft selection so UI updates synchronously in this exact single click
     setSubmissionTracker(null);
     setUploadMessage(null);
+    setSelectedDraftFolder(null);
+
+    // 2. Clear document slots if dismissing from new application form or active tracker
+    if (!folderName || folderName === submissionTracker?.folderName) {
+      clearDocumentSlots(false);
+    }
+
+    if (targetFolder) {
+      dismissedFoldersRef.current.add(targetFolder);
+      setDismissedCorrectionFolder(targetFolder);
+      setApplications(prev => prev.filter(a => a.folder_name !== targetFolder));
+
+      // 3. Fire async non-blocking delete to server
+      const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
+      automationApi.dismissApplication(email, targetFolder, googleUserEmail).catch(err => {
+        console.warn('Server dismiss warning:', err);
+      });
+    }
   };
 
   const handleCancelPreview = (folderName: string, applicantName?: string) => {
@@ -3632,10 +3630,71 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       </button>
                     </>
                   )}
+                  {submissionTracker.isMissingInfo && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (submissionTracker.folderName) {
+                            setSelectedDraftFolder(submissionTracker.folderName);
+                          }
+                          onSectionChange('drafts');
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 14px',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: '#ffffff',
+                          background: '#d97706',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <FileText style={{ width: '14px', height: '14px' }} />
+                        <span>Open in Drafts</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (submissionTracker.folderName) {
+                            handleDismissCorrection(submissionTracker.folderName);
+                          } else {
+                            setSubmissionTracker(null);
+                          }
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '6px 14px',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: '#92400e',
+                          background: '#fef3c7',
+                          border: '1px solid #fde68a',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <X style={{ width: '14px', height: '14px' }} />
+                        <span>Dismiss &amp; New Upload</span>
+                      </button>
+                    </>
+                  )}
                   {submissionTracker.isError && (
                     <button
                       type="button"
-                      onClick={() => setSubmissionTracker(null)}
+                      onClick={() => {
+                        if (submissionTracker.folderName) {
+                          handleDismissCorrection(submissionTracker.folderName);
+                        } else {
+                          setSubmissionTracker(null);
+                        }
+                      }}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -3651,7 +3710,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       }}
                     >
                       <X style={{ width: '14px', height: '14px' }} />
-                      <span>Dismiss</span>
+                      <span>Dismiss &amp; New Upload</span>
                     </button>
                   )}
                 </div>
@@ -3686,7 +3745,565 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             </div>
           )}
 
-          {correctionApp ? (
+            <div className="fresh-form-card">
+
+              {uploadMessage && !portalErrorApp && !submissionTracker?.active && (
+                <div className={`form-alert ${uploadMessage.type === 'success' ? 'alert-success' : 'alert-error'}`}>
+                  {uploadMessage.type === 'success' ? (
+                    <Clock className="alert-icon animate-pulse" />
+                  ) : (
+                    <AlertCircle className="alert-icon" />
+                  )}
+                  <span>{uploadMessage.text}</span>
+                </div>
+              )}
+
+              {quota && quota.is_exhausted && !portalErrorApp && (
+                <div
+                  className="status-banner-card warning"
+                  style={{
+                    marginBottom: '16px',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #fca5a5',
+                    background: '#fef2f2',
+                    color: '#991b1b',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    fontSize: '13px',
+                    fontWeight: 600
+                  }}
+                >
+                  <AlertCircle style={{ width: '18px', height: '18px', color: '#ef4444', flexShrink: 0 }} />
+                  <span>
+                    Portal account quota reached (50/50 applications used). Please enter a new portal email ID to submit applications.
+                  </span>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmitApplication} className="fresh-form">
+                <div className="form-grid-2">
+                  <div className="input-group">
+                    <label
+                      htmlFor="portalEmail"
+                      className="input-label"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}
+                    >
+                      <span>
+                        Email ID <span className="required-star">*</span>
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {portalEmail.trim() && (
+                          <span
+                            title={`Consular Jurisdiction: ${declarationPlace === 'MILAN' ? 'Consulate General of India, Milan' : 'Embassy of India, Rome'} (${declarationPlace})`}
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '1px 8px',
+                              borderRadius: '999px',
+                              background: declarationPlace === 'MILAN' ? 'rgba(16, 185, 129, 0.14)' : 'rgba(99, 102, 241, 0.14)',
+                              color: declarationPlace === 'MILAN' ? '#059669' : '#4f46e5',
+                              letterSpacing: '0.3px',
+                            }}
+                          >
+                            {declarationPlace === 'MILAN' ? '📍 Milan' : '📍 Rome'}
+                          </span>
+                        )}
+                        {quota && portalEmail.trim() && (
+                          <span
+                            title={`Portal ID quota: ${quota.used} of ${quota.total} applications used`}
+                            style={{
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              padding: '1px 8px',
+                              borderRadius: '999px',
+                              background: quota.is_exhausted
+                                ? 'rgba(239, 68, 68, 0.14)'
+                                : quota.used >= 40
+                                ? 'rgba(245, 158, 11, 0.14)'
+                                : 'rgba(37, 99, 235, 0.12)',
+                              color: quota.is_exhausted
+                                ? '#dc2626'
+                                : quota.used >= 40
+                                ? '#d97706'
+                                : '#2563eb',
+                              letterSpacing: '0.3px',
+                            }}
+                          >
+                            {quota.used}/{quota.total}
+                          </span>
+                        )}
+                      </div>
+                    </label>
+                    <input
+                      id="portalEmail"
+                      type="text"
+                      required
+                      value={portalEmail}
+                      onChange={(e) => setPortalEmail(e.target.value.toUpperCase())}
+                      onBlur={handleEmailBlur}
+                      placeholder="e.g. CLIENT@DOMAIN.COM"
+                      className="form-input"
+                      style={{ textTransform: 'uppercase' }}
+                      autoCapitalize="characters"
+                      autoCorrect="off"
+                      spellCheck="false"
+                    />
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="portalPassword" className="input-label">
+                      Password <span className="required-star">*</span>
+                    </label>
+                    <div className="password-input-wrapper">
+                      <input
+                        id="portalPassword"
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        value={portalPassword}
+                        onChange={(e) => handlePasswordChange(e.target.value)}
+                        placeholder="Portal account password"
+                        className="form-input password-input"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="password-toggle-btn"
+                        tabIndex={-1}
+                        title={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOff className="eye-icon" /> : <Eye className="eye-icon" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="compact-docs-section">
+                  <div className="compact-docs-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <span className="compact-docs-title">Document Uploads</span>
+                    <span className="compact-docs-hint">Select or drop documents into boxes</span>
+                  </div>
+
+                  <div
+                    className="info-template-actions-bar"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '12px',
+                      margin: '10px 0 16px 0',
+                      padding: '12px 16px',
+                      borderRadius: '12px',
+                      background: activeServiceType === 'fresh' ? '#f0fdf4' : '#f8fafc',
+                      border: activeServiceType === 'fresh' ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <FileText style={{ width: '18px', height: '18px', color: activeServiceType === 'fresh' ? '#059669' : '#2563eb' }} />
+                      <div>
+                        <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1e293b' }}>
+                          Application Reason &amp; Mandatory Details ({activeServiceType === 'fresh' ? 'Fresh Passport' : 'Passport Reissue'})
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                          Selected Reason: <strong style={{ color: '#0f172a' }}>{APPLYING_SCENARIOS.find(s => s.id === selectedScenario)?.label || 'Standard'}</strong>
+                          {filledParticularsCount > 0 && ` • ${filledParticularsCount} ${filledParticularsCount === 1 ? 'particular' : 'particulars'} saved`}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowInAppInfoModal(true)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 16px',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: filledParticularsCount > 0 ? '#059669' : (activeServiceType === 'fresh' ? '#10b981' : '#2563eb'),
+                          color: '#ffffff',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          transition: 'all 0.2s ease',
+                        }}
+                        title="Select application reason and enter applicant details in the app"
+                      >
+                        <Edit3 style={{ width: '14px', height: '14px' }} />
+                        <span>
+                          {filledParticularsCount > 0
+                            ? `✓ Reason & Info Configured (${filledParticularsCount} ${filledParticularsCount === 1 ? 'detail' : 'details'})`
+                            : 'Fill Info & Application Reason'}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="docs-boxes-grid">
+                    {activeSlots.map((slotKey) => {
+                      const slotDef = SLOT_CATALOG[slotKey];
+                      if (!slotDef) return null;
+                      const file = slotFiles[slotKey];
+                      const isPhoto = slotKey === 'photo';
+                      const isSign = slotKey === 'sign';
+                      const hasFile = isPhoto
+                        ? photoFile && photoValidation.status === 'valid'
+                        : Boolean(file);
+
+                      const renderSlotIcon = () => {
+                        switch (slotDef.iconName) {
+                          case 'camera': return <Camera className="doc-box-icon" />;
+                          case 'pen': return <PenTool className="doc-box-icon" />;
+                          case 'book': return <BookOpen className="doc-box-icon" />;
+                          case 'id': return <FileCheck className="doc-box-icon" />;
+                          case 'shield': return <ShieldCheck className="doc-box-icon" />;
+                          case 'heart': return <Heart className="doc-box-icon" style={{ color: '#ec4899' }} />;
+                          case 'users': return <Users className="doc-box-icon" style={{ color: '#8b5cf6' }} />;
+                          case 'baby': return <Baby className="doc-box-icon" style={{ color: '#06b6d4' }} />;
+                          case 'award': return <Award className="doc-box-icon" style={{ color: '#f59e0b' }} />;
+                          case 'file-plus': return <FilePlus className="doc-box-icon" style={{ color: '#10b981' }} />;
+                          case 'alert': return <AlertTriangle className="doc-box-icon" style={{ color: '#ef4444' }} />;
+                          default: return <FileText className="doc-box-icon" />;
+                        }
+                      };
+
+                      return (
+                        <div
+                          key={slotKey}
+                          className={`doc-upload-box ${hasFile ? 'has-file' : ''} ${dragSlot === slotKey ? 'drag-target' : ''}`}
+                          style={
+                            isPhoto && photoValidation.status === 'invalid'
+                              ? { borderColor: '#ef4444', background: 'rgba(254, 242, 242, 0.85)' }
+                              : isPhoto && photoValidation.status === 'validating'
+                              ? { borderColor: '#3b82f6', background: 'rgba(239, 246, 255, 0.85)' }
+                              : undefined
+                          }
+                          data-drop-slot={slotKey}
+                          onClick={() => dynamicInputRefs.current[slotKey]?.click()}
+                          onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = slotKey; setDragSlot(slotKey); }}
+                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = slotKey; }}
+                          onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === slotKey) { dragSlotRef.current = null; setDragSlot(null); } }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            dragSlotRef.current = null;
+                            setDragSlot(null);
+                            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                              const filesArr = Array.from(e.dataTransfer.files);
+                              if (isDuplicateDropEvent(filesArr)) return;
+                              routeIncomingFiles(filesArr, slotKey);
+                            }
+                          }}
+                        >
+                          <input
+                            ref={(el) => {
+                              dynamicInputRefs.current[slotKey] = el;
+                              if (slotKey === 'photo') (photoInputRef as any).current = el;
+                              if (slotKey === 'sign') (signInputRef as any).current = el;
+                              if (slotKey === 'passport') (passportInputRef as any).current = el;
+                              if (slotKey === 'identity') (identityInputRef as any).current = el;
+                              if (slotKey === 'residence') (residenceInputRef as any).current = el;
+                              if (slotKey === 'info') (infoInputRef as any).current = el;
+                            }}
+                            type="file"
+                            multiple
+                            accept={slotDef.accept}
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files.length > 0) {
+                                routeIncomingFiles(Array.from(e.target.files), slotKey);
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                          <div className="doc-box-header">
+                            {renderSlotIcon()}
+                            <span className="doc-box-title">
+                              {slotKey === 'passport' && activeServiceType === 'fresh'
+                                ? 'Previous PPT (Optional)'
+                                : slotDef.title}
+                            </span>
+                          </div>
+                          <div className="doc-box-content">
+                            {isPhoto && photoValidation.status === 'validating' ? (
+                              <div className="doc-box-empty" style={{ gap: '6px' }}>
+                                <span className="doc-box-badge" style={{ background: '#dbeafe', color: '#1d4ed8', fontWeight: 700 }}>
+                                  Checking with Portal...
+                                </span>
+                                <div className="doc-box-action-hint" style={{ color: '#2563eb' }}>
+                                  <RefreshCw style={{ width: '12px', height: '12px' }} className="animate-spin" />
+                                  <span>Verifying ICAO</span>
+                                </div>
+                              </div>
+                            ) : isPhoto && photoFile && photoValidation.status === 'valid' ? (
+                              <div className="doc-box-file-info">
+                                <img src={URL.createObjectURL(photoFile)} alt="Photo" className="doc-box-thumb" />
+                                <div className="doc-box-text-info">
+                                  <span className="doc-box-filename" title={photoFile.name}>{photoFile.name}</span>
+                                  <span className="doc-box-filesize" style={{ color: '#059669', fontWeight: 700 }}>
+                                    Portal Verified ✓ ({(photoFile.size / 1024).toFixed(0)} KB)
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="doc-box-remove-btn"
+                                  title="Remove photograph"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateSlotFile('photo', null);
+                                  }}
+                                >
+                                  <X style={{ width: '13px', height: '13px' }} />
+                                </button>
+                              </div>
+                            ) : isPhoto && photoValidation.status === 'invalid' ? (
+                              <div className="doc-box-empty" style={{ gap: '4px' }}>
+                                <span className="doc-box-badge" style={{ background: '#fee2e2', color: '#b91c1c', fontWeight: 700 }}>
+                                  Rejected by Portal
+                                </span>
+                                <div className="doc-box-action-hint" style={{ color: '#dc2626', fontWeight: 600 }}>
+                                  <Upload style={{ width: '12px', height: '12px' }} />
+                                  <span>Upload Another</span>
+                                </div>
+                              </div>
+                            ) : isSign && file ? (
+                              <div className="doc-box-file-info">
+                                <img src={URL.createObjectURL(file)} alt="Signature" className="doc-box-thumb" />
+                                <div className="doc-box-text-info">
+                                  <span className="doc-box-filename" title={file.name}>{file.name}</span>
+                                  <span className="doc-box-filesize">{(file.size / 1024).toFixed(0)} KB</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="doc-box-remove-btn"
+                                  title="Remove signature"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateSlotFile('sign', null);
+                                  }}
+                                >
+                                  <X style={{ width: '13px', height: '13px' }} />
+                                </button>
+                              </div>
+                            ) : file ? (
+                              <div className="doc-box-file-info">
+                                <FileText style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
+                                <div className="doc-box-text-info">
+                                  <span className="doc-box-filename" title={file.name}>{file.name}</span>
+                                  <span className="doc-box-filesize">{(file.size / 1024).toFixed(0)} KB</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="doc-box-remove-btn"
+                                  title={`Remove ${slotDef.title}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateSlotFile(slotKey, null);
+                                  }}
+                                >
+                                  <X style={{ width: '13px', height: '13px' }} />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="doc-box-empty">
+                                <span className="doc-box-badge">
+                                  {slotKey === 'info' && Object.keys(inAppInfoData).length > 0
+                                    ? 'Filled In-App ✓'
+                                    : slotKey === 'passport' && activeServiceType === 'fresh'
+                                    ? 'Optional (If Any)'
+                                    : slotDef.badge}
+                                </span>
+                                <div className="doc-box-action-hint">
+                                  <Upload style={{ width: '12px', height: '12px' }} />
+                                  <span>Upload</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Compact Batch Dropstrip */}
+                  <div
+                    className={`compact-drop-strip ${isDragActive ? 'drag-active' : ''}`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleFileDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                      style={{ display: 'none' }}
+                      onChange={handleFileSelect}
+                    />
+                    <Upload style={{ width: '14px', height: '14px', color: '#3b82f6' }} />
+                    <span>Or drag all 6 documents together here to auto-assign</span>
+                  </div>
+
+                  {selectedFiles.length > 0 && (
+                    <div className="attached-files-list">
+                      {selectedFiles.map((file, idx) => (
+                        <div key={idx} className="attached-file-pill">
+                          <FileText className="file-pill-icon" />
+                          <span className="file-pill-name" title={file.name}>{file.name}</span>
+                          <span className="file-pill-size">({(file.size / 1024).toFixed(0)} KB)</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveFile(idx)}
+                            className="file-pill-remove"
+                            title="Remove file"
+                          >
+                            <Trash2 className="remove-icon" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-submit-row">
+                  {photoFile && photoValidation.status === 'valid' ? (
+                    <button
+                      type="submit"
+                      disabled={isUploading}
+                      className="submit-btn"
+                    >
+                      {isUploading ? (
+                        <>
+                          <RefreshCw className="submit-icon animate-spin" />
+                          <span>Uploading &amp; Processing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="submit-icon" />
+                          <span>Submit Application</span>
+                        </>
+                      )}
+                    </button>
+                  ) : photoValidation.status === 'validating' ? (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '10px 18px',
+                        borderRadius: '10px',
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        color: '#1e40af',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <RefreshCw style={{ width: '15px', height: '15px' }} className="animate-spin" />
+                      <span>Verifying photograph with Passport Seva Portal...</span>
+                    </div>
+                  ) : photoValidation.status === 'invalid' ? (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '10px 18px',
+                        borderRadius: '10px',
+                        background: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        color: '#b91c1c',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <AlertCircle style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                      <span>{photoValidation.message || 'This photo is not allowed by the portal. Please upload another photograph.'}</span>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '10px 18px',
+                        borderRadius: '10px',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        color: '#64748b',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                      }}
+                    >
+                      <Camera style={{ width: '15px', height: '15px', color: '#3b82f6' }} />
+                      <span>Upload an ICAO-compliant Photograph above to unlock Submit Application</span>
+                    </div>
+                  )}
+                </div>
+              </form>
+            </div>
+        </div>
+      )}
+
+      {currentSection === 'drafts' && (
+        <div className="fresh-reissue-content drafts-view-container">
+          {selectedDraftFolder && correctionApp ? (
+            <div className="draft-detail-wrapper">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0' }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDraftFolder(null)}
+                  className="draft-back-btn"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: '#2563eb',
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <ArrowLeft style={{ width: '16px', height: '16px' }} />
+                  <span>&larr; Back to All Drafts</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDismissCorrection(correctionApp.folder_name);
+                    setSelectedDraftFolder(null);
+                  }}
+                  className="draft-btn-dismiss"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: '#dc2626',
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Trash2 style={{ width: '14px', height: '14px' }} />
+                  <span>Dismiss Draft</span>
+                </button>
+              </div>
+
             <div className="correction-card">
               <div className="card-header">
                 <h2 className="card-title">Missing Details &amp; Correction Required</h2>
@@ -4313,10 +4930,21 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 <div className="correction-actions-row">
                   <button
                     type="button"
-                    onClick={() => handleDismissCorrection(correctionApp.folder_name)}
+                    onClick={() => {
+                      handleDismissCorrection(correctionApp.folder_name);
+                      setSelectedDraftFolder(null);
+                    }}
                     className="dismiss-btn"
                   >
-                    Dismiss / Upload New Instead
+                    Dismiss Draft
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDraftFolder(null)}
+                    className="dismiss-btn"
+                    style={{ background: '#f8fafc', color: '#475569', borderColor: '#cbd5e1' }}
+                  >
+                    Back to All Drafts
                   </button>
                   <button
                     type="button"
@@ -4345,510 +4973,198 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 </div>
               </form>
             </div>
+            </div>
           ) : (
-            <div className="fresh-form-card">
-
-              {uploadMessage && !portalErrorApp && !submissionTracker?.active && (
-                <div className={`form-alert ${uploadMessage.type === 'success' ? 'alert-success' : 'alert-error'}`}>
-                  {uploadMessage.type === 'success' ? (
-                    <Clock className="alert-icon animate-pulse" />
-                  ) : (
-                    <AlertCircle className="alert-icon" />
-                  )}
-                  <span>{uploadMessage.text}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div className="drafts-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <h2 className="view-main-title">Draft Applications</h2>
+                  <p className="card-subtitle">
+                    Applications that have not yet been submitted to the portal or require missing details before generating preview.
+                  </p>
                 </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => onSectionChange('form')}
+                  className="submit-btn"
+                  style={{ padding: '8px 16px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <Plus style={{ width: '16px', height: '16px' }} />
+                  <span>New Application</span>
+                </button>
+              </div>
 
-              {quota && quota.is_exhausted && !portalErrorApp && (
+              {draftApplications.length === 0 ? (
                 <div
-                  className="status-banner-card warning"
                   style={{
-                    marginBottom: '16px',
-                    padding: '12px 16px',
-                    borderRadius: '10px',
-                    border: '1px solid #fca5a5',
-                    background: '#fef2f2',
-                    color: '#991b1b',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '13px',
-                    fontWeight: 600
+                    padding: '60px 24px',
+                    textAlign: 'center',
+                    background: '#ffffff',
+                    borderRadius: '16px',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                   }}
                 >
-                  <AlertCircle style={{ width: '18px', height: '18px', color: '#ef4444', flexShrink: 0 }} />
-                  <span>
-                    Portal account quota reached (50/50 applications used). Please enter a new portal email ID to submit applications.
-                  </span>
-                </div>
-              )}
-
-              <form onSubmit={handleSubmitApplication} className="fresh-form">
-                <div className="form-grid-2">
-                  <div className="input-group">
-                    <label
-                      htmlFor="portalEmail"
-                      className="input-label"
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}
-                    >
-                      <span>
-                        Email ID <span className="required-star">*</span>
-                      </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {portalEmail.trim() && (
-                          <span
-                            title={`Consular Jurisdiction: ${declarationPlace === 'MILAN' ? 'Consulate General of India, Milan' : 'Embassy of India, Rome'} (${declarationPlace})`}
-                            style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '1px 8px',
-                              borderRadius: '999px',
-                              background: declarationPlace === 'MILAN' ? 'rgba(16, 185, 129, 0.14)' : 'rgba(99, 102, 241, 0.14)',
-                              color: declarationPlace === 'MILAN' ? '#059669' : '#4f46e5',
-                              letterSpacing: '0.3px',
-                            }}
-                          >
-                            {declarationPlace === 'MILAN' ? '📍 Milan' : '📍 Rome'}
-                          </span>
-                        )}
-                        {quota && portalEmail.trim() && (
-                          <span
-                            title={`Portal ID quota: ${quota.used} of ${quota.total} applications used`}
-                            style={{
-                              fontSize: '12px',
-                              fontWeight: 700,
-                              padding: '1px 8px',
-                              borderRadius: '999px',
-                              background: quota.is_exhausted
-                                ? 'rgba(239, 68, 68, 0.14)'
-                                : quota.used >= 40
-                                ? 'rgba(245, 158, 11, 0.14)'
-                                : 'rgba(37, 99, 235, 0.12)',
-                              color: quota.is_exhausted
-                                ? '#dc2626'
-                                : quota.used >= 40
-                                ? '#d97706'
-                                : '#2563eb',
-                              letterSpacing: '0.3px',
-                            }}
-                          >
-                            {quota.used}/{quota.total}
-                          </span>
-                        )}
-                      </div>
-                    </label>
-                    <input
-                      id="portalEmail"
-                      type="text"
-                      required
-                      value={portalEmail}
-                      onChange={(e) => setPortalEmail(e.target.value.toUpperCase())}
-                      onBlur={handleEmailBlur}
-                      placeholder="e.g. CLIENT@DOMAIN.COM"
-                      className="form-input"
-                      style={{ textTransform: 'uppercase' }}
-                      autoCapitalize="characters"
-                      autoCorrect="off"
-                      spellCheck="false"
-                    />
-                  </div>
-
-                  <div className="input-group">
-                    <label htmlFor="portalPassword" className="input-label">
-                      Password <span className="required-star">*</span>
-                    </label>
-                    <div className="password-input-wrapper">
-                      <input
-                        id="portalPassword"
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        value={portalPassword}
-                        onChange={(e) => handlePasswordChange(e.target.value)}
-                        placeholder="Portal account password"
-                        className="form-input password-input"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="password-toggle-btn"
-                        tabIndex={-1}
-                        title={showPassword ? 'Hide password' : 'Show password'}
-                      >
-                        {showPassword ? <EyeOff className="eye-icon" /> : <Eye className="eye-icon" />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="compact-docs-section">
-                  <div className="compact-docs-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                    <span className="compact-docs-title">Document Uploads</span>
-                    <span className="compact-docs-hint">Select or drop documents into boxes</span>
-                  </div>
-
-                  <div
-                    className="info-template-actions-bar"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
-                      gap: '12px',
-                      margin: '10px 0 16px 0',
-                      padding: '12px 16px',
-                      borderRadius: '12px',
-                      background: activeServiceType === 'fresh' ? '#f0fdf4' : '#f8fafc',
-                      border: activeServiceType === 'fresh' ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                    }}
+                  <FileText style={{ width: '48px', height: '48px', color: '#94a3b8', margin: '0 auto 16px', strokeWidth: 1.5 }} />
+                  <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
+                    No Draft Applications
+                  </h3>
+                  <p style={{ fontSize: '14px', color: '#64748b', maxWidth: '440px', margin: '0 auto 20px', lineHeight: 1.5 }}>
+                    All applications have either been submitted or are ready in the Preview section. Any applications requiring corrections or missing details will appear here.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onSectionChange('form')}
+                    className="submit-btn"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', margin: '0 auto' }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <FileText style={{ width: '18px', height: '18px', color: activeServiceType === 'fresh' ? '#059669' : '#2563eb' }} />
-                      <div>
-                        <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1e293b' }}>
-                          Application Reason &amp; Mandatory Details ({activeServiceType === 'fresh' ? 'Fresh Passport' : 'Passport Reissue'})
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                          Selected Reason: <strong style={{ color: '#0f172a' }}>{APPLYING_SCENARIOS.find(s => s.id === selectedScenario)?.label || 'Standard'}</strong>
-                          {filledParticularsCount > 0 && ` • ${filledParticularsCount} ${filledParticularsCount === 1 ? 'particular' : 'particulars'} saved`}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <button
-                        type="button"
-                        onClick={() => setShowInAppInfoModal(true)}
+                    <Plus style={{ width: '16px', height: '16px' }} />
+                    <span>Start New Application</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="drafts-list-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px' }}>
+                  {draftApplications.map((draft: ApplicationItem) => {
+                    const missingList = draft.missing_fields || [];
+                    const isError = draft.status === 'PORTAL_FORM_ERROR' || draft.error_type === 'PORTAL_FORM_ERROR' || draft.error_type === 'STAGE1_7_FAILED';
+                    return (
+                      <div
+                        key={draft.folder_name}
+                        className="draft-card-item"
                         style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          padding: '8px 16px',
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          borderRadius: '8px',
-                          border: 'none',
-                          background: filledParticularsCount > 0 ? '#059669' : (activeServiceType === 'fresh' ? '#10b981' : '#2563eb'),
-                          color: '#ffffff',
-                          cursor: 'pointer',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                          transition: 'all 0.2s ease',
+                          background: '#ffffff',
+                          borderRadius: '14px',
+                          border: isError ? '1px solid #fca5a5' : '1px solid #fcd34d',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                          padding: '20px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '14px',
+                          position: 'relative',
                         }}
-                        title="Select application reason and enter applicant details in the app"
                       >
-                        <Edit3 style={{ width: '14px', height: '14px' }} />
-                        <span>
-                          {filledParticularsCount > 0
-                            ? `✓ Reason & Info Configured (${filledParticularsCount} ${filledParticularsCount === 1 ? 'detail' : 'details'})`
-                            : 'Fill Info & Application Reason'}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="docs-boxes-grid">
-                    {activeSlots.map((slotKey) => {
-                      const slotDef = SLOT_CATALOG[slotKey];
-                      if (!slotDef) return null;
-                      const file = slotFiles[slotKey];
-                      const isPhoto = slotKey === 'photo';
-                      const isSign = slotKey === 'sign';
-                      const hasFile = isPhoto
-                        ? photoFile && photoValidation.status === 'valid'
-                        : Boolean(file);
-
-                      const renderSlotIcon = () => {
-                        switch (slotDef.iconName) {
-                          case 'camera': return <Camera className="doc-box-icon" />;
-                          case 'pen': return <PenTool className="doc-box-icon" />;
-                          case 'book': return <BookOpen className="doc-box-icon" />;
-                          case 'id': return <FileCheck className="doc-box-icon" />;
-                          case 'shield': return <ShieldCheck className="doc-box-icon" />;
-                          case 'heart': return <Heart className="doc-box-icon" style={{ color: '#ec4899' }} />;
-                          case 'users': return <Users className="doc-box-icon" style={{ color: '#8b5cf6' }} />;
-                          case 'baby': return <Baby className="doc-box-icon" style={{ color: '#06b6d4' }} />;
-                          case 'award': return <Award className="doc-box-icon" style={{ color: '#f59e0b' }} />;
-                          case 'file-plus': return <FilePlus className="doc-box-icon" style={{ color: '#10b981' }} />;
-                          case 'alert': return <AlertTriangle className="doc-box-icon" style={{ color: '#ef4444' }} />;
-                          default: return <FileText className="doc-box-icon" />;
-                        }
-                      };
-
-                      return (
-                        <div
-                          key={slotKey}
-                          className={`doc-upload-box ${hasFile ? 'has-file' : ''} ${dragSlot === slotKey ? 'drag-target' : ''}`}
-                          style={
-                            isPhoto && photoValidation.status === 'invalid'
-                              ? { borderColor: '#ef4444', background: 'rgba(254, 242, 242, 0.85)' }
-                              : isPhoto && photoValidation.status === 'validating'
-                              ? { borderColor: '#3b82f6', background: 'rgba(239, 246, 255, 0.85)' }
-                              : undefined
-                          }
-                          data-drop-slot={slotKey}
-                          onClick={() => dynamicInputRefs.current[slotKey]?.click()}
-                          onDragEnter={(e) => { e.preventDefault(); dragSlotRef.current = slotKey; setDragSlot(slotKey); }}
-                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dragSlotRef.current = slotKey; }}
-                          onDragLeave={(e) => { e.preventDefault(); if (dragSlotRef.current === slotKey) { dragSlotRef.current = null; setDragSlot(null); } }}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            dragSlotRef.current = null;
-                            setDragSlot(null);
-                            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                              const filesArr = Array.from(e.dataTransfer.files);
-                              if (isDuplicateDropEvent(filesArr)) return;
-                              routeIncomingFiles(filesArr, slotKey);
-                            }
-                          }}
-                        >
-                          <input
-                            ref={(el) => {
-                              dynamicInputRefs.current[slotKey] = el;
-                              if (slotKey === 'photo') (photoInputRef as any).current = el;
-                              if (slotKey === 'sign') (signInputRef as any).current = el;
-                              if (slotKey === 'passport') (passportInputRef as any).current = el;
-                              if (slotKey === 'identity') (identityInputRef as any).current = el;
-                              if (slotKey === 'residence') (residenceInputRef as any).current = el;
-                              if (slotKey === 'info') (infoInputRef as any).current = el;
-                            }}
-                            type="file"
-                            multiple
-                            accept={slotDef.accept}
-                            style={{ display: 'none' }}
-                            onChange={(e) => {
-                              if (e.target.files && e.target.files.length > 0) {
-                                routeIncomingFiles(Array.from(e.target.files), slotKey);
-                                e.target.value = '';
-                              }
-                            }}
-                          />
-                          <div className="doc-box-header">
-                            {renderSlotIcon()}
-                            <span className="doc-box-title">
-                              {slotKey === 'passport' && activeServiceType === 'fresh'
-                                ? 'Previous PPT (Optional)'
-                                : slotDef.title}
-                            </span>
-                          </div>
-                          <div className="doc-box-content">
-                            {isPhoto && photoValidation.status === 'validating' ? (
-                              <div className="doc-box-empty" style={{ gap: '6px' }}>
-                                <span className="doc-box-badge" style={{ background: '#dbeafe', color: '#1d4ed8', fontWeight: 700 }}>
-                                  Checking with Portal...
-                                </span>
-                                <div className="doc-box-action-hint" style={{ color: '#2563eb' }}>
-                                  <RefreshCw style={{ width: '12px', height: '12px' }} className="animate-spin" />
-                                  <span>Verifying ICAO</span>
-                                </div>
-                              </div>
-                            ) : isPhoto && photoFile && photoValidation.status === 'valid' ? (
-                              <div className="doc-box-file-info">
-                                <img src={URL.createObjectURL(photoFile)} alt="Photo" className="doc-box-thumb" />
-                                <div className="doc-box-text-info">
-                                  <span className="doc-box-filename" title={photoFile.name}>{photoFile.name}</span>
-                                  <span className="doc-box-filesize" style={{ color: '#059669', fontWeight: 700 }}>
-                                    Portal Verified ✓ ({(photoFile.size / 1024).toFixed(0)} KB)
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  className="doc-box-remove-btn"
-                                  title="Remove photograph"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    updateSlotFile('photo', null);
-                                  }}
-                                >
-                                  <X style={{ width: '13px', height: '13px' }} />
-                                </button>
-                              </div>
-                            ) : isPhoto && photoValidation.status === 'invalid' ? (
-                              <div className="doc-box-empty" style={{ gap: '4px' }}>
-                                <span className="doc-box-badge" style={{ background: '#fee2e2', color: '#b91c1c', fontWeight: 700 }}>
-                                  Rejected by Portal
-                                </span>
-                                <div className="doc-box-action-hint" style={{ color: '#dc2626', fontWeight: 600 }}>
-                                  <Upload style={{ width: '12px', height: '12px' }} />
-                                  <span>Upload Another</span>
-                                </div>
-                              </div>
-                            ) : isSign && file ? (
-                              <div className="doc-box-file-info">
-                                <img src={URL.createObjectURL(file)} alt="Signature" className="doc-box-thumb" />
-                                <div className="doc-box-text-info">
-                                  <span className="doc-box-filename" title={file.name}>{file.name}</span>
-                                  <span className="doc-box-filesize">{(file.size / 1024).toFixed(0)} KB</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  className="doc-box-remove-btn"
-                                  title="Remove signature"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    updateSlotFile('sign', null);
-                                  }}
-                                >
-                                  <X style={{ width: '13px', height: '13px' }} />
-                                </button>
-                              </div>
-                            ) : file ? (
-                              <div className="doc-box-file-info">
-                                <FileText style={{ width: '22px', height: '22px', color: '#059669', flexShrink: 0 }} />
-                                <div className="doc-box-text-info">
-                                  <span className="doc-box-filename" title={file.name}>{file.name}</span>
-                                  <span className="doc-box-filesize">{(file.size / 1024).toFixed(0)} KB</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  className="doc-box-remove-btn"
-                                  title={`Remove ${slotDef.title}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    updateSlotFile(slotKey, null);
-                                  }}
-                                >
-                                  <X style={{ width: '13px', height: '13px' }} />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="doc-box-empty">
-                                <span className="doc-box-badge">
-                                  {slotKey === 'info' && Object.keys(inAppInfoData).length > 0
-                                    ? 'Filled In-App ✓'
-                                    : slotKey === 'passport' && activeServiceType === 'fresh'
-                                    ? 'Optional (If Any)'
-                                    : slotDef.badge}
-                                </span>
-                                <div className="doc-box-action-hint">
-                                  <Upload style={{ width: '12px', height: '12px' }} />
-                                  <span>Upload</span>
-                                </div>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                Folder #{draft.folder_name}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  padding: '2px 8px',
+                                  borderRadius: '999px',
+                                  background: isError ? '#fee2e2' : '#fef3c7',
+                                  color: isError ? '#dc2626' : '#b45309',
+                                  border: isError ? '1px solid #fecaca' : '1px solid #fde68a',
+                                }}
+                              >
+                                {isError ? 'Portal Error' : 'Needs Correction'}
+                              </span>
+                            </div>
+                            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                              {draft.applicant_name || `Applicant (Folder ${draft.folder_name})`}
+                            </h3>
+                            {draft.arn && (
+                              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                                ARN: <strong>{draft.arn}</strong>
                               </div>
                             )}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
 
-                  {/* Compact Batch Dropstrip */}
-                  <div
-                    className={`compact-drop-strip ${isDragActive ? 'drag-active' : ''}`}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleFileDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                      style={{ display: 'none' }}
-                      onChange={handleFileSelect}
-                    />
-                    <Upload style={{ width: '14px', height: '14px', color: '#3b82f6' }} />
-                    <span>Or drag all 6 documents together here to auto-assign</span>
-                  </div>
+                        <div
+                          className="draft-card-problem-box"
+                          style={{
+                            background: isError ? '#fef2f2' : '#fffbeb',
+                            borderRadius: '10px',
+                            border: isError ? '1px solid #fee2e2' : '1px solid #fef3c7',
+                            padding: '12px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: isError ? '#991b1b' : '#92400e' }}>
+                            <AlertCircle style={{ width: '15px', height: '15px', flexShrink: 0 }} />
+                            <span>
+                              {isError ? 'Action Required: Portal Form Issue' : 'Action Required: Missing Information'}
+                            </span>
+                          </div>
+                          {draft.error_message && (
+                            <p style={{ margin: 0, fontSize: '12px', color: isError ? '#b91c1c' : '#78350f', lineHeight: 1.4 }}>
+                              {draft.error_message}
+                            </p>
+                          )}
+                          {missingList.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                              {missingList.map((m: string, idx: number) => (
+                                <span
+                                  key={idx}
+                                  className="draft-missing-pill"
+                                  style={{
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    background: '#ffffff',
+                                    border: '1px solid #e2e8f0',
+                                    color: '#475569',
+                                  }}
+                                >
+                                  {formatMissingFieldLabel(m)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
 
-                  {selectedFiles.length > 0 && (
-                    <div className="attached-files-list">
-                      {selectedFiles.map((file, idx) => (
-                        <div key={idx} className="attached-file-pill">
-                          <FileText className="file-pill-icon" />
-                          <span className="file-pill-name" title={file.name}>{file.name}</span>
-                          <span className="file-pill-size">({(file.size / 1024).toFixed(0)} KB)</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: 'auto', paddingTop: '8px' }}>
                           <button
                             type="button"
-                            onClick={() => handleRemoveFile(idx)}
-                            className="file-pill-remove"
-                            title="Remove file"
+                            onClick={() => setSelectedDraftFolder(draft.folder_name)}
+                            className="submit-btn"
+                            style={{
+                              flex: 1,
+                              padding: '8px 14px',
+                              fontSize: '13px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                            }}
                           >
-                            <Trash2 className="remove-icon" />
+                            <Edit3 style={{ width: '14px', height: '14px' }} />
+                            <span>Review &amp; Fix Details</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDismissCorrection(draft.folder_name)}
+                            style={{
+                              padding: '8px 12px',
+                              fontSize: '13px',
+                              fontWeight: 600,
+                              color: '#dc2626',
+                              background: '#fef2f2',
+                              border: '1px solid #fecaca',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                            title="Dismiss Draft"
+                          >
+                            <Trash2 style={{ width: '14px', height: '14px' }} />
+                            <span>Dismiss</span>
                           </button>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      </div>
+                    );
+                  })}
                 </div>
-
-                <div className="form-submit-row">
-                  {photoFile && photoValidation.status === 'valid' ? (
-                    <button
-                      type="submit"
-                      disabled={isUploading}
-                      className="submit-btn"
-                    >
-                      {isUploading ? (
-                        <>
-                          <RefreshCw className="submit-icon animate-spin" />
-                          <span>Uploading &amp; Processing...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Send className="submit-icon" />
-                          <span>Submit Application</span>
-                        </>
-                      )}
-                    </button>
-                  ) : photoValidation.status === 'validating' ? (
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '10px 18px',
-                        borderRadius: '10px',
-                        background: '#eff6ff',
-                        border: '1px solid #bfdbfe',
-                        color: '#1e40af',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                      }}
-                    >
-                      <RefreshCw style={{ width: '15px', height: '15px' }} className="animate-spin" />
-                      <span>Verifying photograph with Passport Seva Portal...</span>
-                    </div>
-                  ) : photoValidation.status === 'invalid' ? (
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '10px 18px',
-                        borderRadius: '10px',
-                        background: '#fef2f2',
-                        border: '1px solid #fecaca',
-                        color: '#b91c1c',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                      }}
-                    >
-                      <AlertCircle style={{ width: '16px', height: '16px', flexShrink: 0 }} />
-                      <span>{photoValidation.message || 'This photo is not allowed by the portal. Please upload another photograph.'}</span>
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '10px 18px',
-                        borderRadius: '10px',
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                        color: '#64748b',
-                        fontSize: '13px',
-                        fontWeight: 500,
-                      }}
-                    >
-                      <Camera style={{ width: '15px', height: '15px', color: '#3b82f6' }} />
-                      <span>Upload an ICAO-compliant Photograph above to unlock Submit Application</span>
-                    </div>
-                  )}
-                </div>
-              </form>
+              )}
             </div>
           )}
         </div>

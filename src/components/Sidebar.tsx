@@ -6,6 +6,7 @@ import {
   ChevronRight,
   LogOut,
   Upload,
+  FileText,
   Eye,
   CheckCircle2,
   BookOpen
@@ -23,6 +24,7 @@ interface SidebarProps {
   freshReissueSection?: FreshReissueSection;
   onFreshReissueSectionChange?: (sec: FreshReissueSection) => void;
   passportServiceType?: 'reissue' | 'fresh';
+  draftCount?: number;
   previewCount?: number;
   completedCount?: number;
 }
@@ -37,10 +39,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   freshReissueSection = 'form',
   onFreshReissueSectionChange,
   passportServiceType = 'reissue',
+  draftCount = 0,
   previewCount = 0,
   completedCount = 0,
 }) => {
-  const [appVersion, setAppVersion] = useState<string>('1.0.73');
+  const [appVersion, setAppVersion] = useState<string>('1.0.74');
 
   useEffect(() => {
     getVersion()
@@ -119,6 +122,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               {!collapsed && (
                 <span className="subnav-label">New Application</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onFreshReissueSectionChange && onFreshReissueSectionChange('drafts')}
+              className={`subnav-item ${freshReissueSection === 'drafts' ? 'active' : ''}`}
+              title="Drafts Section"
+            >
+              <div className="subnav-icon-wrapper">
+                <FileText className="subnav-icon" />
+              </div>
+              {!collapsed && (
+                <div className="subnav-label-group">
+                  <span className="subnav-label">Drafts</span>
+                  {draftCount > 0 && (
+                    <span className="subnav-badge subnav-badge-amber">{draftCount}</span>
+                  )}
+                </div>
+              )}
+              {collapsed && draftCount > 0 && (
+                <span className="subnav-dot-badge subnav-dot-badge-amber" />
               )}
             </button>
 
