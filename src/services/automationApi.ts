@@ -324,9 +324,11 @@ class AutomationApiService {
     infoData?: string
   ): Promise<{ success: boolean; folder_name: string; message: string }> {
     let baseUrl = await this.resolveGateway();
+    const uploadRequestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
     const buildFormData = () => {
       const fd = new FormData();
+      fd.append('upload_request_id', uploadRequestId);
       fd.append('client_email', clientEmail);
       fd.append('portal_username', portalUsername);
       fd.append('portal_password', portalPassword);
@@ -368,33 +370,17 @@ class AutomationApiService {
       res = null;
     }
 
-    // 2. If failed and active wasn't local, try local immediately
+    // 2. If network failed or Cloudflare dropped, try local fallback
     if (!res && baseUrl !== LOCAL_FALLBACK_URL) {
       try {
         const localRes = await tryUpload(LOCAL_FALLBACK_URL);
-        if (localRes.ok || localRes.status < 500) {
-          this.activeBaseUrl = LOCAL_FALLBACK_URL;
-          res = localRes;
-        }
-      } catch (_) {}
-    }
-
-    // 3. If still no response, refresh gateway and retry
-    if (!res) {
-      try {
-        baseUrl = await this.resolveGateway(true);
-        res = await tryUpload(baseUrl);
-      } catch (_) {}
-    }
-
-    // 4. Final attempt on local fallback
-    if (!res) {
-      try {
-        res = await tryUpload(LOCAL_FALLBACK_URL);
         this.activeBaseUrl = LOCAL_FALLBACK_URL;
-      } catch (_) {
-        throw new Error('Error Connecting to Server. Please ensure background automation runner is active.');
-      }
+        res = localRes;
+      } catch (_) {}
+    }
+
+    if (!res) {
+      throw new Error('Error Connecting to Server. Please ensure background automation runner is active.');
     }
 
     if (!res.ok) {

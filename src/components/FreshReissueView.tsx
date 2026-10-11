@@ -2620,6 +2620,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const handleSubmitApplication = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isUploading || isUploadingRef.current) return;
     setUploadMessage(null);
     dismissedFoldersRef.current.clear();
     setDismissedCorrectionFolder(null);
@@ -4296,7 +4297,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   }}
                 >
                   <ArrowLeft style={{ width: '16px', height: '16px' }} />
-                  <span>&larr; Back to All Drafts</span>
+                  <span>Back to All Drafts</span>
                 </button>
                 <button
                   type="button"
