@@ -41,6 +41,7 @@ export interface ApplicationItem {
     current_value?: string;
   }>;
   extracted_data?: Record<string, any>;
+  files?: string[];
   has_passport_preview?: boolean;
   has_declaration_preview?: boolean;
   has_receipt?: boolean;
@@ -566,6 +567,59 @@ class AutomationApiService {
     if (!res.ok) {
       const errJson = await res.json().catch(() => null);
       throw new Error(parseErrorDetail(errJson, 'Failed to dismiss application'));
+    }
+
+    return await res.json();
+  }
+
+  public getDraftFileUrl(clientEmail: string, folderName: string, filename: string, userEmail?: string): string {
+    const uKey = (userEmail || '').trim().toLowerCase();
+    const q = uKey ? `?user_email=${encodeURIComponent(uKey)}` : '';
+    const base = this.getBaseUrl();
+    return `${base}/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/file/${encodeURIComponent(filename)}${q}`;
+  }
+
+  public async deleteDraftFile(
+    clientEmail: string,
+    folderName: string,
+    filename: string,
+    userEmail?: string
+  ): Promise<{ success: boolean; message: string }> {
+    const uKey = (userEmail || '').trim().toLowerCase();
+    const q = uKey ? `?user_email=${encodeURIComponent(uKey)}` : '';
+    let res: Response;
+    try {
+      res = await this.fetchWithAutoRetry(
+        `/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/file/${encodeURIComponent(filename)}${q}`,
+        { method: 'DELETE' }
+      );
+    } catch (_) {
+      res = await this.fetchWithAutoRetry(
+        `/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/delete-file${q}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, user_email: uKey || undefined })
+        }
+      );
+    }
+
+    if (!res.ok) {
+      try {
+        res = await this.fetchWithAutoRetry(
+          `/api/clients/${encodeURIComponent(clientEmail)}/${encodeURIComponent(folderName)}/delete-file${q}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename, user_email: uKey || undefined })
+          }
+        );
+      } catch (_) {}
+    }
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => null);
+      throw new Error(parseErrorDetail(errJson, 'Failed to delete file'));
     }
 
     return await res.json();

@@ -1126,6 +1126,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     folderName: string;
     applicantName: string;
   } | null>(null);
+  const [deleteFileTarget, setDeleteFileTarget] = useState<{
+    folderName: string;
+    filename: string;
+    applicantName?: string;
+  } | null>(null);
+  const [deletingFile, setDeletingFile] = useState<boolean>(false);
+  const [deleteDraftTarget, setDeleteDraftTarget] = useState<{
+    folderName: string;
+    applicantName?: string;
+  } | null>(null);
   const [correctionFormData, setCorrectionFormData] = useState<Record<string, string>>({});
   const [dismissedCorrectionFolder, setDismissedCorrectionFolder] = useState<string | null>(null);
   const dismissedFoldersRef = useRef<Set<string>>(new Set());
@@ -3002,6 +3012,49 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   };
 
+  const executeDeleteDraftFile = async () => {
+    if (!deleteFileTarget) return;
+    const { folderName, filename } = deleteFileTarget;
+    setDeletingFile(true);
+    try {
+      const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
+      await automationApi.deleteDraftFile(email, folderName, filename, googleUserEmail);
+
+      setApplications(prev => prev.map(app => {
+        if (app.folder_name === folderName) {
+          const updatedFiles = (app.files || []).filter(f => f !== filename);
+          return {
+            ...app,
+            files: updatedFiles,
+          };
+        }
+        return app;
+      }));
+
+      setUploadMessage({
+        text: `File "${filename}" deleted successfully.`,
+        type: 'success',
+      });
+      setDeleteFileTarget(null);
+      await refreshAllData();
+    } catch (err: any) {
+      console.error("Failed to delete draft file:", err);
+      setUploadMessage({
+        text: sanitizeErrorMessage(err) || `Failed to delete file "${filename}".`,
+        type: 'error',
+      });
+      setDeleteFileTarget(null);
+    } finally {
+      setDeletingFile(false);
+    }
+  };
+
+  const executeDeleteDraft = (folderName: string) => {
+    setDeleteDraftTarget(null);
+    handleDismissCorrection(folderName);
+    setSelectedDraftFolder(null);
+  };
+
   const togglePreviewCheckbox = (folderName: string, type: 'passport' | 'declaration') => {
     setPreviewSelections(prev => {
       const current = prev[folderName] || { passport: false, declaration: false };
@@ -4281,8 +4334,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    handleDismissCorrection(correctionApp.folder_name);
-                    setSelectedDraftFolder(null);
+                    setDeleteDraftTarget({
+                      folderName: correctionApp.folder_name,
+                      applicantName: correctionApp.applicant_name || correctionApp.folder_name,
+                    });
                   }}
                   className="draft-btn-dismiss"
                   style={{
@@ -4340,6 +4395,153 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Draft Attached Documents & Delete Manager */}
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  marginBottom: '20px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FileCheck style={{ width: '18px', height: '18px', color: '#16a34a' }} />
+                    <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', margin: 0 }}>
+                      Attached Files in Draft {correctionApp.files ? `(${correctionApp.files.length})` : ''}
+                    </h3>
+                  </div>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>
+                    Click file name or eye to view, trash icon to permanently delete
+                  </span>
+                </div>
+
+                {(!correctionApp.files || correctionApp.files.length === 0) ? (
+                  <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8', fontStyle: 'italic' }}>
+                    No files currently in this draft folder.
+                  </p>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '10px' }}>
+                    {correctionApp.files.map((fileName: string) => {
+                      const isImg = /\.(jpg|jpeg|png|webp)$/i.test(fileName);
+                      const isPdf = /\.pdf$/i.test(fileName);
+                      const fileUrl = automationApi.getDraftFileUrl(
+                        queryAccountEmail || activeClientEmail || '',
+                        correctionApp.folder_name,
+                        fileName,
+                        googleUserEmail
+                      );
+                      return (
+                        <div
+                          key={fileName}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            gap: '8px',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              minWidth: 0,
+                              cursor: 'pointer',
+                            }}
+                            title={`Click to view ${fileName}`}
+                            onClick={() => {
+                              if (isPdf) {
+                                setViewerModal({ isOpen: true, title: fileName, pdfUrl: fileUrl });
+                              } else if (isImg) {
+                                openImageViewer(fileName, fileUrl);
+                              } else {
+                                window.open(fileUrl, '_blank');
+                              }
+                            }}
+                          >
+                            {isImg ? (
+                              <Camera style={{ width: '16px', height: '16px', color: '#6366f1', flexShrink: 0 }} />
+                            ) : (
+                              <FileText style={{ width: '16px', height: '16px', color: '#0284c7', flexShrink: 0 }} />
+                            )}
+                            <span
+                              style={{
+                                fontSize: '12px',
+                                fontWeight: 500,
+                                color: '#1e293b',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {fileName}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isPdf) {
+                                  setViewerModal({ isOpen: true, title: fileName, pdfUrl: fileUrl });
+                                } else if (isImg) {
+                                  openImageViewer(fileName, fileUrl);
+                                } else {
+                                  window.open(fileUrl, '_blank');
+                                }
+                              }}
+                              style={{
+                                border: '1px solid #e2e8f0',
+                                background: '#ffffff',
+                                borderRadius: '6px',
+                                padding: '4px 6px',
+                                cursor: 'pointer',
+                                color: '#475569',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                              }}
+                              title="View file"
+                            >
+                              <Eye style={{ width: '13px', height: '13px' }} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteFileTarget({
+                                  folderName: correctionApp.folder_name,
+                                  filename: fileName,
+                                  applicantName: correctionApp.applicant_name,
+                                });
+                              }}
+                              style={{
+                                border: '1px solid #fecaca',
+                                background: '#fef2f2',
+                                borderRadius: '6px',
+                                padding: '4px 6px',
+                                cursor: 'pointer',
+                                color: '#dc2626',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                              }}
+                              title={`Delete ${fileName}`}
+                            >
+                              <Trash2 style={{ width: '13px', height: '13px' }} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {uploadMessage && (
@@ -5120,6 +5322,98 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           )}
                         </div>
 
+                        {draft.files && draft.files.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <FileCheck style={{ width: '13px', height: '13px', color: '#16a34a' }} />
+                              <span>Attached Documents ({draft.files.length})</span>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {draft.files.map((fileName: string) => {
+                                const isImg = /\.(jpg|jpeg|png|webp)$/i.test(fileName);
+                                const isPdf = /\.pdf$/i.test(fileName);
+                                const fileUrl = automationApi.getDraftFileUrl(
+                                  queryAccountEmail || activeClientEmail || '',
+                                  draft.folder_name,
+                                  fileName,
+                                  googleUserEmail
+                                );
+                                return (
+                                  <div
+                                    key={fileName}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '6px',
+                                      padding: '4px 8px',
+                                      background: '#f8fafc',
+                                      border: '1px solid #e2e8f0',
+                                      borderRadius: '6px',
+                                      fontSize: '11px',
+                                      color: '#334155',
+                                    }}
+                                  >
+                                    {isImg ? (
+                                      <Camera style={{ width: '12px', height: '12px', color: '#6366f1' }} />
+                                    ) : (
+                                      <FileText style={{ width: '12px', height: '12px', color: '#0284c7' }} />
+                                    )}
+                                    <span
+                                      style={{
+                                        maxWidth: '120px',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                        cursor: 'pointer',
+                                      }}
+                                      title={`Click to view ${fileName}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (isPdf) {
+                                          setViewerModal({ isOpen: true, title: fileName, pdfUrl: fileUrl });
+                                        } else if (isImg) {
+                                          openImageViewer(fileName, fileUrl);
+                                        } else {
+                                          window.open(fileUrl, '_blank');
+                                        }
+                                      }}
+                                    >
+                                      {fileName}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      title={`Delete ${fileName}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeleteFileTarget({
+                                          folderName: draft.folder_name,
+                                          filename: fileName,
+                                          applicantName: draft.applicant_name,
+                                        });
+                                      }}
+                                      style={{
+                                        border: 'none',
+                                        background: 'transparent',
+                                        cursor: 'pointer',
+                                        padding: '2px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        color: '#94a3b8',
+                                        borderRadius: '4px',
+                                        transition: 'color 0.15s',
+                                      }}
+                                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#ef4444'; }}
+                                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+                                    >
+                                      <Trash2 style={{ width: '12px', height: '12px' }} />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: 'auto', paddingTop: '8px' }}>
                           <button
                             type="button"
@@ -5140,7 +5434,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDismissCorrection(draft.folder_name)}
+                            onClick={() => setDeleteDraftTarget({ folderName: draft.folder_name, applicantName: draft.applicant_name || draft.folder_name })}
                             style={{
                               padding: '8px 12px',
                               fontSize: '13px',
@@ -6172,6 +6466,108 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 ) : (
                   <span>Yes, Cancel Application</span>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteFileTarget && (
+        <div
+          className="logout-modal-overlay"
+          onClick={() => !deletingFile && setDeleteFileTarget(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="logout-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="logout-modal-icon-wrapper" style={{ background: '#fee2e2', color: '#dc2626' }}>
+              <Trash2 className="logout-modal-icon" style={{ stroke: '#dc2626' }} />
+            </div>
+
+            <h3 className="logout-modal-title">
+              Delete File from Draft?
+            </h3>
+
+            <p className="logout-modal-subtitle">
+              Are you sure you want to permanently delete <strong>{deleteFileTarget.filename}</strong>
+              {deleteFileTarget.applicantName && (
+                <span> from the draft for <strong>{deleteFileTarget.applicantName}</strong></span>
+              )}? This file will be removed from your computer and database.
+            </p>
+
+            <div className="logout-modal-actions">
+              <button
+                type="button"
+                className="logout-modal-btn cancel-btn"
+                style={{ background: '#f1f5f9', color: '#475569', boxShadow: 'none' }}
+                disabled={deletingFile}
+                onClick={() => setDeleteFileTarget(null)}
+              >
+                Keep File
+              </button>
+              <button
+                type="button"
+                className="logout-modal-btn confirm-btn"
+                disabled={deletingFile}
+                onClick={executeDeleteDraftFile}
+                style={{ background: '#dc2626', borderColor: '#b91c1c' }}
+              >
+                {deletingFile ? (
+                  <>
+                    <RefreshCw className="animate-spin" style={{ width: '15px', height: '15px', marginRight: '6px' }} />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Yes, Delete File</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteDraftTarget && (
+        <div
+          className="logout-modal-overlay"
+          onClick={() => setDeleteDraftTarget(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="logout-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="logout-modal-icon-wrapper" style={{ background: '#fee2e2', color: '#dc2626' }}>
+              <Trash2 className="logout-modal-icon" style={{ stroke: '#dc2626' }} />
+            </div>
+
+            <h3 className="logout-modal-title">
+              Dismiss Draft Application?
+            </h3>
+
+            <p className="logout-modal-subtitle">
+              Are you sure you want to dismiss and delete the draft application for <strong>{deleteDraftTarget.applicantName || `Folder ${deleteDraftTarget.folderName}`}</strong>? All uploaded documents and form progress will be permanently removed.
+            </p>
+
+            <div className="logout-modal-actions">
+              <button
+                type="button"
+                className="logout-modal-btn cancel-btn"
+                style={{ background: '#f1f5f9', color: '#475569', boxShadow: 'none' }}
+                onClick={() => setDeleteDraftTarget(null)}
+              >
+                Keep Draft
+              </button>
+              <button
+                type="button"
+                className="logout-modal-btn confirm-btn"
+                onClick={() => executeDeleteDraft(deleteDraftTarget.folderName)}
+                style={{ background: '#dc2626', borderColor: '#b91c1c' }}
+              >
+                <span>Yes, Dismiss Draft</span>
               </button>
             </div>
           </div>
