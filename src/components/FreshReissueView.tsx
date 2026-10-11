@@ -44,6 +44,40 @@ import { PdfViewerModal } from './PdfViewerModal';
 import { ImageViewerModal } from './ImageViewerModal';
 import { InAppInfoModal } from './InAppInfoModal';
 
+export const isUserUploadedDocument = (fileName: string): boolean => {
+  if (!fileName) return false;
+  const clean = fileName.trim().toLowerCase();
+  if (clean.startsWith('.') || clean.startsWith('raw_')) return false;
+  if (
+    clean.endsWith('.json') ||
+    clean.endsWith('.lock') ||
+    clean.endsWith('.tmp') ||
+    clean.endsWith('.log') ||
+    clean.endsWith('.txt') ||
+    clean.endsWith('.bak') ||
+    clean.endsWith('.part')
+  ) {
+    return false;
+  }
+  if (
+    clean.endsWith('_preview.pdf') ||
+    clean.endsWith('_declaration.pdf') ||
+    clean.endsWith('_preview.png') ||
+    clean.endsWith('_declaration.png')
+  ) {
+    return false;
+  }
+  if (
+    clean === 'passport_preview.pdf' ||
+    clean === 'self_declaration_preview.pdf' ||
+    clean === 'submission_receipt.pdf' ||
+    clean === 'application_form.pdf'
+  ) {
+    return false;
+  }
+  return /\.(pdf|jpg|jpeg|png|webp|tiff|bmp)$/i.test(clean);
+};
+
 export type DocSlotKey =
   | 'photo'
   | 'sign'
@@ -3522,6 +3556,46 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     });
   };
 
+  const attachedDraftFiles = useMemo(() => {
+    return (correctionApp?.files || []).filter(isUserUploadedDocument);
+  }, [correctionApp?.files]);
+
+  const isDraftAlreadySubmittedWaiting = Boolean(
+    (submissionTracker?.active && submissionTracker.folderName === correctionApp?.folder_name) ||
+    correctionApp?.status === 'FILLING_PORTAL' ||
+    correctionApp?.status === 'EXTRACTING' ||
+    correctionApp?.status === 'PROCESSING' ||
+    (correctionApp?.stage && /preview/i.test(correctionApp.stage) && correctionApp?.status !== 'PENDING_CONFIRMATION') ||
+    (uploadMessage?.type === 'success' && uploadMessage?.text?.toLowerCase().includes('waiting for preview'))
+  );
+
+  const isDraftAlreadyInPreview = Boolean(
+    correctionApp?.status === 'PENDING_CONFIRMATION' ||
+    correctionApp?.status === 'PREVIEW_READY' ||
+    correctionApp?.is_in_preview ||
+    correctionApp?.has_passport_preview
+  );
+
+  const hasMissingFieldsInDraft = Boolean(
+    hasGeneralMissing ||
+    hasIndianAddressMissing ||
+    hasItalianAddressMissing ||
+    hasPassportMissing ||
+    otherMissingFields.length > 0
+  );
+
+  const hasActionableErrorInDraft = Boolean(
+    correctionApp?.error_type === 'PORTAL_FORM_ERROR' ||
+    correctionApp?.error_type === 'STAGE1_7_FAILED' ||
+    correctionApp?.status === 'ERROR'
+  );
+
+  const hasFormEditsInDraft = Object.values(correctionFormData).some(val => Boolean(val && String(val).trim()));
+
+  const isDraftUpdateRequired = !isDraftAlreadySubmittedWaiting && !isDraftAlreadyInPreview && (hasMissingFieldsInDraft || hasActionableErrorInDraft || hasFormEditsInDraft);
+
+  const isSaveBtnDisabled = isSubmittingCorrection || !isDraftUpdateRequired;
+
   return (
     <div className="fresh-reissue-container">
 
@@ -4380,7 +4454,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <FileCheck style={{ width: '18px', height: '18px', color: '#16a34a' }} />
                     <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', margin: 0 }}>
-                      Attached Files in Draft {correctionApp.files ? `(${correctionApp.files.length})` : ''}
+                      Attached Files in Draft {attachedDraftFiles.length > 0 ? `(${attachedDraftFiles.length})` : ''}
                     </h3>
                   </div>
                   <span style={{ fontSize: '12px', color: '#64748b' }}>
@@ -4388,13 +4462,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   </span>
                 </div>
 
-                {(!correctionApp.files || correctionApp.files.length === 0) ? (
+                {attachedDraftFiles.length === 0 ? (
                   <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8', fontStyle: 'italic' }}>
-                    No files currently in this draft folder.
+                    No uploaded document files currently in this draft folder.
                   </p>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '10px' }}>
-                    {correctionApp.files.map((fileName: string) => {
+                    {attachedDraftFiles.map((fileName: string) => {
                       const isImg = /\.(jpg|jpeg|png|webp)$/i.test(fileName);
                       const isPdf = /\.pdf$/i.test(fileName);
                       const fileUrl = automationApi.getDraftFileUrl(
@@ -5093,7 +5167,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   <div className="empty-correction-notice" style={{ padding: '16px', color: '#64748b', textAlign: 'center', fontSize: '13px' }}>
                     {correctionApp.error_type === 'PORTAL_FORM_ERROR' || correctionApp.error_type === 'STAGE1_7_FAILED'
                       ? 'Portal form reported an issue. Click below to verify and retry submission.'
-                      : 'All required fields are verified. Click Save & Start Filling Form to resume.'}
+                      : isDraftAlreadySubmittedWaiting
+                        ? 'File has already been submitted for preview and is currently being processed by the system. No updates are required at this stage.'
+                        : isDraftAlreadyInPreview
+                          ? 'This application has completed preview generation and is ready in the Preview section. No updates are required.'
+                          : 'All required fields are verified. Click Save & Start Filling Form to resume.'}
                   </div>
                 )}
 
@@ -5116,6 +5194,17 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   >
                     Back to All Drafts
                   </button>
+                  {isDraftAlreadyInPreview && (
+                    <button
+                      type="button"
+                      onClick={() => onSectionChange('preview')}
+                      className="submit-btn"
+                      style={{ background: '#16a34a', borderColor: '#15803d', color: '#ffffff', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Eye style={{ width: '15px', height: '15px' }} />
+                      <span>View in Preview</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleClearMissingFields}
@@ -5125,13 +5214,43 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmittingCorrection}
+                    disabled={isSaveBtnDisabled}
                     className="submit-btn save-correction-btn"
+                    style={isSaveBtnDisabled && !isSubmittingCorrection ? {
+                      background: '#cbd5e1',
+                      borderColor: '#94a3b8',
+                      color: '#475569',
+                      cursor: 'not-allowed',
+                      opacity: 0.85,
+                      boxShadow: 'none',
+                    } : {}}
+                    title={isSaveBtnDisabled && !isSubmittingCorrection ? (
+                      isDraftAlreadySubmittedWaiting
+                        ? 'File already submitted. Waiting for preview to complete.'
+                        : isDraftAlreadyInPreview
+                          ? 'Application already in Preview. No updates required.'
+                          : 'All fields are already verified. Enter an update to enable.'
+                    ) : undefined}
                   >
                     {isSubmittingCorrection ? (
                       <>
                         <RefreshCw className="submit-icon animate-spin" />
                         <span>Saving &amp; Resuming...</span>
+                      </>
+                    ) : isDraftAlreadySubmittedWaiting ? (
+                      <>
+                        <Clock className="submit-icon animate-pulse" style={{ color: '#475569' }} />
+                        <span>File Submitted — Waiting for Preview...</span>
+                      </>
+                    ) : isDraftAlreadyInPreview ? (
+                      <>
+                        <CheckCircle2 className="submit-icon" style={{ color: '#16a34a' }} />
+                        <span>Submitted for Preview (No Update Required)</span>
+                      </>
+                    ) : !isDraftUpdateRequired ? (
+                      <>
+                        <CheckCircle2 className="submit-icon" style={{ color: '#475569' }} />
+                        <span>All Fields Verified (No Update Required)</span>
                       </>
                     ) : (
                       <>
@@ -5290,97 +5409,101 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           )}
                         </div>
 
-                        {draft.files && draft.files.length > 0 && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                              <FileCheck style={{ width: '13px', height: '13px', color: '#16a34a' }} />
-                              <span>Attached Documents ({draft.files.length})</span>
-                            </div>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                              {draft.files.map((fileName: string) => {
-                                const isImg = /\.(jpg|jpeg|png|webp)$/i.test(fileName);
-                                const isPdf = /\.pdf$/i.test(fileName);
-                                const fileUrl = automationApi.getDraftFileUrl(
-                                  queryAccountEmail || activeClientEmail || '',
-                                  draft.folder_name,
-                                  fileName,
-                                  googleUserEmail
-                                );
-                                return (
-                                  <div
-                                    key={fileName}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '6px',
-                                      padding: '4px 8px',
-                                      background: '#f8fafc',
-                                      border: '1px solid #e2e8f0',
-                                      borderRadius: '6px',
-                                      fontSize: '11px',
-                                      color: '#334155',
-                                    }}
-                                  >
-                                    {isImg ? (
-                                      <Camera style={{ width: '12px', height: '12px', color: '#6366f1' }} />
-                                    ) : (
-                                      <FileText style={{ width: '12px', height: '12px', color: '#0284c7' }} />
-                                    )}
-                                    <span
+                        {(() => {
+                          const userAttachedFiles = (draft.files || []).filter(isUserUploadedDocument);
+                          if (userAttachedFiles.length === 0) return null;
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <div style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <FileCheck style={{ width: '13px', height: '13px', color: '#16a34a' }} />
+                                <span>Attached Documents ({userAttachedFiles.length})</span>
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                {userAttachedFiles.map((fileName: string) => {
+                                  const isImg = /\.(jpg|jpeg|png|webp)$/i.test(fileName);
+                                  const isPdf = /\.pdf$/i.test(fileName);
+                                  const fileUrl = automationApi.getDraftFileUrl(
+                                    queryAccountEmail || activeClientEmail || '',
+                                    draft.folder_name,
+                                    fileName,
+                                    googleUserEmail
+                                  );
+                                  return (
+                                    <div
+                                      key={fileName}
                                       style={{
-                                        maxWidth: '120px',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                        cursor: 'pointer',
-                                      }}
-                                      title={`Click to view ${fileName}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (isPdf) {
-                                          setViewerModal({ isOpen: true, title: fileName, pdfUrl: fileUrl });
-                                        } else if (isImg) {
-                                          openImageViewer(fileName, fileUrl);
-                                        } else {
-                                          window.open(fileUrl, '_blank');
-                                        }
-                                      }}
-                                    >
-                                      {fileName}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      title={`Delete ${fileName}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setDeleteFileTarget({
-                                          folderName: draft.folder_name,
-                                          filename: fileName,
-                                          applicantName: draft.applicant_name,
-                                        });
-                                      }}
-                                      style={{
-                                        border: 'none',
-                                        background: 'transparent',
-                                        cursor: 'pointer',
-                                        padding: '2px',
                                         display: 'inline-flex',
                                         alignItems: 'center',
-                                        color: '#94a3b8',
-                                        borderRadius: '4px',
-                                        transition: 'color 0.15s',
+                                        gap: '6px',
+                                        padding: '4px 8px',
+                                        background: '#f8fafc',
+                                        border: '1px solid #e2e8f0',
+                                        borderRadius: '6px',
+                                        fontSize: '11px',
+                                        color: '#334155',
                                       }}
-                                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#ef4444'; }}
-                                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
                                     >
-                                      <Trash2 style={{ width: '12px', height: '12px' }} />
-                                    </button>
-                                  </div>
-                                );
-                              })}
+                                      {isImg ? (
+                                        <Camera style={{ width: '12px', height: '12px', color: '#6366f1' }} />
+                                      ) : (
+                                        <FileText style={{ width: '12px', height: '12px', color: '#0284c7' }} />
+                                      )}
+                                      <span
+                                        style={{
+                                          maxWidth: '120px',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap',
+                                          cursor: 'pointer',
+                                        }}
+                                        title={`Click to view ${fileName}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (isPdf) {
+                                            setViewerModal({ isOpen: true, title: fileName, pdfUrl: fileUrl });
+                                          } else if (isImg) {
+                                            openImageViewer(fileName, fileUrl);
+                                          } else {
+                                            window.open(fileUrl, '_blank');
+                                          }
+                                        }}
+                                      >
+                                        {fileName}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        title={`Delete ${fileName}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDeleteFileTarget({
+                                            folderName: draft.folder_name,
+                                            filename: fileName,
+                                            applicantName: draft.applicant_name,
+                                          });
+                                        }}
+                                        style={{
+                                          border: 'none',
+                                          background: 'transparent',
+                                          cursor: 'pointer',
+                                          padding: '2px',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          color: '#94a3b8',
+                                          borderRadius: '4px',
+                                          transition: 'color 0.15s',
+                                        }}
+                                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#ef4444'; }}
+                                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#94a3b8'; }}
+                                      >
+                                        <Trash2 style={{ width: '12px', height: '12px' }} />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: 'auto', paddingTop: '8px' }}>
                           <button
