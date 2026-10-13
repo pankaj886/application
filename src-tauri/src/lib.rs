@@ -269,7 +269,7 @@ fn apply_update_and_restart(app_handle: tauri::AppHandle, installer_path: String
         let app_exe = format!(r"{}\Foreigners Studio\foreigners_studio.exe", local_app_data);
 
         let ps_cmd = format!(
-            "Start-Process -FilePath '{}' -ArgumentList '/S' -Wait; Start-Process -FilePath '{}'",
+            "Start-Sleep -Milliseconds 1200; Get-Process -Name 'foreigners_studio' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 400; Start-Process -FilePath '{}' -ArgumentList '/S' -Wait; Start-Sleep -Milliseconds 600; Start-Process -FilePath '{}'",
             installer_path, app_exe
         );
 
@@ -893,7 +893,7 @@ pub struct LocalFileInfo {
     pub data: Vec<u8>,
 }
 
-const MAX_UPLOAD_FILE_BYTES: u64 = 10 * 1024 * 1024;
+const MAX_UPLOAD_FILE_BYTES: u64 = 20 * 1024 * 1024;
 
 #[tauri::command]
 async fn read_local_file(path: String) -> Result<LocalFileInfo, String> {
@@ -906,7 +906,7 @@ async fn read_local_file(path: String) -> Result<LocalFileInfo, String> {
         .unwrap_or_else(|| "file".to_string());
     let meta = std::fs::metadata(p).map_err(|e| format!("Failed to inspect file {}: {}", path, e))?;
     if meta.len() > MAX_UPLOAD_FILE_BYTES {
-        return Err(format!("File \"{}\" exceeds the 10 MB maximum size limit.", name));
+        return Err(format!("File \"{}\" exceeds the 20 MB maximum size limit.", name));
     }
     let data = std::fs::read(p).map_err(|e| format!("Failed to read file {}: {}", path, e))?;
     Ok(LocalFileInfo { name, data })
