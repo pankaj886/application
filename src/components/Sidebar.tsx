@@ -44,7 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   previewCount = 0,
   completedCount = 0,
 }) => {
-  const [appVersion, setAppVersion] = useState<string>('1.0.85');
+  const [appVersion, setAppVersion] = useState<string>('1.0.86');
 
   useEffect(() => {
     invoke<string>('get_app_version')
