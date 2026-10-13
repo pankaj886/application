@@ -1368,7 +1368,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setCompleted(comps);
 
       const activeTracker = submissionTrackerRef.current;
-      const matchesTrackerFolder = (item: { folder_name?: string; original_folder?: string; applicant_name?: string; arn?: string }) => {
+      const matchesTrackerFolder = (item: { folder_name?: string; original_folder?: string; applicant_name?: string; arn?: string }, allowNameFallback = false) => {
         if (!activeTracker) return false;
         const tf = (activeTracker.folderName || '').trim().toLowerCase();
         const of = (activeTracker.originalFolder || '').trim().toLowerCase();
@@ -1379,6 +1379,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         if (ta && itemArn && ta === itemArn) return true;
         if (tf && (itemFolder === tf || itemOrig === tf)) return true;
         if (of && (itemFolder === of || itemOrig === of)) return true;
+        if (allowNameFallback && activeTracker.applicantName) {
+          const tn = activeTracker.applicantName.trim().toLowerCase();
+          const iname = (item.applicant_name || '').trim().toLowerCase();
+          if (tn && iname && tn === iname) return true;
+        }
         return false;
       };
 
@@ -1404,25 +1409,35 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
       const activeProcessingApp = apps.find(a =>
         ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status) &&
-        matchesTrackerFolder(a)
+        matchesTrackerFolder(a, true)
       );
 
       // Check if this specific tracked application requires correction (missing information)
-      const matchingCorrectionApp = apps.find(a => a.status === 'NEEDS_CORRECTION' && matchesTrackerFolder(a));
+      const matchingCorrectionApp = apps.find(a => a.status === 'NEEDS_CORRECTION' && matchesTrackerFolder(a, true));
 
       const currentPreviewFolders = new Set((prevs || []).map(p => p.folder_name));
       prevPreviewFoldersRef.current = currentPreviewFolders;
 
       // Find matching preview strictly for this application
-      let matchingPreview = (prevs || []).find(p => matchesTrackerFolder(p));
-      if (!matchingPreview) {
-        const readyApp = apps.find(a => a.status === 'PENDING_CONFIRMATION' && matchesTrackerFolder(a));
-        if (readyApp) {
-          matchingPreview = (prevs || []).find(p => p.folder_name === readyApp.folder_name);
-        }
+      let matchingPreview = (prevs || []).find(p => matchesTrackerFolder(p, true));
+      const readyApp = apps.find(a => (a.status === 'PENDING_CONFIRMATION' || a.status === 'READY_FOR_PREVIEW') && matchesTrackerFolder(a, true));
+      if (!matchingPreview && readyApp) {
+        matchingPreview = (prevs || []).find(p => p.folder_name === readyApp.folder_name) || ({
+          folder_name: readyApp.folder_name,
+          original_folder: (readyApp as any).original_folder,
+          applicant_name: readyApp.applicant_name,
+          arn: readyApp.arn,
+          status: readyApp.status,
+          stage: readyApp.stage || 'Preview Ready!',
+          progress: 100,
+          service_type: readyApp.service_type,
+          portal_email: (readyApp as any).portal_email,
+          passport_preview_url: '',
+          declaration_preview_url: '',
+        } as PreviewItem);
       }
 
-      const matchingErrorApp = apps.find(a => a.status === 'ERROR' && matchesTrackerFolder(a));
+      const matchingErrorApp = apps.find(a => a.status === 'ERROR' && matchesTrackerFolder(a, true));
 
       if (matchingCorrectionApp) {
         // Freeze tracker at extraction % and show missing info alert — NEVER jump to 100% or clear tracker!
@@ -1442,8 +1457,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             startedAt: prev?.startedAt || Date.now(),
           };
         });
-      } else if (matchingPreview && matchesTrackerFolder(matchingPreview)) {
+      } else if (matchingPreview || readyApp) {
         // Only mark ready when preview actually belongs to this application and is generated
+        const pItem = matchingPreview || readyApp!;
         setUploadMessage(null);
         setSubmissionTracker(prev => {
           if (prev && prev.active) {
@@ -1452,12 +1468,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               ready: true,
               isMissingInfo: false,
               isError: false,
-              folderName: matchingPreview.folder_name,
-              originalFolder: prev.originalFolder || prev.folderName,
-              arn: matchingPreview.arn,
+              folderName: pItem.folder_name,
+              originalFolder: (pItem as any).original_folder || prev.originalFolder || prev.folderName,
+              arn: pItem.arn || prev.arn,
               percent: 100,
               stageText: 'Preview Ready!',
-              applicantName: matchingPreview.applicant_name || prev.applicantName || matchingPreview.folder_name,
+              applicantName: pItem.applicant_name || prev.applicantName || pItem.folder_name,
               startedAt: prev.startedAt,
             };
           }
@@ -1482,9 +1498,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             isMissingInfo: false,
             folderName: activeProcessingApp.folder_name || prev?.folderName,
             originalFolder: (activeProcessingApp as any).original_folder || prev?.originalFolder || prev?.folderName,
+            arn: activeProcessingApp.arn || prev?.arn,
             isError: false,
             percent: targetPct,
-            stageText: activeProcessingApp.stage || 'Processing application on backend...',
+            stageText: activeProcessingApp.stage || (
+              activeProcessingApp.status === 'UPLOADED' ? 'Extracting details from uploaded documents...' :
+              activeProcessingApp.status === 'EXTRACTING' ? 'Analyzing & extracting applicant documents...' :
+              activeProcessingApp.status === 'EXTRACTED' ? 'Documents parsed successfully' :
+              'Submitting Stages 1-7 to Passport Portal API...'
+            ),
             applicantName: activeProcessingApp.applicant_name || activeProcessingApp.folder_name,
             startedAt: prev?.startedAt || Date.now(),
           };
@@ -3561,9 +3583,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   }, [uploadMessage]);
 
   useEffect(() => {
-    if (currentSection !== 'form') {
-      setUploadMessage(null);
-    }
+    setUploadMessage(null);
   }, [currentSection]);
 
   useEffect(() => {
@@ -3892,11 +3912,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         ? `Preview Ready!${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
                         : submissionTracker.isMissingInfo
                         ? `Information Required${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
-                        : `File submitted, waiting for preview...${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`}
+                        : (submissionTracker.stageText && !submissionTracker.stageText.toLowerCase().includes('waiting for preview')
+                            ? `${submissionTracker.stageText}${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}`
+                            : `Processing Application${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}...`)}
                     </div>
                     {!submissionTracker.ready &&
                       submissionTracker.stageText &&
-                      submissionTracker.stageText !== 'File submitted, waiting for preview...' && (
+                      !submissionTracker.stageText.toLowerCase().includes('waiting for preview') &&
+                      submissionTracker.stageText !== 'Extracting details from uploaded documents...' &&
+                      submissionTracker.stageText !== 'Processing application on backend...' && (
                       <div style={{ fontSize: '12px', fontWeight: 500, color: submissionTracker.isError ? '#b91c1c' : submissionTracker.isMissingInfo ? '#92400e' : '#475569', marginTop: '2px' }}>
                         {submissionTracker.stageText}
                       </div>
@@ -4081,7 +4105,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
             <div className="fresh-form-card">
 
-              {uploadMessage && !portalErrorApp && !submissionTracker?.active && currentSection === 'form' && (
+              {uploadMessage && !portalErrorApp && !submissionTracker?.active && currentSection === 'form' && !uploadMessage.text.toLowerCase().includes('waiting for preview') && !uploadMessage.text.toLowerCase().includes('file submitted') && (
                 <div className={`form-alert ${uploadMessage.type === 'success' ? 'alert-success' : 'alert-error'}`}>
                   {uploadMessage.type === 'success' ? (
                     <Clock className="alert-icon animate-pulse" />
