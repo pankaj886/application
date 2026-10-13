@@ -369,8 +369,8 @@ jobs:
 
       - name: Generate latest.json Manifest for Auto-Updater
         run: |
-          TAG_NAME="v1.0.81"
-          VERSION="1.0.81"
+          VERSION=$(node -p "require('./package.json').version")
+          TAG_NAME="v${VERSION}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
           cat << EOF > release-assets/latest.json
@@ -390,15 +390,17 @@ jobs:
           EOF
           echo "Generated release-assets/latest.json:"
           cat release-assets/latest.json
+          echo "RELEASE_TAG=${TAG_NAME}" >> $GITHUB_ENV
+          echo "RELEASE_VERSION=${VERSION}" >> $GITHUB_ENV
 
       - name: Publish Release Assets to Public Releases Repository
         uses: softprops/action-gh-release@v2
         with:
           repository: pankaj886/foreigners-studio-releases
           token: ${{ secrets.RELEASES_REPO_TOKEN || secrets.GITHUB_TOKEN }}
-          tag_name: v1.0.81
-          name: Foreigners Studio v1.0.81
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Foreigners Studio ${{ env.RELEASE_TAG }}
           files: release-assets/*
           draft: false
           prerelease: false
-          generate_release_notes: true
+          generate_release_notes: false
