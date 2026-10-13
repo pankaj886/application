@@ -1176,6 +1176,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     ready: boolean;
     folderName?: string;
     originalFolder?: string;
+    arn?: string;
     isError?: boolean;
     errorType?: string;
     isMissingInfo?: boolean;
@@ -1270,6 +1271,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         status === 'EXTRACTING' ||
         status === 'EXTRACTED' ||
         status === 'FILLING_PORTAL' ||
+        status === 'SUBMITTING_PORTAL' ||
         status === 'PROCESSING' ||
         status === 'UPLOADING')
       ) {
@@ -1293,6 +1295,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     [key: string]: { passport: boolean; declaration: boolean };
   }>({});
   const [submittingArn, setSubmittingArn] = useState<string | null>(null);
+  const submittingPreviewRef = useRef<PreviewItem | null>(null);
   const [reuploadFiles, setReuploadFiles] = useState<Record<string, File | null>>({});
   const [reuploadingFolder, setReuploadingFolder] = useState<string | null>(null);
 
@@ -1364,15 +1367,21 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setCompleted(comps);
 
       const activeTracker = submissionTrackerRef.current;
-      const matchesTrackerFolder = (item: { folder_name?: string; original_folder?: string; applicant_name?: string }) => {
+      const matchesTrackerFolder = (item: { folder_name?: string; original_folder?: string; applicant_name?: string; arn?: string }) => {
         if (!activeTracker) return false;
         const tf = (activeTracker.folderName || '').trim().toLowerCase();
         const of = (activeTracker.originalFolder || '').trim().toLowerCase();
+        const an = (activeTracker.applicantName || '').trim().toLowerCase();
+        const ta = (activeTracker.arn || '').trim().toLowerCase();
         const itemFolder = (item.folder_name || '').trim().toLowerCase();
         const itemOrig = ((item as any).original_folder || '').trim().toLowerCase();
-        // Strictly match by exact folder name or original folder name — NEVER match by applicant_name to avoid cross-folder collisions
+        const itemApp = ((item as any).applicant_name || '').trim().toLowerCase();
+        const itemArn = ((item as any).arn || '').trim().toLowerCase();
+        if (ta && itemArn && ta === itemArn) return true;
         if (tf && (itemFolder === tf || itemOrig === tf)) return true;
         if (of && (itemFolder === of || itemOrig === of)) return true;
+        if (an && itemApp && (an === itemApp || itemApp.includes(an) || an.includes(itemApp))) return true;
+        if (an && itemFolder && (an === itemFolder || itemFolder.includes(an) || an.includes(itemFolder))) return true;
         return false;
       };
 
@@ -1382,7 +1391,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
 
       // If the currently tracked folder was explicitly dismissed, abort tracker immediately
-      if (activeTracker.folderName && (dismissedFoldersRef.current.has(activeTracker.folderName) || dismissedFoldersRef.current.has(activeTracker.folderName.toLowerCase()))) {
+      // CRITICAL: If this tracked folder has been completed (submitted to portal), clear tracker immediately so it NEVER lingers on Home page with "Open Preview"!
+      const isAlreadyCompleted = (comps || []).some(c => matchesTrackerFolder(c)) || (apps || []).some(a => a.status === 'COMPLETED' && matchesTrackerFolder(a));
+      if (isAlreadyCompleted) {
         submissionTrackerRef.current = null;
         _setSubmissionTracker(null);
         return;
@@ -1440,6 +1451,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               isError: false,
               folderName: matchingPreview.folder_name,
               originalFolder: prev.originalFolder || prev.folderName,
+              arn: matchingPreview.arn,
               percent: 100,
               stageText: 'Preview Ready!',
               applicantName: matchingPreview.applicant_name || prev.applicantName || matchingPreview.folder_name,
@@ -1497,6 +1509,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       } else {
         setSubmissionTracker(prev => {
           if (isUploadingRef.current) return prev;
+          // If the tracker was marked ready (waiting for preview), but preview is no longer in pending previews or apps (e.g. submitted): clear it immediately!
+          if (prev?.ready && !matchingPreview) {
+            return null;
+          }
           if (prev && Date.now() - prev.startedAt > 30000 && !prev.folderName && !prev.ready && !prev.isMissingInfo) {
             return null;
           }
@@ -3258,11 +3274,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setDismissedCorrectionFolder(cleanKey);
       setApplications(prev => prev.filter(a => (a.folder_name || '').trim().toLowerCase() !== cleanKey.toLowerCase()));
 
-      // 3. Fire async non-blocking delete to server
+      // 3. Fire delete to server and synchronize all data
       const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
-      automationApi.dismissApplication(email, cleanKey, googleUserEmail).catch(err => {
-        console.warn('Server dismiss warning:', err);
-      });
+      automationApi.dismissApplication(email, cleanKey, googleUserEmail)
+        .then(async () => {
+          await refreshAllData();
+        })
+        .catch(err => {
+          console.warn('Server dismiss warning:', err);
+        });
+
     }
   };
 
@@ -3355,12 +3376,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     });
   };
 
-  const handleConfirmFinalSubmit = async (folderName: string, arn: string) => {
+  const handleConfirmFinalSubmit = async (folderName: string, arn: string, previewItem?: PreviewItem) => {
     if (voiceProcessingFolder) return;
     try {
+      if (previewItem) {
+        submittingPreviewRef.current = previewItem;
+      }
       setSubmittingArn(arn);
+      // Immediately clear Home page submission tracker so it NEVER lingers with "Open Preview"
+      submissionTrackerRef.current = null;
+      _setSubmissionTracker(null);
+
       const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
       await automationApi.confirmSubmission(email, folderName, arn, googleUserEmail);
+
+      submissionTrackerRef.current = null;
+      _setSubmissionTracker(null);
       await refreshAllData();
       onSectionChange('submitted');
     } catch (err: any) {
@@ -3371,6 +3402,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       });
       await refreshAllData();
     } finally {
+      submittingPreviewRef.current = null;
       setSubmittingArn(null);
     }
   };
@@ -3879,7 +3911,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                     <>
                       <button
                         type="button"
-                        onClick={() => onSectionChange('preview')}
+                        onClick={() => {
+                          submissionTrackerRef.current = null;
+                          setSubmissionTracker(null);
+                          onSectionChange('preview');
+                        }}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -5756,11 +5792,21 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       )}
 
       {currentSection === 'preview' && (() => {
-        const displayedPreviews = previews.filter(p => {
+        let displayedPreviews = previews.filter(p => {
           if (previewFilter === 'fresh') return (p.service_type || '').toLowerCase() === 'fresh';
           if (previewFilter === 'reissue') return (p.service_type || 'reissue').toLowerCase() !== 'fresh';
           return true;
         });
+
+        // Ensure currently submitting card stays firmly pinned during the submission process until complete
+        if (submittingArn && submittingPreviewRef.current) {
+          const itemArn = submittingPreviewRef.current.arn;
+          const itemFname = submittingPreviewRef.current.folder_name;
+          const exists = displayedPreviews.some(p => (itemArn && p.arn === itemArn) || (itemFname && p.folder_name === itemFname));
+          if (!exists) {
+            displayedPreviews = [submittingPreviewRef.current, ...displayedPreviews];
+          }
+        }
 
         const reissueCount = previews.filter(p => (p.service_type || 'reissue').toLowerCase() !== 'fresh').length;
         const freshCount = previews.filter(p => (p.service_type || '').toLowerCase() === 'fresh').length;
@@ -5937,7 +5983,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 const isUpdatingThis = voiceProcessingFolder === folderKey;
                 const isAnyUpdating = Boolean(voiceProcessingFolder);
                 const canSubmit = selection.passport && selection.declaration && !isUpdatingThis && !isAnyUpdating;
-                const isSubmittingThis = submittingArn === item.arn || reuploadingFolder === folderKey;
+                const isSubmittingThis = submittingArn === item.arn || (item as any).status === 'SUBMITTING_PORTAL' || reuploadingFolder === folderKey;
                 const appMatch = applications.find(a => a.folder_name === item.folder_name || (item.arn && a.arn === item.arn));
                 const liveProgress = (typeof appMatch?.progress === 'number' && appMatch.progress > 0) ? appMatch.progress : item.progress;
                 const liveStage = appMatch?.stage || item.stage;
@@ -6482,7 +6528,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         <button
                           type="button"
                           disabled={!canSubmit || isSubmittingThis || cancellingFolder === folderKey || isUpdatingThis || isAnyUpdating}
-                          onClick={() => handleConfirmFinalSubmit(folderKey, item.arn)}
+                          onClick={() => handleConfirmFinalSubmit(folderKey, item.arn, item)}
                           className={`final-submit-btn ${canSubmit && !isSubmittingThis ? 'enabled' : 'disabled'}`}
                         >
                           {isUpdatingThis ? (
