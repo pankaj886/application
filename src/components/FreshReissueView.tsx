@@ -185,20 +185,20 @@ export const SLOT_CATALOG: Record<DocSlotKey, DocSlotDef> = {
   father_passport: {
     key: 'father_passport',
     title: "Father's Document *",
-    badge: 'Passport/PDS/C.C.I.E./Ospiti',
+    badge: 'Passport/PDS/CIE/Ospiti',
     accept: '.pdf,image/jpeg,image/png,image/jpg',
     canonicalName: 'father_document.pdf',
     iconName: 'users',
-    description: 'Passport/PDS/C.C.I.E./Ospiti',
+    description: 'Passport/PDS/CIE/Ospiti',
   },
   mother_passport: {
     key: 'mother_passport',
     title: "Mother's Document *",
-    badge: 'Passport/PDS/C.C.I.E./Ospiti',
+    badge: 'Passport/PDS/CIE/Ospiti',
     accept: '.pdf,image/jpeg,image/png,image/jpg',
     canonicalName: 'mother_document.pdf',
     iconName: 'users',
-    description: 'Passport/PDS/C.C.I.E./Ospiti',
+    description: 'Passport/PDS/CIE/Ospiti',
   },
   annexure_d: {
     key: 'annexure_d',
@@ -1181,6 +1181,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     errorType?: string;
     isMissingInfo?: boolean;
     percent: number;
+    targetPercent?: number;
     stageText: string;
     applicantName?: string;
     startedAt: number;
@@ -1195,6 +1196,43 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     submissionTrackerRef.current = next;
     _setSubmissionTracker(next);
   };
+
+  const [finalSubmitProgress, setFinalSubmitProgress] = useState<number>(0);
+
+  // Smooth adaptive progress ticker that increments percentages continuously in real time
+  useEffect(() => {
+    if (!submissionTracker?.active || submissionTracker.ready || submissionTracker.isError || submissionTracker.isMissingInfo) {
+      return;
+    }
+    const interval = setInterval(() => {
+      _setSubmissionTracker(prev => {
+        if (!prev || !prev.active || prev.ready || prev.isError || prev.isMissingInfo) return prev;
+        const current = prev.percent;
+        const target = prev.targetPercent || Math.max(current, 20);
+
+        if (current < target) {
+          const diff = target - current;
+          const step = diff > 25 ? 3 : diff > 12 ? 2 : 1;
+          const next = Math.min(target, current + step);
+          const updated = { ...prev, percent: next };
+          submissionTrackerRef.current = updated;
+          return updated;
+        } else if (current < 95 && target < 95) {
+          const now = Date.now();
+          const lastTick = (prev as any)._lastTick || 0;
+          const tickInterval = current < 45 ? 1200 : current < 75 ? 850 : 1500;
+          if (now - lastTick >= tickInterval) {
+            const next = Math.min(95, current + 1);
+            const updated = { ...prev, percent: next, _lastTick: now } as any;
+            submissionTrackerRef.current = updated;
+            return updated;
+          }
+        }
+        return prev;
+      });
+    }, 100);
+    return () => clearInterval(interval);
+  }, [submissionTracker?.active, submissionTracker?.ready, submissionTracker?.isError, submissionTracker?.isMissingInfo]);
   const [quota, setQuota] = useState<QuotaInfo | null>(null);
   const prevPreviewFoldersRef = useRef<Set<string>>(new Set());
 
@@ -1367,7 +1405,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setPreviews(prevs);
       setCompleted(comps);
 
-      const activeTracker = submissionTrackerRef.current;
+      let activeTracker = submissionTrackerRef.current;
+      const isGenericNumber = (s?: string) => Boolean(s && /^\d+$/.test(s.trim()));
+
       const matchesTrackerFolder = (item: { folder_name?: string; original_folder?: string; applicant_name?: string; arn?: string }, allowNameFallback = false) => {
         if (!activeTracker) return false;
         const tf = (activeTracker.folderName || '').trim().toLowerCase();
@@ -1387,19 +1427,49 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         return false;
       };
 
-      // ONLY track an application if the user currently initiated an active submission in this session!
+      // Auto-adopt active in-flight or correction application if tracker wasn't set or page was refreshed
       if (!activeTracker || !activeTracker.active) {
-        return;
+        const inFlightApp = apps.find(a =>
+          ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL', 'NEEDS_CORRECTION'].includes(a.status) &&
+          !dismissedFoldersRef.current.has(a.folder_name)
+        );
+        if (inFlightApp) {
+          const isCorrection = inFlightApp.status === 'NEEDS_CORRECTION';
+          const initPct = isCorrection ? 45 : (inFlightApp.status === 'FILLING_PORTAL' ? 70 : inFlightApp.status === 'EXTRACTED' ? 48 : 20);
+          const adopted: SubmissionTrackerState = {
+            active: true,
+            ready: false,
+            isMissingInfo: isCorrection,
+            folderName: inFlightApp.folder_name,
+            originalFolder: (inFlightApp as any).original_folder || inFlightApp.folder_name,
+            arn: inFlightApp.arn,
+            percent: initPct,
+            targetPercent: isCorrection ? 45 : (inFlightApp.status === 'FILLING_PORTAL' ? 85 : 48),
+            stageText: inFlightApp.stage || (isCorrection ? 'Required details missing — please complete the fields below to resume.' : 'Processing application...'),
+            applicantName: inFlightApp.applicant_name || inFlightApp.folder_name,
+            startedAt: Date.now() - 10000,
+          };
+          submissionTrackerRef.current = adopted;
+          _setSubmissionTracker(adopted);
+          activeTracker = adopted;
+        } else {
+          return;
+        }
       }
 
-      // If the currently tracked folder was explicitly dismissed, abort tracker immediately
-      // CRITICAL: If this tracked folder has been completed (submitted to portal), clear tracker immediately so it NEVER lingers on Home page with "Open Preview"!
+      // If this application was completed (submitted to portal), clear tracker so it never lingers
+      // CRITICAL: Never match generic numbers like "1" against completed records!
+      // CRITICAL: If the application is actively present in apps with in-flight status, it is NEVER completed!
       const hasCompletedArn = Boolean(activeTracker.arn && (comps || []).some(c => c.arn && c.arn === activeTracker.arn));
-      const hasCompletedFolder = Boolean(
-        (activeTracker.folderName || activeTracker.originalFolder) &&
-        (comps || []).some(c => matchesTrackerFolder(c))
+      const hasCompletedNamedFolder = Boolean(
+        activeTracker.folderName && !isGenericNumber(activeTracker.folderName) &&
+        (comps || []).some(c => c.folder_name && c.folder_name.toLowerCase() === activeTracker.folderName!.toLowerCase())
       );
-      const isAlreadyCompleted = hasCompletedArn || hasCompletedFolder;
+      const isCurrentlyInFlight = apps.some(a =>
+        ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL', 'NEEDS_CORRECTION', 'PENDING_CONFIRMATION', 'READY_FOR_PREVIEW'].includes(a.status) &&
+        matchesTrackerFolder(a, true)
+      );
+      const isAlreadyCompleted = !isCurrentlyInFlight && (hasCompletedArn || hasCompletedNamedFolder);
       if (isAlreadyCompleted) {
         submissionTrackerRef.current = null;
         _setSubmissionTracker(null);
@@ -1440,10 +1510,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       const matchingErrorApp = apps.find(a => a.status === 'ERROR' && matchesTrackerFolder(a, true));
 
       if (matchingCorrectionApp) {
-        // Freeze tracker at extraction % and show missing info alert — NEVER jump to 100% or clear tracker!
+        // Freeze tracker at extraction % and show missing info alert with "Open in Drafts"
         setUploadMessage(null);
         setSubmissionTracker(prev => {
-          const frozenPct = Math.max(prev?.percent || 35, 35);
+          const frozenPct = Math.max(prev?.percent || 45, 45);
+          const missingList = matchingCorrectionApp.missing_fields || [];
+          const missingDesc = missingList.length > 0
+            ? `Required details missing (${missingList.join(', ')}) — open in draft to complete.`
+            : 'Required details missing — please complete the fields below to resume.';
           return {
             active: true,
             ready: false,
@@ -1452,7 +1526,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             folderName: matchingCorrectionApp.folder_name,
             originalFolder: (matchingCorrectionApp as any).original_folder || prev?.originalFolder || prev?.folderName,
             percent: frozenPct,
-            stageText: 'Required details missing — please complete the fields below to resume.',
+            targetPercent: frozenPct,
+            stageText: missingDesc,
             applicantName: matchingCorrectionApp.applicant_name || prev?.applicantName || matchingCorrectionApp.folder_name,
             startedAt: prev?.startedAt || Date.now(),
           };
@@ -1472,6 +1547,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               originalFolder: (pItem as any).original_folder || prev.originalFolder || prev.folderName,
               arn: pItem.arn || prev.arn,
               percent: 100,
+              targetPercent: 100,
               stageText: 'Preview Ready!',
               applicantName: pItem.applicant_name || prev.applicantName || pItem.folder_name,
               startedAt: prev.startedAt,
@@ -1480,18 +1556,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           return prev;
         });
       } else if (activeProcessingApp) {
-        const serverPct = typeof activeProcessingApp.progress === 'number' && activeProcessingApp.progress > 0
-          ? activeProcessingApp.progress
-          : (activeProcessingApp.status === 'UPLOADED'
-              ? 18
-              : activeProcessingApp.status === 'EXTRACTING'
-              ? 35
-              : activeProcessingApp.status === 'EXTRACTED'
-              ? 50
-              : 68);
+        const stageTarget =
+          activeProcessingApp.status === 'UPLOADED' ? 25 :
+          activeProcessingApp.status === 'EXTRACTING' ? 48 :
+          activeProcessingApp.status === 'EXTRACTED' ? 52 :
+          (typeof activeProcessingApp.progress === 'number' && activeProcessingApp.progress > 0) ? activeProcessingApp.progress : 75;
+
         setSubmissionTracker(prev => {
-          const currentPct = prev?.percent || 10;
-          const targetPct = Math.min(99, Math.max(currentPct, serverPct));
+          const currentPct = prev?.percent || 20;
           return {
             active: true,
             ready: false,
@@ -1500,7 +1572,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             originalFolder: (activeProcessingApp as any).original_folder || prev?.originalFolder || prev?.folderName,
             arn: activeProcessingApp.arn || prev?.arn,
             isError: false,
-            percent: targetPct,
+            percent: currentPct,
+            targetPercent: Math.max(currentPct, stageTarget),
             stageText: activeProcessingApp.stage || (
               activeProcessingApp.status === 'UPLOADED' ? 'Extracting details from uploaded documents...' :
               activeProcessingApp.status === 'EXTRACTING' ? 'Analyzing & extracting applicant documents...' :
@@ -1524,6 +1597,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               folderName: matchingErrorApp.folder_name,
               originalFolder: (matchingErrorApp as any).original_folder || prev.originalFolder,
               percent: Math.max(prev.percent || 40, 40),
+              targetPercent: Math.max(prev.percent || 40, 40),
               stageText: matchingErrorApp.error_message || 'Application encountered an error during submission.',
               applicantName: matchingErrorApp.applicant_name || prev.applicantName || matchingErrorApp.folder_name,
               startedAt: prev.startedAt,
@@ -3037,7 +3111,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
       if (!slotFiles.father_passport || !slotFiles.mother_passport) {
         setUploadMessage({
-          text: "Father and Mother documents (Passport/PDS/C.C.I.E./Ospiti) are required for Fresh passport application.",
+          text: "Father and Mother documents (Passport/PDS/CIE/Ospiti) are required for Fresh passport application.",
           type: 'error',
         });
         return;
@@ -3077,8 +3151,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setSubmissionTracker({
         active: true,
         ready: false,
-        percent: 10,
-        stageText: 'Uploading documents to server...',
+        percent: 2,
+        targetPercent: 5,
+        stageText: 'Preparing documents for upload...',
         startedAt: Date.now(),
       });
       localStorage.setItem(scopedEmailKey, targetClientEmail);
@@ -3097,7 +3172,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         user?.email,
         declarationPlace,
         activeServiceType,
-        infoPayload
+        infoPayload,
+        (uploadPct: number) => {
+          const mappedPct = Math.min(20, Math.max(1, Math.round(uploadPct * 0.20)));
+          setSubmissionTracker(prev => ({
+            active: true,
+            ready: false,
+            percent: mappedPct,
+            targetPercent: mappedPct,
+            stageText: `Uploading documents to server (${uploadPct}%)...`,
+            startedAt: prev?.startedAt || Date.now(),
+          }));
+        }
       );
 
       const uploadedFolder = uploadRes?.folder_name;
@@ -3107,7 +3193,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         ready: false,
         folderName: uploadedFolder,
         originalFolder: uploadedFolder,
-        percent: 18,
+        percent: 20,
+        targetPercent: 48,
         stageText: 'Extracting details from uploaded documents...',
         startedAt: Date.now(),
       });
@@ -3255,7 +3342,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         ready: false,
         folderName: correctionApp.folder_name,
         originalFolder: (correctionApp as any).original_folder || correctionApp.folder_name,
-        percent: 54,
+        percent: 50,
+        targetPercent: 85,
         stageText: 'Details saved! Resuming portal form filling...',
         applicantName: correctionApp.applicant_name || correctionApp.folder_name,
         startedAt: Date.now(),
@@ -3395,6 +3483,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     });
   };
 
+  useEffect(() => {
+    if (!submittingFolder) {
+      setFinalSubmitProgress(0);
+      return;
+    }
+    setFinalSubmitProgress(78);
+    const interval = setInterval(() => {
+      setFinalSubmitProgress(prev => {
+        if (prev >= 98) return 98;
+        const step = prev < 88 ? 2 : 1;
+        return Math.min(98, prev + step);
+      });
+    }, 160);
+    return () => clearInterval(interval);
+  }, [submittingFolder]);
+
   const handleConfirmFinalSubmit = async (folderName: string, arn: string, previewItem?: PreviewItem) => {
     if (voiceProcessingFolder) return;
     try {
@@ -3406,6 +3510,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
       setSubmittingFolder(folderName);
       setSubmittingArn(arn);
+      setFinalSubmitProgress(78);
       // Immediately clear Home page submission tracker so it NEVER lingers with "Open Preview"
       submissionTrackerRef.current = null;
       _setSubmissionTracker(null);
@@ -3414,6 +3519,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
       await automationApi.confirmSubmission(email, folderName, arn, googleUserEmail);
 
+      setFinalSubmitProgress(100);
       submissionTrackerRef.current = null;
       _setSubmissionTracker(null);
       setUploadMessage(null);
@@ -4104,6 +4210,117 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           )}
 
             <div className="fresh-form-card">
+
+              {!submissionTracker?.active && applications.some(a => a.status === 'NEEDS_CORRECTION') && (() => {
+                const cApp = applications.find(a => a.status === 'NEEDS_CORRECTION')!;
+                return (
+                  <div
+                    className="status-banner-card warning"
+                    style={{
+                      marginBottom: '16px',
+                      padding: '14px 18px',
+                      borderRadius: '12px',
+                      border: '1px solid #fde68a',
+                      background: '#fffbeb',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <AlertTriangle style={{ width: '20px', height: '20px', color: '#d97706', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#92400e' }}>
+                          Action Required: Application in Draft ({cApp.applicant_name})
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#b45309', marginTop: '2px' }}>
+                          {cApp.missing_fields && cApp.missing_fields.length > 0
+                            ? `Missing details: ${cApp.missing_fields.join(', ')}. Complete these fields to continue submission.`
+                            : 'Required applicant details are missing. Complete these fields in Draft to resume.'}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDraftFolder(cApp.folder_name);
+                        onSectionChange('drafts');
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 16px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        color: '#ffffff',
+                        background: '#d97706',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <FileText style={{ width: '15px', height: '15px' }} />
+                      <span>Open in Drafts</span>
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {!submissionTracker?.active && previews.length > 0 && (() => {
+                const pApp = previews[0];
+                return (
+                  <div
+                    className="status-banner-card success"
+                    style={{
+                      marginBottom: '16px',
+                      padding: '14px 18px',
+                      borderRadius: '12px',
+                      border: '1px solid #a7f3d0',
+                      background: '#ecfdf5',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <CheckCircle2 style={{ width: '20px', height: '20px', color: '#10b981', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#065f46' }}>
+                          Preview Ready ({pApp.applicant_name})
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#047857', marginTop: '2px' }}>
+                          Application generated (ARN: {pApp.arn}). Review draft forms and submit.
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onSectionChange('preview')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 16px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        color: '#ffffff',
+                        background: '#10b981',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <Eye style={{ width: '15px', height: '15px' }} />
+                      <span>Open Preview</span>
+                    </button>
+                  </div>
+                );
+              })()}
 
               {uploadMessage && !portalErrorApp && !submissionTracker?.active && currentSection === 'form' && !uploadMessage.text.toLowerCase().includes('waiting for preview') && !uploadMessage.text.toLowerCase().includes('file submitted') && (
                 <div className={`form-alert ${uploadMessage.type === 'success' ? 'alert-success' : 'alert-error'}`}>
@@ -6029,12 +6246,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 const canSubmit = selection.passport && selection.declaration && !isUpdatingThis && !isAnyUpdating;
                 const isSubmittingThis = (submittingArn && submittingArn === item.arn) || (submittingFolder && submittingFolder === folderKey) || (item as any).status === 'SUBMITTING_PORTAL' || reuploadingFolder === folderKey;
                 const appMatch = applications.find(a => a.folder_name === item.folder_name || (item.arn && a.arn === item.arn) || (submittingFolder && a.folder_name === submittingFolder));
-                const candidateProgress = Math.max(
-                  typeof appMatch?.progress === 'number' && appMatch.progress > 0 ? appMatch.progress : 0,
-                  typeof item.progress === 'number' && item.progress > 0 ? item.progress : 0,
-                  82
-                );
-                const liveSubmitPct = Math.min(100, candidateProgress);
+                const candidateProgress = isSubmittingThis
+                  ? (finalSubmitProgress || appMatch?.progress || item.progress || 78)
+                  : (item.progress || 100);
+                const liveSubmitPct = Math.min(100, Math.max(1, candidateProgress));
                 const liveStage = (appMatch?.stage && appMatch.stage !== 'Previews Ready for Confirmation' && !appMatch.stage.toLowerCase().includes('previews ready'))
                   ? appMatch.stage
                   : (item.stage && item.stage !== 'Previews Ready for Confirmation' && !item.stage.toLowerCase().includes('previews ready'))
@@ -6595,6 +6810,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           )}
                         </button>
                       </div>
+
+                      {isSubmittingThis && (
+                        <div style={{ width: '100%', marginTop: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600, color: '#2563eb', marginBottom: '4px' }}>
+                            <span>{liveSubmitStage}</span>
+                            <span>{liveSubmitPct}%</span>
+                          </div>
+                          <div style={{ width: '100%', height: '6px', background: 'rgba(37, 99, 235, 0.15)', borderRadius: '999px', overflow: 'hidden' }}>
+                            <div style={{ width: `${liveSubmitPct}%`, height: '100%', background: 'linear-gradient(90deg, #2563eb, #3b82f6)', transition: 'width 0.15s ease-out' }} />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
