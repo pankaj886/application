@@ -321,7 +321,8 @@ class AutomationApiService {
     userEmail?: string,
     declarationPlace?: string,
     serviceType?: string,
-    infoData?: string
+    infoData?: string,
+    onProgress?: (percent: number) => void
   ): Promise<{ success: boolean; folder_name: string; message: string }> {
     let baseUrl = await this.resolveGateway();
     const uploadRequestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -353,42 +354,70 @@ class AutomationApiService {
       return fd;
     };
 
-    const tryUpload = async (targetBase: string): Promise<Response> => {
-      const clean = targetBase.replace(/\/+$/, '');
-      return await fetch(`${clean}/api/upload`, { method: 'POST', body: buildFormData() });
+    const tryUploadXhr = (targetBase: string): Promise<{ ok: boolean; status: number; text: string; data?: any }> => {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const clean = targetBase.replace(/\/+$/, '');
+        xhr.open('POST', `${clean}/api/upload`);
+
+        if (xhr.upload && onProgress) {
+          xhr.upload.onprogress = (evt) => {
+            if (evt.lengthComputable && evt.total > 0) {
+              const rawPct = Math.round((evt.loaded / evt.total) * 100);
+              onProgress(Math.min(100, Math.max(1, rawPct)));
+            }
+          };
+        }
+
+        xhr.onload = () => {
+          let data: any = null;
+          try {
+            data = JSON.parse(xhr.responseText);
+          } catch (_) {}
+          resolve({
+            ok: xhr.status >= 200 && xhr.status < 300,
+            status: xhr.status,
+            text: xhr.responseText,
+            data
+          });
+        };
+
+        xhr.onerror = () => reject(new Error('Network request failed'));
+        xhr.ontimeout = () => reject(new Error('Network request timed out'));
+        xhr.send(buildFormData());
+      });
     };
 
-    let res: Response | null = null;
+    let result: { ok: boolean; status: number; text: string; data?: any } | null = null;
 
     // 1. Try active base URL
     try {
-      res = await tryUpload(baseUrl);
-      if (res.status >= 502 && res.status <= 504 && baseUrl !== LOCAL_FALLBACK_URL) {
-        res = null; // Cloudflare bad gateway -> fallback to local
+      result = await tryUploadXhr(baseUrl);
+      if (result.status >= 502 && result.status <= 504 && baseUrl !== LOCAL_FALLBACK_URL) {
+        result = null; // Cloudflare bad gateway -> fallback to local
       }
     } catch (_) {
-      res = null;
+      result = null;
     }
 
     // 2. If network failed or Cloudflare dropped, try local fallback
-    if (!res && baseUrl !== LOCAL_FALLBACK_URL) {
+    if (!result && baseUrl !== LOCAL_FALLBACK_URL) {
       try {
-        const localRes = await tryUpload(LOCAL_FALLBACK_URL);
+        const localResult = await tryUploadXhr(LOCAL_FALLBACK_URL);
         this.activeBaseUrl = LOCAL_FALLBACK_URL;
-        res = localRes;
+        result = localResult;
       } catch (_) {}
     }
 
-    if (!res) {
+    if (!result) {
       throw new Error('Error Connecting to Server. Please ensure background automation runner is active.');
     }
 
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => null);
-      throw new Error(parseErrorDetail(errJson, `Server error (${res.status})`));
+    if (!result.ok) {
+      throw new Error(parseErrorDetail(result.data, `Server error (${result.status})`));
     }
 
-    return await res.json();
+    return result.data || { success: true, folder_name: '1', message: 'Uploaded successfully.' };
   }
 
   public async resolveConsulate(email?: string, address?: string): Promise<{
