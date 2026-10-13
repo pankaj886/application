@@ -32,6 +32,8 @@ def bump_text(file, regex_old, replacement):
 
 bump_text(os.path.join(app_dir, 'src-tauri', 'Cargo.toml'), r'(?m)^version = "[^"]+"', f'version = "{NEW_VERSION}"')
 bump_text(os.path.join(app_dir, 'src', 'components', 'Sidebar.tsx'), r'appVersion, setAppVersion\] = useState<string>\(\'[\d\.]+\'\)', f"appVersion, setAppVersion] = useState<string>('{NEW_VERSION}')")
+bump_text(os.path.join(app_dir, 'src', 'services', 'updateService.ts'), r"let currentVersion = '[\d\.]+';", f"let currentVersion = '{NEW_VERSION}';")
+bump_text(os.path.join(app_dir, 'src', 'services', 'updateService.ts'), r"currentVersion = '[\d\.]+';", f"currentVersion = '{NEW_VERSION}';")
 
 latest_paths = [
     os.path.join(app_dir, 'dist-release', 'latest.json'),

@@ -63,11 +63,15 @@ class UpdateService {
   }
 
   private async checkRemoteRelease(): Promise<UpdateInfo | null> {
-    let currentVersion = '1.0.0';
+    let currentVersion = '1.0.84';
     try {
-      currentVersion = await getVersion();
+      currentVersion = await invoke<string>('get_app_version');
     } catch {
-      currentVersion = '1.0.7';
+      try {
+        currentVersion = await getVersion();
+      } catch {
+        currentVersion = '1.0.84';
+      }
     }
 
     const isWindows = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows');

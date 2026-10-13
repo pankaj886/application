@@ -1295,6 +1295,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     [key: string]: { passport: boolean; declaration: boolean };
   }>({});
   const [submittingArn, setSubmittingArn] = useState<string | null>(null);
+  const [submittingFolder, setSubmittingFolder] = useState<string | null>(null);
   const submittingPreviewRef = useRef<PreviewItem | null>(null);
   const [reuploadFiles, setReuploadFiles] = useState<Record<string, File | null>>({});
   const [reuploadingFolder, setReuploadingFolder] = useState<string | null>(null);
@@ -1371,17 +1372,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         if (!activeTracker) return false;
         const tf = (activeTracker.folderName || '').trim().toLowerCase();
         const of = (activeTracker.originalFolder || '').trim().toLowerCase();
-        const an = (activeTracker.applicantName || '').trim().toLowerCase();
         const ta = (activeTracker.arn || '').trim().toLowerCase();
         const itemFolder = (item.folder_name || '').trim().toLowerCase();
         const itemOrig = ((item as any).original_folder || '').trim().toLowerCase();
-        const itemApp = ((item as any).applicant_name || '').trim().toLowerCase();
         const itemArn = ((item as any).arn || '').trim().toLowerCase();
         if (ta && itemArn && ta === itemArn) return true;
         if (tf && (itemFolder === tf || itemOrig === tf)) return true;
         if (of && (itemFolder === of || itemOrig === of)) return true;
-        if (an && itemApp && (an === itemApp || itemApp.includes(an) || an.includes(itemApp))) return true;
-        if (an && itemFolder && (an === itemFolder || itemFolder.includes(an) || an.includes(itemFolder))) return true;
         return false;
       };
 
@@ -1392,10 +1389,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
       // If the currently tracked folder was explicitly dismissed, abort tracker immediately
       // CRITICAL: If this tracked folder has been completed (submitted to portal), clear tracker immediately so it NEVER lingers on Home page with "Open Preview"!
-      const isAlreadyCompleted = (comps || []).some(c => matchesTrackerFolder(c)) || (apps || []).some(a => a.status === 'COMPLETED' && matchesTrackerFolder(a));
+      const hasCompletedArn = Boolean(activeTracker.arn && (comps || []).some(c => c.arn && c.arn === activeTracker.arn));
+      const hasCompletedFolder = Boolean(
+        (activeTracker.folderName || activeTracker.originalFolder) &&
+        (comps || []).some(c => matchesTrackerFolder(c))
+      );
+      const isAlreadyCompleted = hasCompletedArn || hasCompletedFolder;
       if (isAlreadyCompleted) {
         submissionTrackerRef.current = null;
         _setSubmissionTracker(null);
+        setUploadMessage(null);
         return;
       }
 
@@ -1510,7 +1513,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         setSubmissionTracker(prev => {
           if (isUploadingRef.current) return prev;
           // If the tracker was marked ready (waiting for preview), but preview is no longer in pending previews or apps (e.g. submitted): clear it immediately!
-          if (prev?.ready && !matchingPreview) {
+          if (prev?.ready && (!matchingPreview || (prevs || []).length === 0)) {
             return null;
           }
           if (prev && Date.now() - prev.startedAt > 30000 && !prev.folderName && !prev.ready && !prev.isMissingInfo) {
@@ -3086,10 +3089,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         stageText: 'Extracting details from uploaded documents...',
         startedAt: Date.now(),
       });
-      setUploadMessage({
-        text: 'File submitted, waiting for preview...',
-        type: 'success',
-      });
+      setUploadMessage(null);
       refreshAllData(targetClientEmail.toLowerCase());
     } catch (err: any) {
       const friendlyMsg = sanitizeErrorMessage(err);
@@ -3238,10 +3238,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         applicantName: correctionApp.applicant_name || correctionApp.folder_name,
         startedAt: Date.now(),
       });
-      setUploadMessage({
-        text: 'File submitted, waiting for preview...',
-        type: 'success',
-      });
+      setUploadMessage(null);
       setSelectedDraftFolder(null);
       onSectionChange('form');
       refreshAllData();
@@ -3381,17 +3378,23 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     try {
       if (previewItem) {
         submittingPreviewRef.current = previewItem;
+      } else {
+        const found = previews.find(p => p.folder_name === folderName || (arn && p.arn === arn));
+        if (found) submittingPreviewRef.current = found;
       }
+      setSubmittingFolder(folderName);
       setSubmittingArn(arn);
       // Immediately clear Home page submission tracker so it NEVER lingers with "Open Preview"
       submissionTrackerRef.current = null;
       _setSubmissionTracker(null);
+      setUploadMessage(null);
 
       const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
       await automationApi.confirmSubmission(email, folderName, arn, googleUserEmail);
 
       submissionTrackerRef.current = null;
       _setSubmissionTracker(null);
+      setUploadMessage(null);
       await refreshAllData();
       onSectionChange('submitted');
     } catch (err: any) {
@@ -3403,6 +3406,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       await refreshAllData();
     } finally {
       submittingPreviewRef.current = null;
+      setSubmittingFolder(null);
       setSubmittingArn(null);
     }
   };
@@ -3549,12 +3553,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
 
   useEffect(() => {
-    if (!uploadMessage || uploadMessage.type !== 'error') return;
+    if (!uploadMessage) return;
     const timer = setTimeout(() => {
       setUploadMessage(null);
-    }, 10000);
+    }, 6000);
     return () => clearTimeout(timer);
   }, [uploadMessage]);
+
+  useEffect(() => {
+    if (currentSection !== 'form') {
+      setUploadMessage(null);
+    }
+  }, [currentSection]);
 
   useEffect(() => {
     if (!centeredAlert?.isOpen) return;
@@ -4071,7 +4081,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
             <div className="fresh-form-card">
 
-              {uploadMessage && !portalErrorApp && !submissionTracker?.active && (
+              {uploadMessage && !portalErrorApp && !submissionTracker?.active && currentSection === 'form' && (
                 <div className={`form-alert ${uploadMessage.type === 'success' ? 'alert-success' : 'alert-error'}`}>
                   {uploadMessage.type === 'success' ? (
                     <Clock className="alert-icon animate-pulse" />
@@ -5799,9 +5809,19 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         });
 
         // Ensure currently submitting card stays firmly pinned during the submission process until complete
-        if (submittingArn && submittingPreviewRef.current) {
+        const isCurrentlySubmitting = Boolean(submittingFolder || submittingArn);
+        if (isCurrentlySubmitting && submittingPreviewRef.current) {
           const itemArn = submittingPreviewRef.current.arn;
-          const itemFname = submittingPreviewRef.current.folder_name;
+          const itemFname = submittingPreviewRef.current.folder_name || submittingFolder;
+          const liveApp = applications.find(a => (itemFname && a.folder_name === itemFname) || (itemArn && a.arn === itemArn));
+          if (liveApp) {
+            if (typeof liveApp.progress === 'number' && liveApp.progress > 0) {
+              submittingPreviewRef.current.progress = liveApp.progress;
+            }
+            if (liveApp.stage && !liveApp.stage.toLowerCase().includes('previews ready')) {
+              submittingPreviewRef.current.stage = liveApp.stage;
+            }
+          }
           const exists = displayedPreviews.some(p => (itemArn && p.arn === itemArn) || (itemFname && p.folder_name === itemFname));
           if (!exists) {
             displayedPreviews = [submittingPreviewRef.current, ...displayedPreviews];
@@ -5983,18 +6003,20 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 const isUpdatingThis = voiceProcessingFolder === folderKey;
                 const isAnyUpdating = Boolean(voiceProcessingFolder);
                 const canSubmit = selection.passport && selection.declaration && !isUpdatingThis && !isAnyUpdating;
-                const isSubmittingThis = submittingArn === item.arn || (item as any).status === 'SUBMITTING_PORTAL' || reuploadingFolder === folderKey;
-                const appMatch = applications.find(a => a.folder_name === item.folder_name || (item.arn && a.arn === item.arn));
-                const liveProgress = (typeof appMatch?.progress === 'number' && appMatch.progress > 0) ? appMatch.progress : item.progress;
-                const liveStage = appMatch?.stage || item.stage;
-                const liveSubmitPct =
-                  typeof liveProgress === 'number' && liveProgress > 0 && liveProgress <= 100
-                    ? liveProgress
-                    : 90;
-                const liveSubmitStage =
-                  liveStage && liveStage !== 'Previews Ready for Confirmation' && !liveStage.toLowerCase().includes('previews ready')
-                    ? liveStage
-                    : 'Submitting application to Passport Seva Portal...';
+                const isSubmittingThis = (submittingArn && submittingArn === item.arn) || (submittingFolder && submittingFolder === folderKey) || (item as any).status === 'SUBMITTING_PORTAL' || reuploadingFolder === folderKey;
+                const appMatch = applications.find(a => a.folder_name === item.folder_name || (item.arn && a.arn === item.arn) || (submittingFolder && a.folder_name === submittingFolder));
+                const candidateProgress = Math.max(
+                  typeof appMatch?.progress === 'number' && appMatch.progress > 0 ? appMatch.progress : 0,
+                  typeof item.progress === 'number' && item.progress > 0 ? item.progress : 0,
+                  82
+                );
+                const liveSubmitPct = Math.min(100, candidateProgress);
+                const liveStage = (appMatch?.stage && appMatch.stage !== 'Previews Ready for Confirmation' && !appMatch.stage.toLowerCase().includes('previews ready'))
+                  ? appMatch.stage
+                  : (item.stage && item.stage !== 'Previews Ready for Confirmation' && !item.stage.toLowerCase().includes('previews ready'))
+                  ? item.stage
+                  : 'Submitting application to Passport Seva Portal...';
+                const liveSubmitStage = liveStage;
 
                 return (
                   <div key={folderKey} className="preview-card">

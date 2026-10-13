@@ -12,6 +12,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { getVersion } from '@tauri-apps/api/app';
+import { invoke } from '@tauri-apps/api/core';
 import { NavigationTab, FreshReissueSection, UserProfile } from '../types';
 
 interface SidebarProps {
@@ -43,14 +44,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
   previewCount = 0,
   completedCount = 0,
 }) => {
-  const [appVersion, setAppVersion] = useState<string>('1.0.83');
+  const [appVersion, setAppVersion] = useState<string>('1.0.84');
 
   useEffect(() => {
-    getVersion()
+    invoke<string>('get_app_version')
       .then((ver) => {
         if (ver) setAppVersion(ver);
       })
       .catch(() => {
+        getVersion()
+          .then((ver) => {
+            if (ver) setAppVersion(ver);
+          })
+          .catch(() => {});
       });
   }, []);
 

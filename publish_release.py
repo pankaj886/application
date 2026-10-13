@@ -1,88 +1,69 @@
 import os
 import sys
 import json
-import urllib.request
-import urllib.error
+import base64
+import requests
 
-import subprocess
+DEFAULT_TOKEN = "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"
 
 def get_token():
-    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-    if token:
-        return token
-    try:
-        proc = subprocess.run(
-            ["git", "credential", "fill"],
-            input="protocol=https\nhost=github.com\n",
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        for line in proc.stdout.splitlines():
-            if line.startswith("password="):
-                return line.split("=", 1)[1].strip()
-    except Exception:
-        pass
-    raise RuntimeError("GitHub token not found. Please set GITHUB_TOKEN environment variable.")
+    return os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or DEFAULT_TOKEN
 
 TOKEN = get_token()
 REPO = "pankaj886/foreigners-studio-releases"
 
 pkg_file = os.path.join(os.path.dirname(__file__), "package.json")
 with open(pkg_file, "r", encoding="utf-8") as f:
-    VERSION = json.load(f).get("version", "1.0.25")
+    VERSION = json.load(f).get("version", "1.0.82")
 
 TAG = f"v{VERSION}"
 NAME = f"Foreigners Studio {TAG}"
-BODY = ""
+BODY = f"Release {TAG}"
 
 DIST_DIR = os.path.join(os.path.dirname(__file__), "dist-release")
 
-def api_request(url, method="GET", data=None, content_type="application/json"):
-    headers = {
-        "Authorization": f"token {TOKEN}",
-        "User-Agent": "ForeignersStudio-Release-Uploader",
-        "Accept": "application/vnd.github.v3+json"
-    }
-    if content_type:
-        headers["Content-Type"] = content_type
-    req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req) as resp:
-        body = resp.read()
-        if not body:
-            return None
-        return json.loads(body.decode("utf-8"))
+headers = {
+    "Authorization": f"token {TOKEN}",
+    "User-Agent": "ForeignersStudio-Release-Uploader",
+    "Accept": "application/vnd.github.v3+json"
+}
+
+def api_request(url, method="GET", data=None, json_data=None):
+    resp = requests.request(method, url, headers=headers, data=data, json=json_data, timeout=30)
+    if resp.status_code == 404:
+        raise requests.HTTPError(response=resp)
+    resp.raise_for_status()
+    if resp.content:
+        return resp.json()
+    return None
 
 def get_or_create_release():
-    print(f"Checking for release {TAG} in {REPO}...")
+    print(f"Checking for release {TAG} in {REPO}...", flush=True)
     try:
         rel = api_request(f"https://api.github.com/repos/{REPO}/releases/tags/{TAG}")
-        print(f"Found existing release: ID {rel['id']}")
+        print(f"Found existing release: ID {rel['id']}", flush=True)
         return rel
-    except urllib.error.HTTPError as e:
-        if e.code != 404:
-            raise
+    except Exception:
+        pass
 
-    print(f"Creating new release {TAG}...")
-    payload = json.dumps({
+    print(f"Creating new release {TAG}...", flush=True)
+    payload = {
         "tag_name": TAG,
         "target_commitish": "main",
         "name": NAME,
         "body": BODY,
         "draft": False,
         "prerelease": False
-    }).encode("utf-8")
-    rel = api_request(f"https://api.github.com/repos/{REPO}/releases", method="POST", data=payload)
-    print(f"Successfully created release: ID {rel['id']}")
+    }
+    rel = api_request(f"https://api.github.com/repos/{REPO}/releases", method="POST", json_data=payload)
+    print(f"Successfully created release: ID {rel['id']}", flush=True)
     return rel
 
 def upload_asset(upload_url_template, file_path, asset_name):
     base_url = upload_url_template.split("{")[0]
     upload_url = f"{base_url}?name={asset_name}"
-
-    print(f"Uploading {asset_name} ({os.path.getsize(file_path)} bytes)...")
-    with open(file_path, "rb") as f:
-        file_bytes = f.read()
+    size = os.path.getsize(file_path)
+    print(f"Uploading {asset_name} ({size} bytes)...", flush=True)
 
     content_type = "application/octet-stream"
     if asset_name.endswith(".json"):
@@ -90,20 +71,44 @@ def upload_asset(upload_url_template, file_path, asset_name):
     elif asset_name.endswith(".zip"):
         content_type = "application/zip"
 
-    req = urllib.request.Request(
-        upload_url,
-        data=file_bytes,
-        headers={
-            "Authorization": f"token {TOKEN}",
-            "User-Agent": "ForeignersStudio-Release-Uploader",
-            "Content-Type": content_type,
-            "Accept": "application/vnd.github.v3+json"
-        },
-        method="POST"
-    )
-    with urllib.request.urlopen(req) as resp:
-        res = json.loads(resp.read().decode("utf-8"))
-        print(f"[OK] Uploaded {asset_name}: ID {res['id']}")
+    upload_headers = dict(headers)
+    upload_headers["Content-Type"] = content_type
+
+    with open(file_path, "rb") as f:
+        resp = requests.post(upload_url, headers=upload_headers, data=f, timeout=120)
+    resp.raise_for_status()
+    res = resp.json()
+    print(f"[OK] Uploaded {asset_name}: ID {res['id']}", flush=True)
+
+def update_main_manifest():
+    latest_file = os.path.join(DIST_DIR, "latest.json")
+    if not os.path.exists(latest_file):
+        return
+    print("\nSyncing latest.json to main branch on GitHub...", flush=True)
+    with open(latest_file, "rb") as f:
+        content_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    url = f"https://api.github.com/repos/{REPO}/contents/latest.json"
+    sha = None
+    try:
+        cur = api_request(url)
+        sha = cur.get("sha")
+    except Exception:
+        pass
+
+    payload = {
+        "message": f"Update latest.json for {TAG}",
+        "content": content_b64,
+        "branch": "main"
+    }
+    if sha:
+        payload["sha"] = sha
+
+    try:
+        api_request(url, method="PUT", json_data=payload)
+        print("[OK] Successfully updated latest.json on main branch!", flush=True)
+    except Exception as e:
+        print(f"Note updating main branch manifest: {e}", flush=True)
 
 def main():
     rel = get_or_create_release()
@@ -121,17 +126,18 @@ def main():
     for asset_name in assets:
         path = os.path.join(DIST_DIR, asset_name)
         if not os.path.exists(path):
-            print(f"WARNING: File not found: {path}")
+            print(f"WARNING: File not found: {path}", flush=True)
             continue
 
         if asset_name in existing_assets:
-            print(f"Asset {asset_name} already exists (ID {existing_assets[asset_name]}). Deleting old asset...")
-            api_request(f"https://api.github.com/repos/{REPO}/releases/assets/{existing_assets[asset_name]}", method="DELETE", content_type=None)
-            print(f"Deleted old {asset_name}.")
+            print(f"Asset {asset_name} already exists (ID {existing_assets[asset_name]}). Deleting old asset...", flush=True)
+            api_request(f"https://api.github.com/repos/{REPO}/releases/assets/{existing_assets[asset_name]}", method="DELETE")
+            print(f"Deleted old {asset_name}.", flush=True)
 
         upload_asset(upload_url, path, asset_name)
 
-    print("\nAll release assets uploaded successfully to GitHub!")
+    print("\nAll release assets uploaded successfully to GitHub!", flush=True)
+    update_main_manifest()
 
 if __name__ == "__main__":
     main()

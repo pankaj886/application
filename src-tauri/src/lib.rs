@@ -95,6 +95,11 @@ fn open_browser(url: &str) {
 }
 
 #[tauri::command]
+fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[tauri::command]
 fn app_minimize(window: tauri::Window) {
     let _ = window.minimize();
 }
@@ -1031,6 +1036,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            get_app_version,
             app_minimize,
             app_toggle_maximize,
             app_close,
