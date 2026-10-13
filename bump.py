@@ -17,8 +17,10 @@ def bump_json(file, key_path, val):
     with open(file, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2)
 
-bump_json(r'c:\Users\Work PC\Documents\passport\Application\package.json', 'version', NEW_VERSION)
-bump_json(r'c:\Users\Work PC\Documents\passport\Application\src-tauri\tauri.conf.json', 'version', NEW_VERSION)
+app_dir = os.path.dirname(os.path.abspath(__file__))
+
+bump_json(os.path.join(app_dir, 'package.json'), 'version', NEW_VERSION)
+bump_json(os.path.join(app_dir, 'src-tauri', 'tauri.conf.json'), 'version', NEW_VERSION)
 
 def bump_text(file, regex_old, replacement):
     if not os.path.exists(file): return
@@ -28,12 +30,12 @@ def bump_text(file, regex_old, replacement):
     with open(file, 'w', encoding='utf-8') as f:
         f.write(content)
 
-bump_text(r'c:\Users\Work PC\Documents\passport\Application\src-tauri\Cargo.toml', r'(?m)^version = "[^"]+"', f'version = "{NEW_VERSION}"')
-bump_text(r'c:\Users\Work PC\Documents\passport\Application\src\components\Sidebar.tsx', r'appVersion, setAppVersion\] = useState<string>\(\'[\d\.]+\'\)', f"appVersion, setAppVersion] = useState<string>('{NEW_VERSION}')")
+bump_text(os.path.join(app_dir, 'src-tauri', 'Cargo.toml'), r'(?m)^version = "[^"]+"', f'version = "{NEW_VERSION}"')
+bump_text(os.path.join(app_dir, 'src', 'components', 'Sidebar.tsx'), r'appVersion, setAppVersion\] = useState<string>\(\'[\d\.]+\'\)', f"appVersion, setAppVersion] = useState<string>('{NEW_VERSION}')")
 
 latest_paths = [
-    r'c:\Users\Work PC\Documents\foreigners-studio-releases\latest.json',
-    r'c:\Users\Work PC\Documents\passport\Application\dist-release\latest.json'
+    os.path.join(app_dir, 'dist-release', 'latest.json'),
+    os.path.join(os.path.dirname(app_dir), 'foreigners-studio-releases', 'latest.json')
 ]
 now_str = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
 for latest_json_path in latest_paths:
@@ -55,7 +57,7 @@ for latest_json_path in latest_paths:
             json.dump(latest, f, indent=2)
 
 import glob, shutil
-for base_d in [r'c:\Users\Work PC\Documents\passport\Application\dist-release', r'c:\Users\Work PC\Documents\foreigners-studio-releases']:
+for base_d in [os.path.join(app_dir, 'dist-release'), os.path.join(os.path.dirname(app_dir), 'foreigners-studio-releases')]:
     if os.path.exists(base_d):
         dmgs = sorted(glob.glob(os.path.join(base_d, "Foreigners_Studio_*_universal.dmg")))
         if dmgs:
