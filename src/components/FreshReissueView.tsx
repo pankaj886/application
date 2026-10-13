@@ -6738,7 +6738,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </span>
                         ) : isSubmittingThis ? (
                           <span className="instruction-text" style={{ color: '#2563eb', fontWeight: 600 }}>
-                            {liveSubmitStage} ({liveSubmitPct}%)
+                            Final submission in progress to Passport Seva Portal...
                           </span>
                         ) : !canSubmit ? (
                           <span className="instruction-text">
@@ -6810,18 +6810,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           )}
                         </button>
                       </div>
-
-                      {isSubmittingThis && (
-                        <div style={{ width: '100%', marginTop: '12px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600, color: '#2563eb', marginBottom: '4px' }}>
-                            <span>{liveSubmitStage}</span>
-                            <span>{liveSubmitPct}%</span>
-                          </div>
-                          <div style={{ width: '100%', height: '6px', background: 'rgba(37, 99, 235, 0.15)', borderRadius: '999px', overflow: 'hidden' }}>
-                            <div style={{ width: `${liveSubmitPct}%`, height: '100%', background: 'linear-gradient(90deg, #2563eb, #3b82f6)', transition: 'width 0.15s ease-out' }} />
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 );
