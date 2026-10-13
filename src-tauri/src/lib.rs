@@ -274,7 +274,7 @@ fn apply_update_and_restart(app_handle: tauri::AppHandle, installer_path: String
         let app_exe = format!(r"{}\Foreigners Studio\foreigners_studio.exe", local_app_data);
 
         let ps_cmd = format!(
-            "Start-Sleep -Milliseconds 1200; Get-Process -Name 'foreigners_studio' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 400; Start-Process -FilePath '{}' -ArgumentList '/S' -Wait; Start-Sleep -Milliseconds 600; Start-Process -FilePath '{}'",
+            "Start-Sleep -Milliseconds 800; Get-Process -Name 'foreigners_studio' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500; $p = Start-Process -FilePath '{}' -ArgumentList '/S' -PassThru; $p.WaitForExit(60000); Start-Sleep -Milliseconds 1200; Start-Process -FilePath '{}'",
             installer_path, app_exe
         );
 
