@@ -35,6 +35,8 @@ bump_text(os.path.join(app_dir, 'src', 'components', 'Sidebar.tsx'), r'appVersio
 bump_text(os.path.join(app_dir, 'src', 'services', 'updateService.ts'), r"let currentVersion = '[\d\.]+';", f"let currentVersion = '{NEW_VERSION}';")
 bump_text(os.path.join(app_dir, 'src', 'services', 'updateService.ts'), r"currentVersion = '[\d\.]+';", f"currentVersion = '{NEW_VERSION}';")
 
+bump_text(os.path.join(app_dir, 'installer.nsi'), r'Foreigners_Studio_[\d\.]+_x64-setup\.exe', f"Foreigners_Studio_{NEW_VERSION}_x64-setup.exe")
+
 latest_paths = [
     os.path.join(app_dir, 'dist-release', 'latest.json'),
     os.path.join(os.path.dirname(app_dir), 'foreigners-studio-releases', 'latest.json')
@@ -58,14 +60,7 @@ for latest_json_path in latest_paths:
         with open(latest_json_path, 'w', encoding='utf-8') as f:
             json.dump(latest, f, indent=2)
 
-import glob, shutil
-for base_d in [os.path.join(app_dir, 'dist-release'), os.path.join(os.path.dirname(app_dir), 'foreigners-studio-releases')]:
-    if os.path.exists(base_d):
-        dmgs = sorted(glob.glob(os.path.join(base_d, "Foreigners_Studio_*_universal.dmg")))
-        if dmgs:
-            new_dmg = os.path.join(base_d, f"Foreigners_Studio_{NEW_VERSION}_universal.dmg")
-            if not os.path.exists(new_dmg):
-                shutil.copyfile(dmgs[-1], new_dmg)
-                print(f"Copied universal DMG forward -> {new_dmg}")
+print(f"Successfully bumped version configuration to {NEW_VERSION}.")
+print("[CRITICAL NOTICE] Old binary files are NOT copied forward to prevent corrupt release loops.")
+print("Build new binaries via CI or local build before publishing release.")
 
-print(f"Bumped to {NEW_VERSION}")
