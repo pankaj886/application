@@ -1,9 +1,9 @@
 import React from 'react';
-import { ArrowLeft, ArrowRight, BookOpen, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, Sparkles, FileCheck } from 'lucide-react';
 
 interface PassportViewProps {
   onBack: () => void;
-  onSelectFreshReissue: (service?: 'fresh' | 'reissue') => void;
+  onSelectFreshReissue: (service?: 'fresh' | 'reissue' | 'surrender') => void;
 }
 
 export const PassportView: React.FC<PassportViewProps> = ({ onBack, onSelectFreshReissue }) => {
@@ -77,6 +77,36 @@ export const PassportView: React.FC<PassportViewProps> = ({ onBack, onSelectFres
               <h2 className="service-card-title">Fresh Passport</h2>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
                 First-time applicants &amp; minors without an existing Indian passport
+              </p>
+            </div>
+          </div>
+          <ArrowRight className="arrow-icon" />
+        </div>
+
+        <div 
+          className="service-card"
+          role="button"
+          tabIndex={0}
+          aria-label="Surrender Certificate"
+          onClick={(e) => {
+            e.preventDefault();
+            onSelectFreshReissue('surrender');
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelectFreshReissue('surrender');
+            }
+          }}
+        >
+          <div className="service-card-left">
+            <div className="passport-emblem-seal" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
+              <FileCheck className="passport-emblem-icon" style={{ color: '#d97706' }} />
+            </div>
+            <div>
+              <h2 className="service-card-title">Surrender Certificate</h2>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
+                Renunciation of Indian citizenship &amp; surrender of passport upon foreign nationality acquisition
               </p>
             </div>
           </div>

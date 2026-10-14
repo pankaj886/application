@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, FileText, RotateCcw } from 'lucide-react';
+import { X, Save, FileText, RotateCcw, FileCheck } from 'lucide-react';
 
 interface InAppInfoModalProps {
   isOpen: boolean;
-  serviceType: 'reissue' | 'fresh';
+  serviceType: 'reissue' | 'fresh' | 'surrender';
   initialData: Record<string, any>;
   onSave: (data: Record<string, any>) => void;
   onClear?: () => void;
@@ -44,6 +44,13 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
           }
           data.reissue_reason = 'VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE';
         }
+      } else if (serviceType === 'surrender') {
+        if (!data.foreign_nationality_country && !data['Foreign nationality country']) {
+          data.foreign_nationality_country = 'Italy';
+        }
+        if (!data.surrender_reason && !data['Surrender reason']) {
+          data.surrender_reason = 'ACQUIRING FOREIGN NATIONALITY/RENUNCIATION OF INDIAN CITIZENSHIP';
+        }
       }
       setFormData(data);
     }
@@ -71,6 +78,7 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
     onClose();
   };
 
+  const isSurrender = serviceType === 'surrender';
   const isFresh = serviceType === 'fresh';
   const isChangeInParticulars =
     formData.is_change_in_particulars === 'Y' ||
@@ -159,9 +167,11 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: isFresh
-              ? 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)'
-              : 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)',
+            background: isSurrender
+              ? 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)'
+              : isFresh
+                ? 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)'
+                : 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -170,21 +180,31 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                 width: '38px',
                 height: '38px',
                 borderRadius: '10px',
-                background: isFresh ? '#dcfce7' : '#dbeafe',
+                background: isSurrender ? '#fef3c7' : isFresh ? '#dcfce7' : '#dbeafe',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: isFresh ? '#15803d' : '#1d4ed8',
+                color: isSurrender ? '#b45309' : isFresh ? '#15803d' : '#1d4ed8',
               }}
             >
-              <FileText style={{ width: '20px', height: '20px' }} />
+              {isSurrender ? (
+                <FileCheck style={{ width: '20px', height: '20px' }} />
+              ) : (
+                <FileText style={{ width: '20px', height: '20px' }} />
+              )}
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#0f172a' }}>
-                {isFresh ? 'Fresh Passport Mandatory Info' : 'Reissue Passport Mandatory Info'}
+                {isSurrender
+                  ? 'Surrender Certificate Mandatory Info'
+                  : isFresh
+                    ? 'Fresh Passport Mandatory Info'
+                    : 'Reissue Passport Mandatory Info'}
               </h3>
               <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b' }}>
-                Only enter mandatory details not present on uploaded documents. All fields auto-merge into application.
+                {isSurrender
+                  ? 'Enter mandatory details not found on uploaded documents. All details auto-merge into the application.'
+                  : 'Only enter mandatory details not present on uploaded documents. All fields auto-merge into application.'}
               </p>
             </div>
           </div>
@@ -208,7 +228,237 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
 
         {/* Scrollable Form Body */}
         <form onSubmit={handleSubmit} style={{ overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {isFresh ? (
+          {isSurrender ? (
+            <>
+              {/* SURRENDER: Foreign Nationality & Acquisition */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  1. Foreign Nationality &amp; Acquisition
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Foreign Passport Number *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. YA1234567"
+                      value={formData.foreign_passport_number || formData['Foreign passport number'] || ''}
+                      onChange={(e) => handleChange('foreign_passport_number', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Date of Acquisition of Foreign Nationality *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="DD/MM/YYYY"
+                      value={formData.foreign_nationality_acquisition_date || formData['Foreign nationality acquisition date'] || ''}
+                      onChange={(e) => handleChange('foreign_nationality_acquisition_date', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Foreign Nationality Country
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Italy"
+                      value={formData.foreign_nationality_country || formData['Foreign nationality country'] || 'Italy'}
+                      onChange={(e) => handleChange('foreign_nationality_country', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Surrender Reason
+                    </label>
+                    <select
+                      value={formData.surrender_reason || formData['Surrender reason'] || 'ACQUIRING FOREIGN NATIONALITY/RENUNCIATION OF INDIAN CITIZENSHIP'}
+                      onChange={(e) => handleChange('surrender_reason', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    >
+                      <option value="ACQUIRING FOREIGN NATIONALITY/RENUNCIATION OF INDIAN CITIZENSHIP">ACQUIRING FOREIGN NATIONALITY/RENUNCIATION OF INDIAN CITIZENSHIP</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* SURRENDER: Surrendered Indian Passport Details */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  2. Surrendered Indian Passport Details
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Current Indian Passport Number *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Z1234567"
+                      value={formData.passport_number || formData['Current passport number'] || ''}
+                      onChange={(e) => handleChange('passport_number', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Date of Issue *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="DD/MM/YYYY"
+                      value={formData.issue_date || formData['Date of issue'] || ''}
+                      onChange={(e) => handleChange('issue_date', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Date of Expiry *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="DD/MM/YYYY"
+                      value={formData.expiry_date || formData['Date of expiry'] || ''}
+                      onChange={(e) => handleChange('expiry_date', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Place of Issue *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. ROME / JALANDHAR"
+                      value={formData.issue_place || formData['Place of issue'] || ''}
+                      onChange={(e) => handleChange('issue_place', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SURRENDER: Contact & Italian Address */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  3. Contact &amp; Italian Address
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Italian Mobile Number *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 3331234567"
+                      value={formData.italian_mobile_number || formData['Mobile No'] || ''}
+                      onChange={(e) => handleChange('italian_mobile_number', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Email ID
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="client@email.com"
+                      value={formData.email_id || formData['Email ID'] || ''}
+                      onChange={(e) => handleChange('email_id', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      House No. &amp; Street Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. VIA ROMA 12"
+                      value={formData.italian_street || formData['House No. and Street Name'] || ''}
+                      onChange={(e) => handleChange('italian_street', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      City / Comune
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. ROMA"
+                      value={formData.italian_city || formData['City'] || ''}
+                      onChange={(e) => handleChange('italian_city', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Province
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. ROMA"
+                      value={formData.italian_province || formData['State'] || ''}
+                      onChange={(e) => handleChange('italian_province', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Postal Code / PIN
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 00100"
+                      value={formData.italian_postal_code || formData['PIN'] || ''}
+                      onChange={(e) => handleChange('italian_postal_code', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SURRENDER: Emergency Contact */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  4. Emergency Contact
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Contact Person Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Full Name"
+                      value={formData.emergency_name || formData['Emergency Name'] || ''}
+                      onChange={(e) => handleChange('emergency_name', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Contact Mobile Number
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 3331234567"
+                      value={formData.emergency_mobile || formData['Emergency Mobile'] || ''}
+                      onChange={(e) => handleChange('emergency_mobile', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : isFresh ? (
             <>
               {/* FRESH: Service Details */}
               <div>
@@ -726,7 +976,7 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                   padding: '9px 20px',
                   borderRadius: '8px',
                   border: 'none',
-                  background: isFresh ? '#059669' : '#2563eb',
+                  background: isSurrender ? '#d97706' : isFresh ? '#059669' : '#2563eb',
                   color: '#ffffff',
                   fontSize: '13px',
                   fontWeight: 600,
@@ -734,7 +984,7 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  boxShadow: isFresh ? '0 2px 8px rgba(5, 150, 105, 0.25)' : '0 2px 8px rgba(37, 99, 235, 0.25)',
+                  boxShadow: isSurrender ? '0 2px 8px rgba(217, 119, 6, 0.25)' : isFresh ? '0 2px 8px rgba(5, 150, 105, 0.25)' : '0 2px 8px rgba(37, 99, 235, 0.25)',
                 }}
               >
                 <Save style={{ width: '15px', height: '15px' }} />

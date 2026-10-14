@@ -2,7 +2,7 @@
 !include "FileFunc.nsh"
 
 Name "Foreigners Studio"
-OutFile "dist-release\Foreigners_Studio_1.0.95_x64-setup.exe"
+OutFile "dist-release\Foreigners_Studio_1.0.96_x64-setup.exe"
 InstallDir "$LOCALAPPDATA\Foreigners Studio"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma

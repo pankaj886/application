@@ -20,7 +20,7 @@ export function App() {
   const [draftCount, setDraftCount] = useState<number>(0);
   const [previewCount, setPreviewCount] = useState<number>(0);
   const [completedCount, setCompletedCount] = useState<number>(0);
-  const [passportServiceType, setPassportServiceType] = useState<'reissue' | 'fresh'>('reissue');
+  const [passportServiceType, setPassportServiceType] = useState<'reissue' | 'fresh' | 'surrender'>('reissue');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 960);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const updateInFlight = useRef(false);
@@ -331,7 +331,7 @@ export function App() {
     setActiveTab('services');
   };
 
-  const handleSelectFreshReissue = (service?: 'fresh' | 'reissue') => {
+  const handleSelectFreshReissue = (service?: 'fresh' | 'reissue' | 'surrender') => {
     if (service) {
       setPassportServiceType(service);
     }
@@ -343,7 +343,11 @@ export function App() {
     setActiveTab('passport');
   };
 
-  const serviceLabel = passportServiceType === 'fresh' ? 'Fresh Passport' : 'Reissue Passport';
+  const serviceLabel = passportServiceType === 'fresh' 
+    ? 'Fresh Passport' 
+    : passportServiceType === 'surrender' 
+      ? 'Surrender Certificate' 
+      : 'Reissue Passport';
   const currentPathString = !user 
     ? 'Sign In' 
     : (activeTab === 'fresh-reissue'

@@ -72,7 +72,8 @@ export const isUserUploadedDocument = (fileName: string): boolean => {
     clean === 'self_declaration_preview.pdf' ||
     clean === 'submission_receipt.pdf' ||
     clean === 'application_form.pdf' ||
-    clean === 'printapplicationreceipt_opp.pdf'
+    clean === 'printapplicationreceipt_opp.pdf' ||
+    clean === 'printapplicationreceipt_sc.pdf'
   ) {
     return false;
   }
@@ -80,7 +81,7 @@ export const isUserUploadedDocument = (fileName: string): boolean => {
 };
 
 
-export const isAppMatchingService = (app: any, targetService: 'reissue' | 'fresh'): boolean => {
+export const isAppMatchingService = (app: any, targetService: 'reissue' | 'fresh' | 'surrender'): boolean => {
   if (!app) return false;
   const st = String(
     app.service_type ||
@@ -94,11 +95,15 @@ export const isAppMatchingService = (app: any, targetService: 'reissue' | 'fresh
     app.extracted_data?.['Applying for'] ||
     app.extracted_data?.applying_for ||
     ''
-  ).trim();
-  if (targetService === 'fresh') {
-    return st === 'fresh' || af === '6';
+  ).trim().toLowerCase();
+  const folder = String(app.folder_name || app.folderName || '').trim().toLowerCase();
+
+  if (targetService === 'surrender') {
+    return st === 'surrender' || af.includes('surrender') || folder.includes('surrender');
+  } else if (targetService === 'fresh') {
+    return (st === 'fresh' || af === '6' || folder.includes('fresh')) && st !== 'surrender' && !af.includes('surrender');
   } else {
-    return st === 'reissue' || af === '7' || (st !== 'fresh' && af !== '6');
+    return (st === 'reissue' || af === '7' || (!st && !af)) && st !== 'surrender' && st !== 'fresh' && !af.includes('surrender') && af !== '6' && !folder.includes('surrender');
   }
 };
 
@@ -120,7 +125,8 @@ export type DocSlotKey =
   | 'annexure_e'
   | 'divorce_death_cert'
   | 'name_change_proof'
-  | 'education_proof';
+  | 'education_proof'
+  | 'citizenship_cert';
 
 export interface DocSlotDef {
   key: DocSlotKey;
@@ -295,6 +301,15 @@ export const SLOT_CATALOG: Record<DocSlotKey, DocSlotDef> = {
     iconName: 'file',
     description: 'Client info sheet or other supporting paperwork',
   },
+  citizenship_cert: {
+    key: 'citizenship_cert',
+    title: 'Citizenship Certificate / Foreign Passport *',
+    badge: 'Proof of Foreign Nationality',
+    accept: '.pdf,image/jpeg,image/png,image/jpg',
+    canonicalName: 'citizenship_certificate.pdf',
+    iconName: 'award',
+    description: 'Attestazione di cittadinanza or foreign passport with date of acquisition',
+  },
 };
 
 export type ApplyingScenarioId =
@@ -305,12 +320,13 @@ export type ApplyingScenarioId =
   | 'reissue_damaged'
   | 'reissue_name_change'
   | 'fresh_minor'
-  | 'fresh_adult';
+  | 'fresh_adult'
+  | 'surrender_standard';
 
 export interface ApplyingScenario {
   id: ApplyingScenarioId;
   label: string;
-  serviceType: 'reissue' | 'fresh';
+  serviceType: 'reissue' | 'fresh' | 'surrender';
   icon: string;
   slots: DocSlotKey[];
   description: string;
@@ -380,6 +396,14 @@ export const APPLYING_SCENARIOS: ApplyingScenario[] = [
     icon: 'award',
     slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'annexure_e', 'sign', 'info'],
     description: 'Fresh passport application for adult born abroad / in Italy — requires self-declaration (Annexure E)',
+  },
+  {
+    id: 'surrender_standard',
+    label: 'Surrender Certificate (Renunciation)',
+    serviceType: 'surrender',
+    icon: 'award',
+    slots: ['photo', 'sign', 'passport', 'citizenship_cert', 'residence', 'info'],
+    description: 'Surrender of Indian passport upon acquisition of foreign / Italian nationality',
   },
 ];
 
@@ -595,6 +619,19 @@ export const detectSlotAndCanonicalName = (
     lower.includes('slip')
   ) {
     return { slot: 'info', canonicalName: `appointment_details${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
+  }
+
+  // 14.8 Citizenship Certificate / Foreign Nationality Proof
+  if (
+    lower.includes('cittadinanza') ||
+    lower.includes('citizen') ||
+    lower.includes('naturaliz') ||
+    lower.includes('acquisition') ||
+    lower.includes('foreign_passport') ||
+    lower.includes('italian_passport') ||
+    (lower.includes('passaporto') && lower.includes('ital'))
+  ) {
+    return { slot: 'citizenship_cert', canonicalName: `citizenship_certificate${ext.toLowerCase() === '.pdf' ? '.pdf' : ext}` };
   }
 
   // 15. Applicant Passport (Strict: exclude appointment, booking, urgent, mother, father, spouse)
@@ -861,6 +898,20 @@ export const detectSlotAndCanonicalNameAsync = async (
       return { slot: 'education_proof', canonicalName: 'education_certificate.pdf' };
     }
 
+    // I2. Citizenship Certificate / Foreign Nationality
+    if (
+      pdfText.includes('cittadinanza') ||
+      pdfText.includes('acquisto della cittadinanza') ||
+      pdfText.includes('attestazione di cittadinanza') ||
+      pdfText.includes('certificato di cittadinanza') ||
+      pdfText.includes('giuramento') ||
+      pdfText.includes('naturalizzazione') ||
+      pdfText.includes('passaporto italiano') ||
+      pdfText.includes('italian passport')
+    ) {
+      return { slot: 'citizenship_cert', canonicalName: 'citizenship_certificate.pdf' };
+    }
+
     // J. Italian Carta d'Identità (CIE) -> STRICTLY Proof of Residence
     if (
       pdfText.includes("carta d'identita") ||
@@ -993,8 +1044,8 @@ interface FreshReissueViewProps {
   onSectionChange: (sec: FreshReissueSection) => void;
   onBackToPassport?: () => void;
   onBackToServices?: () => void;
-  serviceType?: 'reissue' | 'fresh';
-  onServiceTypeChange?: (service: 'reissue' | 'fresh') => void;
+  serviceType?: 'reissue' | 'fresh' | 'surrender';
+  onServiceTypeChange?: (service: 'reissue' | 'fresh' | 'surrender') => void;
 }
 
 export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
@@ -1006,7 +1057,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   serviceType,
   onServiceTypeChange,
 }) => {
-  const [activeServiceType, setActiveServiceType] = useState<'reissue' | 'fresh'>(serviceType || 'reissue');
+  const [activeServiceType, setActiveServiceType] = useState<'reissue' | 'fresh' | 'surrender'>(serviceType || 'reissue');
 
   useEffect(() => {
     if (serviceType && serviceType !== activeServiceType) {
@@ -1014,7 +1065,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   }, [serviceType]);
 
-  const switchActiveServiceType = (newType: 'reissue' | 'fresh') => {
+  const switchActiveServiceType = (newType: 'reissue' | 'fresh' | 'surrender') => {
     setActiveServiceType(newType);
     if (onServiceTypeChange) {
       onServiceTypeChange(newType);
@@ -1082,7 +1133,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   // Dynamic Application Scenario and Dynamic Document Requirement Slots
   const [selectedScenario, setSelectedScenario] = useState<ApplyingScenarioId>(
-    activeServiceType === 'fresh' ? 'fresh_minor' : 'reissue_standard'
+    activeServiceType === 'fresh' ? 'fresh_minor' : activeServiceType === 'surrender' ? 'surrender_standard' : 'reissue_standard'
   );
   const [dynamicallyActivatedSlots, setDynamicallyActivatedSlots] = useState<DocSlotKey[]>([]);
   const [slotFiles, setSlotFiles] = useState<Record<DocSlotKey, File | null>>({
@@ -1104,6 +1155,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     divorce_death_cert: null,
     name_change_proof: null,
     education_proof: null,
+    citizenship_cert: null,
   });
 
   const dynamicInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -1112,6 +1164,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   useEffect(() => {
     if (activeServiceType === 'fresh') {
       setSelectedScenario('fresh_minor');
+    } else if (activeServiceType === 'surrender') {
+      setSelectedScenario('surrender_standard');
     } else {
       setSelectedScenario('reissue_standard');
     }
@@ -1135,6 +1189,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
     } else if (activeServiceType === 'fresh') {
       setSelectedScenario('fresh_minor');
+    } else if (activeServiceType === 'surrender') {
+      setSelectedScenario('surrender_standard');
     }
   }, [inAppInfoData, activeServiceType]);
 
@@ -1158,6 +1214,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
     if (activeServiceType === 'fresh') {
       baseSlots = baseSlots.filter(s => s !== 'passport' && s !== 'identity' && s !== 'residence');
+    } else if (activeServiceType === 'surrender') {
+      baseSlots = baseSlots.filter(s => s !== 'identity');
     }
     return baseSlots;
   }, [selectedScenario, dynamicallyActivatedSlots, slotFiles, activeServiceType]);
@@ -1208,7 +1266,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   type SubmissionTrackerState = {
     active: boolean;
     ready: boolean;
-    serviceType?: 'reissue' | 'fresh';
+    serviceType?: 'reissue' | 'fresh' | 'surrender';
     folderName?: string;
     originalFolder?: string;
     arn?: string;
@@ -1224,28 +1282,32 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [trackers, _setTrackers] = useState<{
     reissue: SubmissionTrackerState;
     fresh: SubmissionTrackerState;
+    surrender: SubmissionTrackerState;
   }>({
     reissue: null,
     fresh: null,
+    surrender: null,
   });
   const trackersRef = useRef<{
     reissue: SubmissionTrackerState;
     fresh: SubmissionTrackerState;
+    surrender: SubmissionTrackerState;
   }>({
     reissue: null,
     fresh: null,
+    surrender: null,
   });
   trackersRef.current = trackers;
 
-  const [draftFilter, setDraftFilter] = useState<'all' | 'fresh' | 'reissue'>('all');
-  const [previewFilter, setPreviewFilter] = useState<'all' | 'fresh' | 'reissue'>('all');
+  const [draftFilter, setDraftFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender'>('all');
+  const [previewFilter, setPreviewFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender'>('all');
 
-  const submissionTracker = trackers[activeServiceType] || (trackers.fresh?.active ? trackers.fresh : (trackers.reissue?.active ? trackers.reissue : null));
+  const submissionTracker = trackers[activeServiceType] || (trackers.surrender?.active ? trackers.surrender : (trackers.fresh?.active ? trackers.fresh : (trackers.reissue?.active ? trackers.reissue : null)));
   const submissionTrackerRef = useRef<SubmissionTrackerState>(null);
   submissionTrackerRef.current = submissionTracker;
 
   const setSubmissionTrackerFor = (
-    sType: 'reissue' | 'fresh',
+    sType: 'reissue' | 'fresh' | 'surrender',
     updater: SubmissionTrackerState | ((prev: SubmissionTrackerState) => SubmissionTrackerState)
   ) => {
     _setTrackers(prev => {
@@ -1274,7 +1336,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       _setTrackers(prev => {
         let changed = false;
         const nextTrackers = { ...prev };
-        for (const sType of ['reissue', 'fresh'] as const) {
+        for (const sType of ['reissue', 'fresh', 'surrender'] as const) {
           const t = prev[sType];
           if (!t || !t.active || t.ready || t.isError || t.isMissingInfo) continue;
           const current = t.percent;
@@ -3045,9 +3107,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       divorce_death_cert: null,
       name_change_proof: null,
       education_proof: null,
+      citizenship_cert: null,
     });
     setDynamicallyActivatedSlots([]);
-    setSelectedScenario(activeServiceType === 'fresh' ? 'fresh_minor' : 'reissue_standard');
+    setSelectedScenario(activeServiceType === 'fresh' ? 'fresh_minor' : activeServiceType === 'surrender' ? 'surrender_standard' : 'reissue_standard');
     if (photoInputRef.current) photoInputRef.current.value = '';
     if (signInputRef.current) signInputRef.current.value = '';
     if (passportInputRef.current) passportInputRef.current.value = '';
@@ -5006,6 +5069,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                     <span className="compact-docs-hint">
                       {activeServiceType === 'fresh'
                         ? 'Only Photograph & Birth Certificate are mandatory (up to 10 files, max 20 MB each)'
+                        : activeServiceType === 'surrender'
+                        ? 'Photograph, Signature & Citizenship Proof are mandatory (up to 10 files, max 20 MB each)'
                         : 'Select or drop documents into boxes (up to 10 files, max 20 MB each)'}
                     </span>
                   </div>
@@ -5021,16 +5086,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       margin: '10px 0 16px 0',
                       padding: '12px 16px',
                       borderRadius: '12px',
-                      background: activeServiceType === 'fresh' ? '#f0fdf4' : '#f8fafc',
-                      border: activeServiceType === 'fresh' ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                      background: activeServiceType === 'fresh' ? '#f0fdf4' : activeServiceType === 'surrender' ? '#fffbeb' : '#f8fafc',
+                      border: activeServiceType === 'fresh' ? '1px solid #bbf7d0' : activeServiceType === 'surrender' ? '1px solid #fde68a' : '1px solid #e2e8f0',
                       boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <FileText style={{ width: '18px', height: '18px', color: activeServiceType === 'fresh' ? '#059669' : '#2563eb' }} />
+                      <FileText style={{ width: '18px', height: '18px', color: activeServiceType === 'fresh' ? '#059669' : activeServiceType === 'surrender' ? '#d97706' : '#2563eb' }} />
                       <div>
                         <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1e293b' }}>
-                          Application Reason &amp; Mandatory Details ({activeServiceType === 'fresh' ? 'Fresh Passport' : 'Passport Reissue'})
+                          Application Reason &amp; Mandatory Details ({activeServiceType === 'fresh' ? 'Fresh Passport' : activeServiceType === 'surrender' ? 'Surrender Certificate' : 'Passport Reissue'})
                         </div>
                         <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
                           Selected Reason: <strong style={{ color: '#0f172a' }}>{APPLYING_SCENARIOS.find(s => s.id === selectedScenario)?.label || 'Standard'}</strong>
@@ -5052,7 +5117,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           fontWeight: 600,
                           borderRadius: '8px',
                           border: 'none',
-                          background: filledParticularsCount > 0 ? '#059669' : (activeServiceType === 'fresh' ? '#10b981' : '#2563eb'),
+                          background: filledParticularsCount > 0 ? '#059669' : (activeServiceType === 'fresh' ? '#10b981' : activeServiceType === 'surrender' ? '#d97706' : '#2563eb'),
                           color: '#ffffff',
                           cursor: 'pointer',
                           boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
