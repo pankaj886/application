@@ -108,13 +108,22 @@ export function App() {
         ]);
         const compFolderSet = new Set((comps || []).map((c: any) => (c.folder_name || '').trim().toLowerCase()));
         const compArnSet = new Set((comps || []).map((c: any) => (c.arn || '').trim().toLowerCase()).filter(Boolean));
+        let dismissedSet = new Set<string>();
+        try {
+          const raw = JSON.parse(sessionStorage.getItem('fs_dismissed_folders') || '[]');
+          dismissedSet = new Set((raw || []).map((s: string) => String(s).trim().toLowerCase()).filter(Boolean));
+        } catch (_) {}
+
         const isMatch = (item: any) => isAppMatchingService(item, passportServiceType);
         const drafts = (statusRes?.applications || []).filter((a: any) => {
           if (!isMatch(a)) return false;
           const fn = (a.folder_name || '').trim().toLowerCase();
+          const orig = ((a as any).original_folder || '').trim().toLowerCase();
           const arn = (a.arn || '').trim().toLowerCase();
           if (arn && compArnSet.has(arn)) return false;
           if (fn && compFolderSet.has(fn)) return false;
+          if (orig && compFolderSet.has(orig)) return false;
+          if (dismissedSet.has(fn) || (orig && dismissedSet.has(orig)) || (arn && dismissedSet.has(arn))) return false;
           const status = (a?.status || '').toUpperCase();
           if (
             a.has_passport_preview ||
@@ -150,9 +159,12 @@ export function App() {
         const validPrevs = (prevs || []).filter((p: any) => {
           if (!isMatch(p)) return false;
           const fn = (p.folder_name || '').trim().toLowerCase();
+          const orig = ((p as any).original_folder || '').trim().toLowerCase();
           const arn = (p.arn || '').trim().toLowerCase();
           if (arn && compArnSet.has(arn)) return false;
           if (fn && compFolderSet.has(fn)) return false;
+          if (orig && compFolderSet.has(orig)) return false;
+          if (dismissedSet.has(fn) || (orig && dismissedSet.has(orig)) || (arn && dismissedSet.has(arn))) return false;
           return true;
         });
         setDraftCount(drafts.length);

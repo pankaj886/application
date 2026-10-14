@@ -82,8 +82,19 @@ export const isUserUploadedDocument = (fileName: string): boolean => {
 
 export const isAppMatchingService = (app: any, targetService: 'reissue' | 'fresh'): boolean => {
   if (!app) return false;
-  const st = String(app.service_type || app.serviceType || '').trim().toLowerCase();
-  const af = String(app.applying_for || app.applyingFor || '').trim();
+  const st = String(
+    app.service_type ||
+    app.serviceType ||
+    app.extracted_data?.service_type ||
+    ''
+  ).trim().toLowerCase();
+  const af = String(
+    app.applying_for ||
+    app.applyingFor ||
+    app.extracted_data?.['Applying for'] ||
+    app.extracted_data?.applying_for ||
+    ''
+  ).trim();
   if (targetService === 'fresh') {
     return st === 'fresh' || af === '6';
   } else {
@@ -1318,11 +1329,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [reuploadFiles, setReuploadFiles] = useState<Record<string, File | null>>({});
   const [reuploadingFolder, setReuploadingFolder] = useState<string | null>(null);
 
+  const getStoredDismissedKeys = (): Set<string> => {
+    try {
+      const arr = JSON.parse(sessionStorage.getItem('fs_dismissed_folders') || '[]');
+      return new Set((arr || []).map((s: string) => String(s).trim().toLowerCase()).filter(Boolean));
+    } catch (_) {
+      return new Set();
+    }
+  };
+
   const draftApplications = useMemo<ApplicationItem[]>(() => {
     // Collect all folder names and ARNs of applications that are already in preview or submitted
     const previewFolderSet = new Set((previews || []).map(p => (p.folder_name || '').trim().toLowerCase()));
+    const previewArnSet = new Set((previews || []).map(p => (p.arn || '').trim().toLowerCase()).filter(Boolean));
     const completedFolderSet = new Set((completed || []).map(c => (c.folder_name || '').trim().toLowerCase()));
     const completedArnSet = new Set((completed || []).map(c => (c.arn || '').trim().toLowerCase()).filter(Boolean));
+    const storedDismissed = getStoredDismissedKeys();
 
     return applications.filter(app => {
       if (!isAppMatchingService(app, activeServiceType)) {
@@ -1330,7 +1352,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
       const fName = (app.folder_name || '').trim();
       const folderKey = fName.toLowerCase();
-      if (dismissedFoldersRef.current.has(fName) || dismissedFoldersRef.current.has(folderKey)) {
+      const origKey = ((app as any).original_folder || '').trim().toLowerCase();
+      const arnKey = (app.arn || '').trim().toLowerCase();
+
+      if (
+        dismissedFoldersRef.current.has(fName) ||
+        dismissedFoldersRef.current.has(folderKey) ||
+        storedDismissed.has(folderKey) ||
+        (origKey && (dismissedFoldersRef.current.has(origKey) || storedDismissed.has(origKey))) ||
+        (arnKey && (dismissedFoldersRef.current.has(arnKey) || storedDismissed.has(arnKey)))
+      ) {
         return false;
       }
 
@@ -1344,7 +1375,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         Boolean(app.is_submitted) ||
         Boolean(app.has_receipt) ||
         completedFolderSet.has(folderKey) ||
-        (app.arn && completedArnSet.has(app.arn.trim().toLowerCase()))
+        (origKey && completedFolderSet.has(origKey)) ||
+        (arnKey && completedArnSet.has(arnKey)) ||
+        (submittingFolder && (folderKey === submittingFolder.toLowerCase() || origKey === submittingFolder.toLowerCase())) ||
+        (submittingArn && arnKey === submittingArn.toLowerCase())
       ) {
         return false;
       }
@@ -1356,7 +1390,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         Boolean(app.is_in_preview) ||
         Boolean(app.has_passport_preview) ||
         Boolean(app.has_declaration_preview) ||
-        previewFolderSet.has(folderKey)
+        previewFolderSet.has(folderKey) ||
+        (origKey && previewFolderSet.has(origKey)) ||
+        (arnKey && previewArnSet.has(arnKey))
       ) {
         return false;
       }
@@ -1387,22 +1423,36 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
       return requiresInfo;
     });
-  }, [applications, previews, completed, activeServiceType, dismissedCorrectionFolder]);
+  }, [applications, previews, completed, activeServiceType, dismissedCorrectionFolder, submittingFolder, submittingArn]);
 
   const activeServicePreviews = useMemo(() => {
     const completedFolderSet = new Set((completed || []).map(c => (c.folder_name || '').trim().toLowerCase()));
     const completedArnSet = new Set((completed || []).map(c => (c.arn || '').trim().toLowerCase()).filter(Boolean));
+    const storedDismissed = getStoredDismissedKeys();
+
     return previews.filter(p => {
       if (!isAppMatchingService(p, activeServiceType)) return false;
       const fn = (p.folder_name || '').trim().toLowerCase();
+      const orig = ((p as any).original_folder || '').trim().toLowerCase();
       const arn = (p.arn || '').trim().toLowerCase();
+
+      if (
+        dismissedFoldersRef.current.has(fn) ||
+        storedDismissed.has(fn) ||
+        (orig && (dismissedFoldersRef.current.has(orig) || storedDismissed.has(orig))) ||
+        (arn && (dismissedFoldersRef.current.has(arn) || storedDismissed.has(arn)))
+      ) {
+        return false;
+      }
+
       if (arn && completedArnSet.has(arn)) return false;
       if (fn && completedFolderSet.has(fn)) return false;
-      if (submittingFolder && fn === submittingFolder.toLowerCase()) return false;
+      if (orig && completedFolderSet.has(orig)) return false;
+      if (submittingFolder && (fn === submittingFolder.toLowerCase() || orig === submittingFolder.toLowerCase())) return false;
       if (submittingArn && arn === submittingArn.toLowerCase()) return false;
       return true;
     });
-  }, [previews, completed, activeServiceType, submittingFolder, submittingArn]);
+  }, [previews, completed, activeServiceType, submittingFolder, submittingArn, dismissedCorrectionFolder]);
 
   const [viewerModal, setViewerModal] = useState<{
     isOpen: boolean;
@@ -1501,27 +1551,31 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           return false;
         };
 
-        // If not active, auto-adopt in-flight or correction application
+        const storedDismissed = getStoredDismissedKeys();
+
+        // If not active, auto-adopt only truly in-flight background processing applications
         if (!currentTracker || !currentTracker.active) {
           const inFlightApp = serviceApps.find(a =>
-            ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL', 'NEEDS_CORRECTION'].includes(a.status) &&
+            ['UPLOADED', 'QUEUED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL', 'SUBMITTING_PORTAL', 'PROCESSING', 'UPLOADING'].includes(a.status) &&
             !dismissedFoldersRef.current.has(a.folder_name) &&
-            !dismissedFoldersRef.current.has((a.folder_name || '').trim().toLowerCase())
+            !dismissedFoldersRef.current.has((a.folder_name || '').trim().toLowerCase()) &&
+            !storedDismissed.has((a.folder_name || '').trim().toLowerCase()) &&
+            !((a as any).original_folder && storedDismissed.has(String((a as any).original_folder).trim().toLowerCase())) &&
+            !(a.arn && storedDismissed.has(String(a.arn).trim().toLowerCase()))
           );
           if (inFlightApp) {
-            const isCorrection = inFlightApp.status === 'NEEDS_CORRECTION';
-            const initPct = isCorrection ? 45 : (inFlightApp.status === 'FILLING_PORTAL' ? 70 : inFlightApp.status === 'EXTRACTED' ? 48 : 20);
+            const initPct = inFlightApp.status === 'FILLING_PORTAL' ? 70 : inFlightApp.status === 'EXTRACTED' ? 48 : 20;
             const adopted: SubmissionTrackerState = {
               active: true,
               ready: false,
               serviceType: sType,
-              isMissingInfo: isCorrection,
+              isMissingInfo: false,
               folderName: inFlightApp.folder_name,
               originalFolder: (inFlightApp as any).original_folder || inFlightApp.folder_name,
               arn: inFlightApp.arn,
               percent: initPct,
-              targetPercent: isCorrection ? 45 : (inFlightApp.status === 'FILLING_PORTAL' ? 85 : 48),
-              stageText: inFlightApp.stage || (isCorrection ? 'Required details missing — please complete the fields below to resume.' : 'Processing application...'),
+              targetPercent: inFlightApp.status === 'FILLING_PORTAL' ? 85 : 48,
+              stageText: inFlightApp.stage || 'Processing application...',
               applicantName: inFlightApp.applicant_name || inFlightApp.folder_name,
               startedAt: Date.now() - 10000,
             };
@@ -1533,10 +1587,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         }
 
         // Check if completed in serviceComps - if so, vanish tracker immediately!
-        const hasCompletedArn = Boolean(currentTracker.arn && serviceComps.some(c => c.arn && c.arn === currentTracker.arn));
+        const hasCompletedArn = Boolean(currentTracker.arn && serviceComps.some(c => c.arn && c.arn.toLowerCase() === currentTracker.arn!.toLowerCase()));
         const hasCompletedNamedFolder = Boolean(
           currentTracker.folderName && !isGenericNumber(currentTracker.folderName) &&
-          serviceComps.some(c => c.folder_name && c.folder_name.toLowerCase() === currentTracker.folderName!.toLowerCase())
+          serviceComps.some(c => (c.folder_name && c.folder_name.toLowerCase() === currentTracker.folderName!.toLowerCase()) ||
+                                 ((c as any).original_folder && (c as any).original_folder.toLowerCase() === currentTracker.folderName!.toLowerCase()))
         );
         if (hasCompletedArn || hasCompletedNamedFolder) {
           setSubmissionTrackerFor(sType, null);
@@ -1545,85 +1600,44 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         }
 
         // Check if dismissed
-        if (currentTracker.folderName && (dismissedFoldersRef.current.has(currentTracker.folderName) || dismissedFoldersRef.current.has(currentTracker.folderName.toLowerCase()))) {
+        const tf = (currentTracker.folderName || '').trim().toLowerCase();
+        const tof = (currentTracker.originalFolder || '').trim().toLowerCase();
+        const tarn = (currentTracker.arn || '').trim().toLowerCase();
+        if (
+          (tf && (dismissedFoldersRef.current.has(tf) || storedDismissed.has(tf))) ||
+          (tof && (dismissedFoldersRef.current.has(tof) || storedDismissed.has(tof))) ||
+          (tarn && (dismissedFoldersRef.current.has(tarn) || storedDismissed.has(tarn)))
+        ) {
           setSubmissionTrackerFor(sType, null);
           if (sType === activeServiceType) setUploadMessage(null);
           continue;
         }
 
         const activeProcessingApp = serviceApps.find(a =>
-          ['UPLOADED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL'].includes(a.status) &&
+          ['UPLOADED', 'QUEUED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL', 'SUBMITTING_PORTAL', 'PROCESSING', 'UPLOADING'].includes(a.status) &&
           matchesThisTracker(a, true)
         );
 
-        const matchingCorrectionApp = serviceApps.find(a => a.status === 'NEEDS_CORRECTION' && matchesThisTracker(a, true));
+        const matchingCorrectionApp = serviceApps.find(a =>
+          (a.status === 'NEEDS_CORRECTION' || a.status === 'PORTAL_FORM_ERROR' || a.status === 'MISSING_MANDATORY_DATA' || (Array.isArray(a.missing_fields) && a.missing_fields.length > 0)) &&
+          matchesThisTracker(a, true)
+        );
 
         let matchingPreview = servicePrevs.find(p => matchesThisTracker(p, true));
         const readyApp = serviceApps.find(a => (a.status === 'PENDING_CONFIRMATION' || a.status === 'READY_FOR_PREVIEW') && matchesThisTracker(a, true));
-        if (!matchingPreview && readyApp) {
-          matchingPreview = servicePrevs.find(p => p.folder_name === readyApp.folder_name) || ({
-            folder_name: readyApp.folder_name,
-            original_folder: (readyApp as any).original_folder,
-            applicant_name: readyApp.applicant_name,
-            arn: readyApp.arn,
-            status: readyApp.status,
-            stage: readyApp.stage || 'Preview Ready!',
-            progress: 100,
-            service_type: readyApp.service_type || sType,
-            portal_email: (readyApp as any).portal_email,
-            passport_preview_url: '',
-            declaration_preview_url: '',
-          } as PreviewItem);
-        }
 
         const matchingErrorApp = serviceApps.find(a => a.status === 'ERROR' && matchesThisTracker(a, true));
 
         if (matchingCorrectionApp) {
+          // File has reached Draft/Correction status! Progress bar vanishes so Drafts banner & screen display it cleanly!
+          setSubmissionTrackerFor(sType, null);
           if (sType === activeServiceType) setUploadMessage(null);
-          setSubmissionTrackerFor(sType, prev => {
-            const frozenPct = Math.max(prev?.percent || 45, 45);
-            const missingList = matchingCorrectionApp.missing_fields || [];
-            const missingDesc = missingList.length > 0
-              ? `Required details missing (${missingList.join(', ')}) — open in draft to complete.`
-              : 'Required details missing — please complete the fields below to resume.';
-            return {
-              active: true,
-              ready: false,
-              serviceType: sType,
-              isMissingInfo: true,
-              isError: false,
-              folderName: matchingCorrectionApp.folder_name,
-              originalFolder: (matchingCorrectionApp as any).original_folder || prev?.originalFolder || prev?.folderName,
-              percent: frozenPct,
-              targetPercent: frozenPct,
-              stageText: missingDesc,
-              applicantName: matchingCorrectionApp.applicant_name || prev?.applicantName || matchingCorrectionApp.folder_name,
-              startedAt: prev?.startedAt || Date.now(),
-            };
-          });
+          continue;
         } else if (matchingPreview || readyApp) {
-          const pItem = matchingPreview || readyApp!;
+          // File has reached Preview status! Progress bar vanishes so Preview banner & screen display it cleanly!
+          setSubmissionTrackerFor(sType, null);
           if (sType === activeServiceType) setUploadMessage(null);
-          setSubmissionTrackerFor(sType, prev => {
-            if (prev && prev.active) {
-              return {
-                active: true,
-                ready: true,
-                serviceType: sType,
-                isMissingInfo: false,
-                isError: false,
-                folderName: pItem.folder_name,
-                originalFolder: (pItem as any).original_folder || prev.originalFolder || prev.folderName,
-                arn: pItem.arn || prev.arn,
-                percent: 100,
-                targetPercent: 100,
-                stageText: 'Preview Ready!',
-                applicantName: pItem.applicant_name || prev.applicantName || pItem.folder_name,
-                startedAt: prev.startedAt,
-              };
-            }
-            return prev;
-          });
+          continue;
         } else if (activeProcessingApp) {
           const stageTarget =
             activeProcessingApp.status === 'UPLOADED' ? 25 :
@@ -3422,11 +3436,23 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   };
 
+  const markFolderDismissed = (folderName: string, originalFolder?: string, arn?: string) => {
+    const rawKeys = [folderName, originalFolder, arn].filter(Boolean);
+    const keys = rawKeys.flatMap(k => [String(k).trim(), String(k).trim().toLowerCase()]);
+    keys.forEach(k => dismissedFoldersRef.current.add(k));
+    try {
+      const stored = JSON.parse(sessionStorage.getItem('fs_dismissed_folders') || '[]');
+      const combined = Array.from(new Set([...stored, ...keys]));
+      sessionStorage.setItem('fs_dismissed_folders', JSON.stringify(combined));
+    } catch (_) {}
+  };
+
   const handleDismissCorrection = (folderName?: string) => {
     const targetFolder = folderName || submissionTrackerRef.current?.folderName || submissionTracker?.folderName || correctionApp?.folder_name;
     // 1. Immediately abort active tracker, upload message and draft selection so UI updates synchronously in this exact single click
     submissionTrackerRef.current = null;
-    setSubmissionTracker(null);
+    setSubmissionTrackerFor('reissue', null);
+    setSubmissionTrackerFor('fresh', null);
     setUploadMessage(null);
     setSelectedDraftFolder(null);
 
@@ -3435,10 +3461,35 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
     if (targetFolder) {
       const cleanKey = targetFolder.trim();
-      dismissedFoldersRef.current.add(cleanKey);
-      dismissedFoldersRef.current.add(cleanKey.toLowerCase());
+      const targetApp = applications.find(a =>
+        (a.folder_name || '').trim().toLowerCase() === cleanKey.toLowerCase() ||
+        ((a as any).original_folder || '').trim().toLowerCase() === cleanKey.toLowerCase() ||
+        ((a as any).arn || '').trim().toLowerCase() === cleanKey.toLowerCase()
+      );
+
+      markFolderDismissed(cleanKey, (targetApp as any)?.original_folder, targetApp?.arn);
       setDismissedCorrectionFolder(cleanKey);
-      setApplications(prev => prev.filter(a => (a.folder_name || '').trim().toLowerCase() !== cleanKey.toLowerCase()));
+
+      setApplications(prev => prev.filter(a => {
+        const fn = (a.folder_name || '').trim().toLowerCase();
+        const ofn = ((a as any).original_folder || '').trim().toLowerCase();
+        const arn = ((a as any).arn || '').trim().toLowerCase();
+        const storedDismissed = getStoredDismissedKeys();
+        return !dismissedFoldersRef.current.has(fn) && !storedDismissed.has(fn) &&
+               (!ofn || (!dismissedFoldersRef.current.has(ofn) && !storedDismissed.has(ofn))) &&
+               (!arn || (!dismissedFoldersRef.current.has(arn) && !storedDismissed.has(arn)));
+      }));
+
+      setPreviews(prev => prev.filter(p => {
+        const fn = (p.folder_name || '').trim().toLowerCase();
+        const ofn = ((p as any).original_folder || '').trim().toLowerCase();
+        const arn = ((p as any).arn || '').trim().toLowerCase();
+        const storedDismissed = getStoredDismissedKeys();
+        return !dismissedFoldersRef.current.has(fn) && !storedDismissed.has(fn) &&
+               (!ofn || (!dismissedFoldersRef.current.has(ofn) && !storedDismissed.has(ofn))) &&
+               (!arn || (!dismissedFoldersRef.current.has(arn) && !storedDismissed.has(arn)));
+      }));
+
       try { window.dispatchEvent(new Event('fs_counts_updated')); } catch (_) {}
 
       // 3. Fire delete to server and synchronize all data
@@ -3503,19 +3554,38 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const executeCancelApplication = async (folderName: string) => {
     try {
       setCancellingFolder(folderName);
-      const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
-      await automationApi.dismissApplication(email, folderName, googleUserEmail);
-
       const cleanKey = folderName.trim();
-      dismissedFoldersRef.current.add(cleanKey);
-      dismissedFoldersRef.current.add(cleanKey.toLowerCase());
+      const targetPrev = previews.find(p =>
+        (p.folder_name || '').trim().toLowerCase() === cleanKey.toLowerCase() ||
+        ((p as any).original_folder || '').trim().toLowerCase() === cleanKey.toLowerCase() ||
+        ((p as any).arn || '').trim().toLowerCase() === cleanKey.toLowerCase()
+      );
+
+      markFolderDismissed(cleanKey, (targetPrev as any)?.original_folder, targetPrev?.arn);
       setDismissedCorrectionFolder(cleanKey);
-      if (submissionTrackerRef.current?.folderName === folderName) {
-        submissionTrackerRef.current = null;
-        setSubmissionTracker(null);
-      }
-      setPreviews(prev => prev.filter(p => (p.folder_name || '').toLowerCase() !== cleanKey.toLowerCase()));
-      setApplications(prev => prev.filter(a => (a.folder_name || '').toLowerCase() !== cleanKey.toLowerCase()));
+
+      setSubmissionTrackerFor('reissue', null);
+      setSubmissionTrackerFor('fresh', null);
+      submissionTrackerRef.current = null;
+
+      setPreviews(prev => prev.filter(p => {
+        const fn = (p.folder_name || '').trim().toLowerCase();
+        const ofn = ((p as any).original_folder || '').trim().toLowerCase();
+        const arn = ((p as any).arn || '').trim().toLowerCase();
+        const storedDismissed = getStoredDismissedKeys();
+        return !dismissedFoldersRef.current.has(fn) && !storedDismissed.has(fn) &&
+               (!ofn || (!dismissedFoldersRef.current.has(ofn) && !storedDismissed.has(ofn))) &&
+               (!arn || (!dismissedFoldersRef.current.has(arn) && !storedDismissed.has(arn)));
+      }));
+      setApplications(prev => prev.filter(a => {
+        const fn = (a.folder_name || '').trim().toLowerCase();
+        const ofn = ((a as any).original_folder || '').trim().toLowerCase();
+        const arn = ((a as any).arn || '').trim().toLowerCase();
+        const storedDismissed = getStoredDismissedKeys();
+        return !dismissedFoldersRef.current.has(fn) && !storedDismissed.has(fn) &&
+               (!ofn || (!dismissedFoldersRef.current.has(ofn) && !storedDismissed.has(ofn))) &&
+               (!arn || (!dismissedFoldersRef.current.has(arn) && !storedDismissed.has(arn)));
+      }));
       setPreviewSelections(prev => {
         const copy = { ...prev };
         delete copy[folderName];
@@ -3523,17 +3593,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       });
       setCancelModalTarget(null);
       try { window.dispatchEvent(new Event('fs_counts_updated')); } catch (_) {}
+
+      const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
+      await automationApi.dismissApplication(email, folderName, googleUserEmail);
       await refreshAllData();
     } catch (err: any) {
       console.warn("Failed to delete application files from server:", err);
       const cleanKey = folderName.trim();
-      dismissedFoldersRef.current.add(cleanKey);
-      dismissedFoldersRef.current.add(cleanKey.toLowerCase());
+      markFolderDismissed(cleanKey);
       setDismissedCorrectionFolder(cleanKey);
-      if (submissionTrackerRef.current?.folderName === folderName) {
-        submissionTrackerRef.current = null;
-        setSubmissionTracker(null);
-      }
+      setSubmissionTrackerFor('reissue', null);
+      setSubmissionTrackerFor('fresh', null);
+      submissionTrackerRef.current = null;
       setPreviews(prev => prev.filter(p => (p.folder_name || '').toLowerCase() !== cleanKey.toLowerCase()));
       setApplications(prev => prev.filter(a => (a.folder_name || '').toLowerCase() !== cleanKey.toLowerCase()));
       setCancelModalTarget(null);
@@ -3627,10 +3698,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
       setSubmittingFolder(folderName);
       setSubmittingArn(arn);
+      if (folderName || arn) {
+        markFolderDismissed(folderName, undefined, arn);
+      }
       setFinalSubmitProgress(78);
       // Immediately clear Home page submission tracker and pending previews so UI updates cleanly with zero lag
       submissionTrackerRef.current = null;
-      setSubmissionTracker(null);
+      setSubmissionTrackerFor('reissue', null);
+      setSubmissionTrackerFor('fresh', null);
       setUploadMessage(null);
       setPreviews(prev => prev.filter(p => (p.folder_name || '').toLowerCase() !== folderName.toLowerCase() && (!arn || p.arn !== arn)));
       setApplications(prev => prev.filter(a => (a.folder_name || '').toLowerCase() !== folderName.toLowerCase() && (!arn || a.arn !== arn)));
@@ -3641,7 +3716,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
       setFinalSubmitProgress(100);
       submissionTrackerRef.current = null;
-      setSubmissionTracker(null);
+      setSubmissionTrackerFor('reissue', null);
+      setSubmissionTrackerFor('fresh', null);
       setUploadMessage(null);
       try { window.dispatchEvent(new Event('fs_counts_updated')); } catch (_) {}
       await refreshAllData();
@@ -3794,10 +3870,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const portalErrorApp = applications.find(
     a => a.status === 'ERROR' &&
+    isAppMatchingService(a, activeServiceType) &&
     a.error_type !== 'PORTAL_FORM_ERROR' &&
     a.error_type !== 'STAGE1_7_FAILED' &&
     a.folder_name !== dismissedCorrectionFolder &&
-    !dismissedFoldersRef.current.has(a.folder_name)
+    !dismissedFoldersRef.current.has(a.folder_name) &&
+    !dismissedFoldersRef.current.has((a.folder_name || '').toLowerCase()) &&
+    !getStoredDismissedKeys().has((a.folder_name || '').toLowerCase())
   );
 
 
@@ -4433,7 +4512,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
             <div className="fresh-form-card">
 
-              {!submissionTracker?.active && draftApplications.length > 0 && (() => {
+              {draftApplications.length > 0 && (() => {
                 const cApp = draftApplications[0];
                 return (
                   <div
@@ -4515,7 +4594,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 );
               })()}
 
-              {!submissionTracker?.active && activeServicePreviews.length > 0 && (() => {
+              {activeServicePreviews.length > 0 && (() => {
                 const pApp = activeServicePreviews[0];
                 return (
                   <div
