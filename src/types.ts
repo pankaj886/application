@@ -9,4 +9,5 @@ export interface UserProfile {
   id_token: string;
   access_token: string;
   expires_at: number;
+  sub?: string;
 }

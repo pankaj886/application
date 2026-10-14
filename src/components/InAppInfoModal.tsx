@@ -67,8 +67,6 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
     setFormData({});
     if (onClear) {
       onClear();
-    } else {
-      onSave({});
     }
     onClose();
   };
@@ -80,7 +78,6 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
 
   const selectedReissueReason =
     formData.reissue_reason &&
-    formData.reissue_reason !== 'CHANGE IN EXISTING PERSONAL PARTICULARS' &&
     REISSUE_REASONS.some(r => r.value === formData.reissue_reason)
       ? formData.reissue_reason
       : 'VALIDITY EXPIRED WITHIN 3 YEARS/DUE TO EXPIRE';
@@ -489,13 +486,25 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                               checked={isChecked}
                               onChange={(e) => {
                                 const checked = e.target.checked;
-                                handleChange(item.key, checked ? 'Y' : 'N');
-                                if (checked) {
-                                  handleChange('change_type', item.typeValue);
+                                // Build combined change_type from all checked items
+                                setFormData((prev) => {
+                                  const updated = { ...prev, [item.key]: checked ? 'Y' : 'N' };
                                   if (item.key === 'change_in_name') {
-                                    handleChange('change_in_surname', 'Y');
+                                    updated['change_in_surname'] = checked ? 'Y' : 'N';
                                   }
-                                }
+                                  const allChangeItems = [
+                                    { key: 'change_in_address', typeValue: 'CHANGE IN ADDRESS' },
+                                    { key: 'change_in_spouse', typeValue: 'CHANGE IN SPOUSE NAME' },
+                                    { key: 'change_in_name', typeValue: 'CHANGE IN NAME / SURNAME' },
+                                    { key: 'change_in_appearance', typeValue: 'CHANGE IN APPEARANCE / SIGNATURE' },
+                                    { key: 'change_in_dob', typeValue: 'CHANGE IN DATE OF BIRTH' },
+                                  ];
+                                  const activeTypes = allChangeItems
+                                    .filter((ci) => updated[ci.key] === 'Y')
+                                    .map((ci) => ci.typeValue);
+                                  updated['change_type'] = activeTypes.length > 0 ? activeTypes.join(', ') : 'NOT APPLICABLE';
+                                  return updated;
+                                });
                               }}
                               style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }}
                             />

@@ -367,19 +367,19 @@ export const APPLYING_SCENARIOS: ApplyingScenario[] = [
   },
   {
     id: 'fresh_minor',
-    label: 'Fresh Passport',
+    label: 'Fresh Passport (Minor)',
     serviceType: 'fresh',
     icon: 'baby',
-    slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'sign', 'info'],
-    description: 'Fresh passport application for applicant born abroad / in Italy',
+    slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'annexure_d', 'sign', 'info'],
+    description: 'Fresh passport application for minor (born abroad / in Italy) — requires parental consent (Annexure D)',
   },
   {
     id: 'fresh_adult',
-    label: 'Fresh Passport',
+    label: 'Fresh Passport (Adult)',
     serviceType: 'fresh',
     icon: 'award',
-    slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'sign', 'info'],
-    description: 'Fresh passport application for applicant born abroad / in Italy',
+    slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'annexure_e', 'sign', 'info'],
+    description: 'Fresh passport application for adult born abroad / in Italy — requires self-declaration (Annexure E)',
   },
 ];
 
@@ -1733,20 +1733,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           });
         } else if (matchingErrorApp) {
           if (sType === activeServiceType) setUploadMessage(null);
+          // PERMANENT PROGRESS BAR FIX: Never show a stuck or broken red "Error" progress bar!
+          // Seamlessly transition the tracker to 100% Information Required so the user can open it in Drafts
           setSubmissionTrackerFor(sType, prev => {
             if (prev && prev.active) {
               return {
                 active: true,
                 ready: false,
                 serviceType: sType,
-                isError: true,
-                isMissingInfo: false,
+                isError: false,
+                isMissingInfo: true,
                 errorType: matchingErrorApp.error_type,
                 folderName: matchingErrorApp.folder_name,
                 originalFolder: (matchingErrorApp as any).original_folder || prev.originalFolder,
-                percent: Math.max(prev.percent || 40, 40),
-                targetPercent: Math.max(prev.percent || 40, 40),
-                stageText: matchingErrorApp.error_message || 'Application encountered an error during submission.',
+                percent: 100,
+                targetPercent: 100,
+                stageText: matchingErrorApp.error_message || 'Action Required in Drafts',
                 applicantName: matchingErrorApp.applicant_name || prev.applicantName || matchingErrorApp.folder_name,
                 startedAt: prev.startedAt,
               };
@@ -4619,7 +4621,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
             <div className="fresh-form-card">
 
-              {allDraftApplications.length > 0 && (() => {
+              {/* SINGLE NOTIFICATION RULE: Show at most ONE top notification banner.
+                  If submissionTracker is active, the progress tracker card above ALREADY serves as the banner.
+                  If submissionTracker is NOT active, show Draft warning (priority 1) OR Preview Ready (priority 2), never both! */}
+              {!submissionTracker?.active && allDraftApplications.length > 0 && (() => {
                 const cApp = draftApplications[0] || allDraftApplications[0];
                 const cService = (cApp.service_type || '').toLowerCase() === 'fresh' ? 'fresh' : 'reissue';
                 return (
@@ -4707,7 +4712,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 );
               })()}
 
-              {allValidPreviews.length > 0 && (() => {
+              {!submissionTracker?.active && allDraftApplications.length === 0 && allValidPreviews.length > 0 && (() => {
                 const pApp = activeServicePreviews[0] || allValidPreviews[0];
                 const pService = (pApp.service_type || '').toLowerCase() === 'fresh' ? 'fresh' : 'reissue';
                 return (

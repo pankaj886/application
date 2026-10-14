@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/Sidebar';
@@ -23,6 +23,7 @@ export function App() {
   const [passportServiceType, setPassportServiceType] = useState<'reissue' | 'fresh'>('reissue');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 960);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const updateInFlight = useRef(false);
 
   useEffect(() => {
     const checkSavedSession = async () => {
@@ -84,6 +85,8 @@ export function App() {
 
   useEffect(() => {
     const updateCounts = async () => {
+      if (updateInFlight.current) return;
+      updateInFlight.current = true;
       try {
         const gEmail = user?.email?.trim().toLowerCase() || '';
         if (!gEmail) {
@@ -127,7 +130,7 @@ export function App() {
           return true;
         });
         const servicePrevs = allValidPrevs.filter(isMatch);
-        const effectivePreviewCount = servicePrevs.length > 0 ? servicePrevs.length : allValidPrevs.length;
+        const effectivePreviewCount = servicePrevs.length;
 
         const allDrafts = (statusRes?.applications || []).filter((a: any) => {
           const fn = (a.folder_name || '').trim().toLowerCase();
@@ -170,19 +173,22 @@ export function App() {
           );
         });
         const serviceDrafts = allDrafts.filter(isMatch);
-        const effectiveDraftCount = serviceDrafts.length > 0 ? serviceDrafts.length : allDrafts.length;
+        const effectiveDraftCount = serviceDrafts.length;
 
         const serviceComps = (comps || []).filter(isMatch);
-        const effectiveCompletedCount = serviceComps.length > 0 ? serviceComps.length : (comps || []).length;
+        const effectiveCompletedCount = serviceComps.length;
 
         setDraftCount(effectiveDraftCount);
         setPreviewCount(effectivePreviewCount);
         setCompletedCount(effectiveCompletedCount);
-      } catch (_) {}
+      } catch (_) {
+      } finally {
+        updateInFlight.current = false;
+      }
     };
 
     updateCounts();
-    const interval = setInterval(updateCounts, 4000);
+    const interval = setInterval(updateCounts, 8000);
     const handleEmailChanged = () => {
       updateCounts();
     };

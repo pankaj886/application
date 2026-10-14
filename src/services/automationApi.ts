@@ -173,24 +173,27 @@ class AutomationApiService {
     }
 
     this.isResolving = (async () => {
-      if (await this.pingHealth(LOCAL_FALLBACK_URL, 2500)) {
+      // 1. If local server is running on this machine, use it for lowest latency
+      if (await this.pingHealth(LOCAL_FALLBACK_URL, 1200)) {
         this.activeBaseUrl = LOCAL_FALLBACK_URL;
         localStorage.setItem('fs_automation_api_url', LOCAL_FALLBACK_URL);
         return LOCAL_FALLBACK_URL;
       }
 
-      if (this.activeBaseUrl && !forceRefresh) {
-        if (await this.pingHealth(this.activeBaseUrl, 2000)) {
+      // 2. If we already have a working cached remote tunnel URL, keep using it
+      if (this.activeBaseUrl && !forceRefresh && this.activeBaseUrl !== LOCAL_FALLBACK_URL) {
+        if (await this.pingHealth(this.activeBaseUrl, 3000)) {
           return this.activeBaseUrl;
         }
       }
 
+      // 3. Check local tunnel_config.json if available
       try {
         const localCfgRes = await fetch(`/tunnel_config.json?_t=${Date.now()}`, { cache: 'no-store' });
         if (localCfgRes.ok) {
           const localCfg = await localCfgRes.json();
           const pub = (localCfg?.public_url || '').replace(/\/+$/, '');
-          if (pub && pub.startsWith('http') && (await this.pingHealth(pub, 2500))) {
+          if (pub && pub.startsWith('http') && (await this.pingHealth(pub, 3500))) {
             this.activeBaseUrl = pub;
             localStorage.setItem('fs_automation_api_url', pub);
             return pub;
@@ -198,10 +201,14 @@ class AutomationApiService {
         }
       } catch (_) {}
 
+      // 4. Resolve active Cloudflare tunnel from GitHub Releases Gateway (guaranteed live across all PCs)
       let candidatePublicUrl = '';
       try {
         const ghRes = await fetch(`${GITHUB_API_GATEWAY_URL}?_t=${Date.now()}`, {
-          headers: { 'Accept': 'application/vnd.github.v3+json' },
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': 'token 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',
+          },
           cache: 'no-store',
         });
         if (ghRes.ok) {
@@ -217,6 +224,7 @@ class AutomationApiService {
         }
       } catch (_) {}
 
+      // 5. Fallback to raw GitHub Gateway URL
       if (!candidatePublicUrl) {
         try {
           const rawRes = await fetch(`${CLOUD_GATEWAY_RAW_URL}?_t=${Date.now()}`, { cache: 'no-store' });
@@ -230,7 +238,8 @@ class AutomationApiService {
         } catch (_) {}
       }
 
-      if (candidatePublicUrl && (await this.pingHealth(candidatePublicUrl, 4000))) {
+      // 6. Verify health of candidate Cloudflare tunnel
+      if (candidatePublicUrl && (await this.pingHealth(candidatePublicUrl, 5000))) {
         this.activeBaseUrl = candidatePublicUrl;
         localStorage.setItem('fs_automation_api_url', candidatePublicUrl);
         return candidatePublicUrl;
