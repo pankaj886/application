@@ -97,7 +97,7 @@ export function App() {
         }
         const scopedKey = `fs_active_client_email_${gEmail}`;
         const storedPortalEmail = localStorage.getItem(scopedKey)?.trim().toLowerCase();
-        const activeEmail = storedPortalEmail || '';
+        const activeEmail = storedPortalEmail || gEmail;
         if (!activeEmail) {
           setDraftCount(0);
           setPreviewCount(0);
@@ -109,24 +109,37 @@ export function App() {
           automationApi.getCompletedApplications(activeEmail, gEmail).catch(() => []),
           automationApi.getClientStatus(activeEmail, gEmail).catch(() => ({ client_email: activeEmail, applications: [] })),
         ]);
-        const compFolderSet = new Set((comps || []).map((c: any) => (c.folder_name || '').trim().toLowerCase()));
         const compArnSet = new Set((comps || []).map((c: any) => (c.arn || '').trim().toLowerCase()).filter(Boolean));
         let dismissedSet = new Set<string>();
         try {
           const raw = JSON.parse(sessionStorage.getItem('fs_dismissed_folders') || '[]');
-          dismissedSet = new Set((raw || []).map((s: string) => String(s).trim().toLowerCase()).filter(Boolean));
+          dismissedSet = new Set((raw || []).map((s: string) => String(s).trim().toLowerCase()).filter((s: string) => s && !/^\d+$/.test(s)));
         } catch (_) {}
 
+        const isGenericFolderNumber = (s?: string) => Boolean(s && /^\d+$/.test(String(s).trim()));
         const isMatch = (item: any) => isAppMatchingService(item, passportServiceType);
 
         const allValidPrevs = (prevs || []).filter((p: any) => {
           const fn = (p.folder_name || '').trim().toLowerCase();
-          const orig = ((p as any).original_folder || '').trim().toLowerCase();
           const arn = (p.arn || '').trim().toLowerCase();
+          const portal = (p.portal_email || '').trim().toLowerCase();
+
+          // Only unique ARNs mark a preview as completed
           if (arn && compArnSet.has(arn)) return false;
-          if (fn && compFolderSet.has(fn)) return false;
-          if (orig && compFolderSet.has(orig)) return false;
-          if (dismissedSet.has(fn) || (orig && dismissedSet.has(orig)) || (arn && dismissedSet.has(arn))) return false;
+
+          // If checking folder, must NOT be a generic number, must match portal, and must have same ARN
+          if (portal && fn && !isGenericFolderNumber(fn)) {
+            const isExactCompleted = (comps || []).some((c: any) =>
+              (c.portal_email || '').trim().toLowerCase() === portal &&
+              (c.folder_name || '').trim().toLowerCase() === fn &&
+              c.arn && c.arn.toLowerCase() === arn
+            );
+            if (isExactCompleted) return false;
+          }
+
+          // Dismissed check only on specific non-generic identifiers
+          if (arn && dismissedSet.has(arn)) return false;
+          if (fn && !isGenericFolderNumber(fn) && dismissedSet.has(fn)) return false;
           return true;
         });
         const servicePrevs = allValidPrevs.filter(isMatch);
@@ -134,12 +147,23 @@ export function App() {
 
         const allDrafts = (statusRes?.applications || []).filter((a: any) => {
           const fn = (a.folder_name || '').trim().toLowerCase();
-          const orig = ((a as any).original_folder || '').trim().toLowerCase();
           const arn = (a.arn || '').trim().toLowerCase();
+          const portal = (a.portal_email || '').trim().toLowerCase();
+
+          // Only unique ARNs mark a draft as completed
           if (arn && compArnSet.has(arn)) return false;
-          if (fn && compFolderSet.has(fn)) return false;
-          if (orig && compFolderSet.has(orig)) return false;
-          if (dismissedSet.has(fn) || (orig && dismissedSet.has(orig)) || (arn && dismissedSet.has(arn))) return false;
+
+          if (portal && fn && !isGenericFolderNumber(fn)) {
+            const isExactCompleted = (comps || []).some((c: any) =>
+              (c.portal_email || '').trim().toLowerCase() === portal &&
+              (c.folder_name || '').trim().toLowerCase() === fn &&
+              c.arn && c.arn.toLowerCase() === arn
+            );
+            if (isExactCompleted) return false;
+          }
+
+          if (arn && dismissedSet.has(arn)) return false;
+          if (fn && !isGenericFolderNumber(fn) && dismissedSet.has(fn)) return false;
           const status = (a?.status || '').toUpperCase();
           if (
             a.has_passport_preview ||
