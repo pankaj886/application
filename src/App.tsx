@@ -4,7 +4,7 @@ import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/Sidebar';
 import { ServicesView } from './components/ServicesView';
 import { PassportView } from './components/PassportView';
-import { FreshReissueView } from './components/FreshReissueView';
+import { FreshReissueView, isAppMatchingService } from './components/FreshReissueView';
 import { LoginView } from './components/LoginView';
 import { LogoutConfirmModal } from './components/LogoutConfirmModal';
 import { NavigationTab, FreshReissueSection, UserProfile } from './types';
@@ -106,7 +106,15 @@ export function App() {
           automationApi.getCompletedApplications(activeEmail, gEmail).catch(() => []),
           automationApi.getClientStatus(activeEmail, gEmail).catch(() => ({ client_email: activeEmail, applications: [] })),
         ]);
+        const compFolderSet = new Set((comps || []).map((c: any) => (c.folder_name || '').trim().toLowerCase()));
+        const compArnSet = new Set((comps || []).map((c: any) => (c.arn || '').trim().toLowerCase()).filter(Boolean));
+        const isMatch = (item: any) => isAppMatchingService(item, passportServiceType);
         const drafts = (statusRes?.applications || []).filter((a: any) => {
+          if (!isMatch(a)) return false;
+          const fn = (a.folder_name || '').trim().toLowerCase();
+          const arn = (a.arn || '').trim().toLowerCase();
+          if (arn && compArnSet.has(arn)) return false;
+          if (fn && compFolderSet.has(fn)) return false;
           const status = (a?.status || '').toUpperCase();
           if (
             a.has_passport_preview ||
@@ -139,9 +147,17 @@ export function App() {
             (Array.isArray(a.missing_fields) && a.missing_fields.length > 0)
           );
         });
+        const validPrevs = (prevs || []).filter((p: any) => {
+          if (!isMatch(p)) return false;
+          const fn = (p.folder_name || '').trim().toLowerCase();
+          const arn = (p.arn || '').trim().toLowerCase();
+          if (arn && compArnSet.has(arn)) return false;
+          if (fn && compFolderSet.has(fn)) return false;
+          return true;
+        });
         setDraftCount(drafts.length);
-        setPreviewCount(prevs.length);
-        setCompletedCount(comps.length);
+        setPreviewCount(validPrevs.length);
+        setCompletedCount((comps || []).filter(isMatch).length);
       } catch (_) {}
     };
 
@@ -151,13 +167,15 @@ export function App() {
       updateCounts();
     };
     window.addEventListener('fs_active_email_changed', handleEmailChanged);
+    window.addEventListener('fs_counts_updated', handleEmailChanged);
     window.addEventListener('storage', handleEmailChanged);
     return () => {
       clearInterval(interval);
       window.removeEventListener('fs_active_email_changed', handleEmailChanged);
+      window.removeEventListener('fs_counts_updated', handleEmailChanged);
       window.removeEventListener('storage', handleEmailChanged);
     };
-  }, [user?.email]);
+  }, [user?.email, passportServiceType]);
 
   useEffect(() => {
     let prevWidth = window.innerWidth;
@@ -341,9 +359,11 @@ export function App() {
                   currentSection={freshReissueSection}
                   onSectionChange={(sec) => setFreshReissueSection(sec)}
                   onBackToPassport={handleBackToPassport}
+                  onBackToServices={handleBackToServices}
                   serviceType={passportServiceType}
                   onServiceTypeChange={setPassportServiceType}
                 />
+
               )}
             </div>
           </main>
