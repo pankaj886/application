@@ -4458,51 +4458,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             <span>Passport Selection</span>
           </button>
         </div>
-
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Service Mode:
-          </span>
-          <div style={{ display: 'inline-flex', background: '#f1f5f9', borderRadius: '999px', padding: '3px', border: '1px solid #e2e8f0' }}>
-            <button
-              type="button"
-              onClick={() => switchActiveServiceType('reissue')}
-              style={{
-                fontSize: '12px',
-                fontWeight: 700,
-                padding: '4px 12px',
-                borderRadius: '999px',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                backgroundColor: activeServiceType === 'reissue' ? '#2563eb' : 'transparent',
-                color: activeServiceType === 'reissue' ? '#ffffff' : '#64748b',
-                boxShadow: activeServiceType === 'reissue' ? '0 1px 3px rgba(37,99,235,0.3)' : 'none',
-              }}
-            >
-              Reissue Passport
-            </button>
-            <button
-              type="button"
-              onClick={() => switchActiveServiceType('fresh')}
-              style={{
-                fontSize: '12px',
-                fontWeight: 700,
-                padding: '4px 12px',
-                borderRadius: '999px',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                backgroundColor: activeServiceType === 'fresh' ? '#059669' : 'transparent',
-                color: activeServiceType === 'fresh' ? '#ffffff' : '#64748b',
-                boxShadow: activeServiceType === 'fresh' ? '0 1px 3px rgba(5,150,105,0.3)' : 'none',
-              }}
-            >
-              Fresh Passport
-            </button>
-          </div>
-        </div>
       </div>
 
       {currentSection === 'form' && (
