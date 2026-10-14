@@ -370,7 +370,7 @@ export const APPLYING_SCENARIOS: ApplyingScenario[] = [
     label: 'Fresh Passport',
     serviceType: 'fresh',
     icon: 'baby',
-    slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'passport', 'identity', 'residence', 'marriage_cert', 'sign', 'info'],
+    slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'sign', 'info'],
     description: 'Fresh passport application for applicant born abroad / in Italy',
   },
   {
@@ -378,7 +378,7 @@ export const APPLYING_SCENARIOS: ApplyingScenario[] = [
     label: 'Fresh Passport',
     serviceType: 'fresh',
     icon: 'award',
-    slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'passport', 'identity', 'residence', 'marriage_cert', 'sign', 'info'],
+    slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'sign', 'info'],
     description: 'Fresh passport application for applicant born abroad / in Italy',
   },
 ];
@@ -1002,7 +1002,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   currentSection,
   onSectionChange,
   onBackToPassport,
-  onBackToServices,
+  onBackToServices: _onBackToServices,
   serviceType,
   onServiceTypeChange: _onServiceTypeChange,
 }) => {
@@ -1138,7 +1138,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const activeSlots = useMemo<DocSlotKey[]>(() => {
     const curScenario = APPLYING_SCENARIOS.find(s => s.id === selectedScenario) || APPLYING_SCENARIOS[0];
-    const baseSlots = [...curScenario.slots];
+    let baseSlots = [...curScenario.slots];
     for (const extraSlot of dynamicallyActivatedSlots) {
       if (!baseSlots.includes(extraSlot)) {
         baseSlots.push(extraSlot);
@@ -1149,8 +1149,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         baseSlots.push(key);
       }
     }
+    if (activeServiceType === 'fresh') {
+      baseSlots = baseSlots.filter(s => s !== 'passport' && s !== 'identity' && s !== 'residence');
+    }
     return baseSlots;
-  }, [selectedScenario, dynamicallyActivatedSlots, slotFiles]);
+  }, [selectedScenario, dynamicallyActivatedSlots, slotFiles, activeServiceType]);
 
   // Box Drag Over states & tracking refs
   const [dragSlot, setDragSlot] = useState<string | null>(null);
@@ -1515,6 +1518,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       ]);
       const apps = (statusRes.applications || []).filter(a => {
         const fn = (a.folder_name || '').trim();
+        const isCurrentlySubmitting =
+          (submittingFolder && (fn === submittingFolder || fn.toLowerCase() === submittingFolder.toLowerCase())) ||
+          (submittingArn && a.arn === submittingArn);
+        if (isCurrentlySubmitting) return true;
         return !dismissedFoldersRef.current.has(fn) && !dismissedFoldersRef.current.has(fn.toLowerCase());
       });
       if (statusRes.quota) {
@@ -2076,9 +2083,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     const isBusy =
       Boolean(submissionTracker?.active && !submissionTracker.ready) ||
       Boolean(submittingArn) ||
+      Boolean(submittingFolder) ||
       Boolean(reuploadingFolder) ||
       Boolean(voiceProcessingFolder);
-    const pollMs = isBusy ? 900 : 2200;
+    const pollMs = isBusy ? 750 : 2200;
     const interval = setInterval(() => refreshAllDataRef.current(), pollMs);
     return () => clearInterval(interval);
   }, [
@@ -2089,6 +2097,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     submissionTracker?.active,
     submissionTracker?.ready,
     submittingArn,
+    submittingFolder,
     reuploadingFolder,
     voiceProcessingFolder,
   ]);
@@ -2684,7 +2693,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     const slotsToActivate = new Set<DocSlotKey>();
 
     for (const item of analyzedList) {
-      const targetSlot = item.detectedSlot;
+      let targetSlot = item.detectedSlot;
+
+      if (activeServiceType === 'fresh' && (targetSlot === 'passport' || targetSlot === 'identity' || targetSlot === 'residence')) {
+        if (!occupiedSlots.has('info')) {
+          targetSlot = 'info';
+        } else {
+          extraFilesToAppend.push(item.original);
+          continue;
+        }
+      }
 
       // Primary detected slot is unoccupied
       if (!occupiedSlots.has(targetSlot)) {
@@ -2698,10 +2716,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       let altSlot: DocSlotKey | null = null;
       const lowerName = item.original.name.toLowerCase();
 
-      if (lowerName.includes('pds') || lowerName.includes('soggiorno') || lowerName.includes('permesso') || lowerName.includes('ricevuta')) {
+      if (activeServiceType !== 'fresh' && (lowerName.includes('pds') || lowerName.includes('soggiorno') || lowerName.includes('permesso') || lowerName.includes('ricevuta'))) {
         if (!occupiedSlots.has('identity')) altSlot = 'identity';
         else if (!occupiedSlots.has('residence')) altSlot = 'residence';
-      } else if (lowerName.includes('cie') || lowerName.includes('residen') || lowerName.includes('carta') || lowerName.includes('ospitalita')) {
+      } else if (activeServiceType !== 'fresh' && (lowerName.includes('cie') || lowerName.includes('residen') || lowerName.includes('carta') || lowerName.includes('ospitalita'))) {
         if (!occupiedSlots.has('residence')) altSlot = 'residence';
         else if (!occupiedSlots.has('identity')) altSlot = 'identity';
       } else if (lowerName.includes('marriage') || lowerName.includes('matrimonio')) {
@@ -2786,6 +2804,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           if (matched.slot === 'sign') return;
           const target = item.target_slot as DocSlotKey;
           if (!target || target === 'info' || (item.target_slot as string) === 'extra') return;
+          if (activeServiceType === 'fresh' && (target === 'passport' || target === 'identity' || target === 'residence')) return;
           if (matched.slot === 'residence' && target === 'identity') return;
           if (target === 'identity' && item.role !== 'pds') return;
 
@@ -3672,20 +3691,30 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   };
 
   useEffect(() => {
-    if (!submittingFolder) {
+    if (!submittingFolder && !submittingArn) {
       setFinalSubmitProgress(0);
       return;
     }
-    setFinalSubmitProgress(78);
     const interval = setInterval(() => {
+      const match = applications.find(
+        a => (submittingFolder && a.folder_name === submittingFolder) || (submittingArn && a.arn === submittingArn)
+      );
+      const serverTarget = (match && typeof match.progress === 'number' && match.progress > 0)
+        ? match.progress
+        : (submittingPreviewRef.current?.progress || 70);
+
       setFinalSubmitProgress(prev => {
-        if (prev >= 98) return 98;
-        const step = prev < 88 ? 2 : 1;
-        return Math.min(98, prev + step);
+        if (prev === 0) return Math.min(serverTarget, 70);
+        if (prev < serverTarget) {
+          const diff = serverTarget - prev;
+          const step = diff > 15 ? 3 : diff > 6 ? 2 : 1;
+          return Math.min(serverTarget, prev + step);
+        }
+        return prev;
       });
-    }, 160);
+    }, 180);
     return () => clearInterval(interval);
-  }, [submittingFolder]);
+  }, [submittingFolder, submittingArn, applications]);
 
   const handleConfirmFinalSubmit = async (folderName: string, arn: string, previewItem?: PreviewItem) => {
     if (voiceProcessingFolder) return;
@@ -3698,27 +3727,32 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
       setSubmittingFolder(folderName);
       setSubmittingArn(arn);
-      if (folderName || arn) {
-        markFolderDismissed(folderName, undefined, arn);
+      setFinalSubmitProgress(70);
+      if (submittingPreviewRef.current) {
+        submittingPreviewRef.current.progress = 70;
+        submittingPreviewRef.current.stage = 'Connecting to Passport Seva Portal...';
       }
-      setFinalSubmitProgress(78);
-      // Immediately clear Home page submission tracker and pending previews so UI updates cleanly with zero lag
+
+      // Immediately clear Home page submission tracker so UI remains clean
       submissionTrackerRef.current = null;
       setSubmissionTrackerFor('reissue', null);
       setSubmissionTrackerFor('fresh', null);
       setUploadMessage(null);
-      setPreviews(prev => prev.filter(p => (p.folder_name || '').toLowerCase() !== folderName.toLowerCase() && (!arn || p.arn !== arn)));
-      setApplications(prev => prev.filter(a => (a.folder_name || '').toLowerCase() !== folderName.toLowerCase() && (!arn || a.arn !== arn)));
       try { window.dispatchEvent(new Event('fs_counts_updated')); } catch (_) {}
 
       const email = (queryAccountEmail || activeClientEmail || '').trim().toLowerCase();
       await automationApi.confirmSubmission(email, folderName, arn, googleUserEmail);
 
       setFinalSubmitProgress(100);
+      if (folderName || arn) {
+        markFolderDismissed(folderName, undefined, arn);
+      }
       submissionTrackerRef.current = null;
       setSubmissionTrackerFor('reissue', null);
       setSubmissionTrackerFor('fresh', null);
       setUploadMessage(null);
+      setPreviews(prev => prev.filter(p => (p.folder_name || '').toLowerCase() !== folderName.toLowerCase() && (!arn || p.arn !== arn)));
+      setApplications(prev => prev.filter(a => (a.folder_name || '').toLowerCase() !== folderName.toLowerCase() && (!arn || a.arn !== arn)));
       try { window.dispatchEvent(new Event('fs_counts_updated')); } catch (_) {}
       await refreshAllData();
       onSectionChange('submitted');
@@ -4206,39 +4240,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             <ArrowLeft style={{ width: '16px', height: '16px' }} />
             <span>Passport Selection</span>
           </button>
-
-          {onBackToServices && (
-            <button
-              type="button"
-              onClick={() => {
-                onBackToServices();
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                fontSize: '13px',
-                fontWeight: 600,
-                color: '#475569',
-                backgroundColor: '#ffffff',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f8fafc';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#ffffff';
-              }}
-              title="Return to All Services"
-            >
-              <ArrowLeft style={{ width: '14px', height: '14px' }} />
-              <span>All Services</span>
-            </button>
-          )}
         </div>
 
 
@@ -6571,14 +6572,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 const isSubmittingThis = (submittingArn && submittingArn === item.arn) || (submittingFolder && submittingFolder === folderKey) || (item as any).status === 'SUBMITTING_PORTAL' || reuploadingFolder === folderKey;
                 const appMatch = applications.find(a => a.folder_name === item.folder_name || (item.arn && a.arn === item.arn) || (submittingFolder && a.folder_name === submittingFolder));
                 const candidateProgress = isSubmittingThis
-                  ? (finalSubmitProgress || appMatch?.progress || item.progress || 78)
+                  ? (finalSubmitProgress || appMatch?.progress || item.progress || 70)
                   : (item.progress || 100);
                 const liveSubmitPct = Math.min(100, Math.max(1, candidateProgress));
                 const liveStage = (appMatch?.stage && appMatch.stage !== 'Previews Ready for Confirmation' && !appMatch.stage.toLowerCase().includes('previews ready'))
                   ? appMatch.stage
                   : (item.stage && item.stage !== 'Previews Ready for Confirmation' && !item.stage.toLowerCase().includes('previews ready'))
                   ? item.stage
-                  : 'Submitting application to Passport Seva Portal...';
+                  : (submittingPreviewRef.current?.stage || 'Submitting application to Passport Seva Portal...');
                 const liveSubmitStage = liveStage;
 
                 return (
