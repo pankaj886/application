@@ -1365,10 +1365,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       const arnKey = (app.arn || '').trim().toLowerCase();
       const portal = (app.portal_email || '').trim().toLowerCase();
 
-      // Only check dismissal for specific non-generic identifiers
+      // Only check dismissal for specific unique ARN or current in-memory dismissed correction
       if (
         (arnKey && (dismissedFoldersRef.current.has(arnKey) || storedDismissed.has(arnKey))) ||
-        (folderKey && !isGenericFolderNumber(folderKey) && (dismissedFoldersRef.current.has(fName) || dismissedFoldersRef.current.has(folderKey) || storedDismissed.has(folderKey)))
+        (dismissedCorrectionFolder && (folderKey === dismissedCorrectionFolder.toLowerCase() || (arnKey && arnKey === dismissedCorrectionFolder.toLowerCase())))
       ) {
         return false;
       }
@@ -1447,10 +1447,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       const arn = (p.arn || '').trim().toLowerCase();
       const portal = (p.portal_email || '').trim().toLowerCase();
 
-      // Only check dismissal for specific non-generic identifiers
+      // Only check dismissal for unique ARN or active in-memory dismissed correction
       if (
         (arn && (dismissedFoldersRef.current.has(arn) || storedDismissed.has(arn))) ||
-        (fn && !isGenericFolderNumber(fn) && (dismissedFoldersRef.current.has(fn) || storedDismissed.has(fn)))
+        (dismissedCorrectionFolder && (fn === dismissedCorrectionFolder.toLowerCase() || (arn && arn === dismissedCorrectionFolder.toLowerCase())))
       ) {
         return false;
       }
@@ -1553,8 +1553,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         window.dispatchEvent(new Event('fs_counts_updated'));
       } catch (_) {}
 
-      const isGenericNumber = (s?: string) => Boolean(s && /^\d+$/.test(s.trim()));
-
       for (const sType of ['reissue', 'fresh'] as const) {
         let currentTracker = trackersRef.current[sType];
         const serviceApps = apps.filter(a => isAppMatchingService(a, sType));
@@ -1585,10 +1583,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         if (!currentTracker || !currentTracker.active) {
           const inFlightApp = serviceApps.find(a =>
             ['UPLOADED', 'QUEUED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL', 'SUBMITTING_PORTAL', 'PROCESSING', 'UPLOADING'].includes(a.status) &&
-            !dismissedFoldersRef.current.has(a.folder_name) &&
-            !dismissedFoldersRef.current.has((a.folder_name || '').trim().toLowerCase()) &&
-            !storedDismissed.has((a.folder_name || '').trim().toLowerCase()) &&
-            !(a.arn && storedDismissed.has(String(a.arn).trim().toLowerCase()))
+            !(a.arn && (dismissedFoldersRef.current.has(a.arn) || storedDismissed.has(String(a.arn).trim().toLowerCase()))) &&
+            !(dismissedCorrectionFolder && a.folder_name === dismissedCorrectionFolder)
           );
           if (inFlightApp) {
             const initPct = inFlightApp.status === 'FILLING_PORTAL' ? 70 : inFlightApp.status === 'EXTRACTED' ? 48 : 20;
@@ -1612,9 +1608,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             // Also auto-adopt if there is a preview ready waiting for verification!
             const readyPreviewApp = prevs.find(p =>
               isAppMatchingService(p, sType) &&
-              !dismissedFoldersRef.current.has(p.folder_name) &&
-              !storedDismissed.has((p.folder_name || '').toLowerCase()) &&
-              !(p.arn && storedDismissed.has(p.arn.toLowerCase()))
+              !(p.arn && (dismissedFoldersRef.current.has(p.arn) || storedDismissed.has(p.arn.toLowerCase()))) &&
+              !(dismissedCorrectionFolder && p.folder_name === dismissedCorrectionFolder)
             );
             if (readyPreviewApp) {
               const adoptedReady: SubmissionTrackerState = {
@@ -1651,12 +1646,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           continue;
         }
 
-        // Check if dismissed (only non-numeric names or ARNs)
+        // Check if dismissed: ONLY by unique ARN or active in-memory dismissed correction folder
         const tf = (currentTracker.folderName || '').trim().toLowerCase();
         const tarn = (currentTracker.arn || '').trim().toLowerCase();
         if (
           (tarn && (dismissedFoldersRef.current.has(tarn) || storedDismissed.has(tarn))) ||
-          (tf && !isGenericNumber(tf) && (dismissedFoldersRef.current.has(tf) || storedDismissed.has(tf)))
+          (dismissedCorrectionFolder && tf === dismissedCorrectionFolder.toLowerCase())
         ) {
           setSubmissionTrackerFor(sType, null);
           if (sType === activeServiceType) setUploadMessage(null);
@@ -3324,6 +3319,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     // Immediately clear slots so uploaded documents fade away from UI without double process
     clearDocumentSlots(true);
     isUploadingRef.current = true;
+    dismissedFoldersRef.current.clear();
+    setDismissedCorrectionFolder(null);
+    try {
+      sessionStorage.removeItem('fs_dismissed_folders');
+    } catch (_) {}
 
     try {
       setIsUploading(true);
@@ -3543,19 +3543,20 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   };
 
-  const markFolderDismissed = (folderName: string, _originalFolder?: string, arn?: string) => {
-    const isNum = (s?: string) => Boolean(s && /^\d+$/.test(s.trim()));
-    const rawKeys = [
-      folderName && !isNum(folderName) ? folderName : null,
-      arn ? arn : null
-    ].filter(Boolean);
-    const keys = rawKeys.flatMap(k => [String(k).trim(), String(k).trim().toLowerCase()]);
-    keys.forEach(k => dismissedFoldersRef.current.add(k));
-    try {
-      const stored = JSON.parse(sessionStorage.getItem('fs_dismissed_folders') || '[]');
-      const combined = Array.from(new Set([...stored, ...keys])).filter(k => !isNum(k));
-      sessionStorage.setItem('fs_dismissed_folders', JSON.stringify(combined));
-    } catch (_) {}
+  const markFolderDismissed = (folderName?: string, _originalFolder?: string, arn?: string) => {
+    if (folderName) {
+      dismissedFoldersRef.current.add(folderName.trim());
+      dismissedFoldersRef.current.add(folderName.trim().toLowerCase());
+    }
+    if (arn) {
+      const cleanArn = arn.trim().toLowerCase();
+      dismissedFoldersRef.current.add(cleanArn);
+      try {
+        const stored = JSON.parse(sessionStorage.getItem('fs_dismissed_folders') || '[]');
+        const combined = Array.from(new Set([...stored, cleanArn]));
+        sessionStorage.setItem('fs_dismissed_folders', JSON.stringify(combined));
+      } catch (_) {}
+    }
   };
 
   const handleDismissCorrection = (folderName?: string) => {
@@ -4806,7 +4807,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 );
               })()}
 
-              {uploadMessage && !portalErrorApp && !submissionTracker?.active && currentSection === 'form' && !uploadMessage.text.toLowerCase().includes('waiting for preview') && !uploadMessage.text.toLowerCase().includes('file submitted') && (
+              {uploadMessage && !portalErrorApp && !submissionTracker?.active && allDraftApplications.length === 0 && allValidPreviews.length === 0 && currentSection === 'form' && !uploadMessage.text.toLowerCase().includes('waiting for preview') && !uploadMessage.text.toLowerCase().includes('file submitted') && (
                 <div className={`form-alert ${uploadMessage.type === 'success' ? 'alert-success' : 'alert-error'}`}>
                   {uploadMessage.type === 'success' ? (
                     <Clock className="alert-icon animate-pulse" />

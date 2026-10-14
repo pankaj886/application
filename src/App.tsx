@@ -137,9 +137,8 @@ export function App() {
             if (isExactCompleted) return false;
           }
 
-          // Dismissed check only on specific non-generic identifiers
+          // Dismissed check only on specific unique ARNs
           if (arn && dismissedSet.has(arn)) return false;
-          if (fn && !isGenericFolderNumber(fn) && dismissedSet.has(fn)) return false;
           return true;
         });
         const servicePrevs = allValidPrevs.filter(isMatch);
@@ -163,7 +162,6 @@ export function App() {
           }
 
           if (arn && dismissedSet.has(arn)) return false;
-          if (fn && !isGenericFolderNumber(fn) && dismissedSet.has(fn)) return false;
           const status = (a?.status || '').toUpperCase();
           if (
             a.has_passport_preview ||
