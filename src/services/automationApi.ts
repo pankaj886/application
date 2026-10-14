@@ -331,7 +331,8 @@ class AutomationApiService {
     declarationPlace?: string,
     serviceType?: string,
     infoData?: string,
-    onProgress?: (percent: number) => void
+    onProgress?: (percent: number) => void,
+    folderName?: string
   ): Promise<{ success: boolean; folder_name: string; message: string }> {
     let baseUrl = await this.resolveGateway();
     const uploadRequestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -346,6 +347,7 @@ class AutomationApiService {
       if (declarationPlace && declarationPlace.trim()) fd.append('declaration_place', declarationPlace.trim().toUpperCase());
       if (serviceType && serviceType.trim()) fd.append('service_type', serviceType.trim().toLowerCase());
       if (infoData && infoData.trim()) fd.append('info_data', infoData.trim());
+      if (folderName && folderName.trim()) fd.append('folder_name', folderName.trim());
 
       if (Array.isArray(files)) {
         for (const file of files) fd.append('files', file);

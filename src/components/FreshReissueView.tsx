@@ -1444,15 +1444,36 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
     return previews.filter(p => {
       const fn = (p.folder_name || '').trim().toLowerCase();
+      const ofn = ((p as any).original_folder || '').trim().toLowerCase();
       const arn = (p.arn || '').trim().toLowerCase();
       const portal = (p.portal_email || '').trim().toLowerCase();
+      const pname = (p.applicant_name || '').trim().toLowerCase();
+      const pAliases: string[] = Array.isArray((p as any).alias_folders)
+        ? (p as any).alias_folders.map((x: any) => String(x).trim().toLowerCase())
+        : [];
 
-      // Only check dismissal for unique ARN or active in-memory dismissed correction
-      if (
-        (arn && (dismissedFoldersRef.current.has(arn) || storedDismissed.has(arn))) ||
-        (dismissedCorrectionFolder && (fn === dismissedCorrectionFolder.toLowerCase() || (arn && arn === dismissedCorrectionFolder.toLowerCase())))
-      ) {
-        return false;
+      // Check if this preview matches an active tracker - if so, it must NEVER be dismissed!
+      const isTracked = (['reissue', 'fresh'] as const).some(st => {
+        const tr = trackersRef.current[st];
+        if (!tr || !tr.active) return false;
+        const tf = (tr.folderName || '').trim().toLowerCase();
+        const tof = (tr.originalFolder || '').trim().toLowerCase();
+        const tarn = (tr.arn || '').trim().toLowerCase();
+        const tname = (tr.applicantName || '').trim().toLowerCase();
+        return (tarn && arn && tarn === arn) ||
+               (tf && (fn === tf || ofn === tf || pAliases.includes(tf))) ||
+               (tof && (fn === tof || ofn === tof || pAliases.includes(tof))) ||
+               (tname && pname && (tname === pname || pname.includes(tname) || tname.includes(pname)));
+      });
+
+      if (!isTracked) {
+        // Only check dismissal for unique ARN or active in-memory dismissed correction
+        if (
+          (arn && (dismissedFoldersRef.current.has(arn) || storedDismissed.has(arn))) ||
+          (dismissedCorrectionFolder && (fn === dismissedCorrectionFolder.toLowerCase() || ofn === dismissedCorrectionFolder.toLowerCase() || (arn && arn === dismissedCorrectionFolder.toLowerCase())))
+        ) {
+          return false;
+        }
       }
 
       // Completed check: ONLY by unique ARN or exact portal+folder with same ARN
@@ -1470,7 +1491,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       if (submittingArn && arn && arn === submittingArn.toLowerCase()) return false;
       return true;
     });
-  }, [previews, completed, submittingFolder, submittingArn, dismissedCorrectionFolder]);
+  }, [previews, completed, submittingFolder, submittingArn, dismissedCorrectionFolder, trackers]);
 
   const activeServicePreviews = useMemo(() => {
     return allValidPreviews.filter(p => isAppMatchingService(p, activeServiceType));
@@ -1537,10 +1558,38 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       ]);
       const apps = (statusRes.applications || []).filter(a => {
         const fn = (a.folder_name || '').trim();
+        const ofn = ((a as any).original_folder || '').trim();
         const isCurrentlySubmitting =
           (submittingFolder && (fn === submittingFolder || fn.toLowerCase() === submittingFolder.toLowerCase())) ||
           (submittingArn && a.arn === submittingArn);
         if (isCurrentlySubmitting) return true;
+
+        // Never filter out an application that matches any active submission tracker
+        for (const sType of ['reissue', 'fresh'] as const) {
+          const t = trackersRef.current[sType];
+          if (t && t.active) {
+            const tf = (t.folderName || '').trim().toLowerCase();
+            const tof = (t.originalFolder || '').trim().toLowerCase();
+            const tarn = (t.arn || '').trim().toLowerCase();
+            const tname = (t.applicantName || '').trim().toLowerCase();
+            const fnLower = fn.toLowerCase();
+            const ofnLower = ofn.toLowerCase();
+            const anameLower = (a.applicant_name || '').trim().toLowerCase();
+            const arnLower = ((a as any).arn || '').trim().toLowerCase();
+            const aAliases: string[] = Array.isArray((a as any).alias_folders)
+              ? (a as any).alias_folders.map((x: any) => String(x).trim().toLowerCase())
+              : [];
+            if (
+              (tarn && arnLower && tarn === arnLower) ||
+              (tf && (fnLower === tf || ofnLower === tf || aAliases.includes(tf))) ||
+              (tof && (fnLower === tof || ofnLower === tof || aAliases.includes(tof))) ||
+              (tname && anameLower && (tname === anameLower || anameLower.includes(tname) || tname.includes(anameLower)))
+            ) {
+              return true;
+            }
+          }
+        }
+
         return !dismissedFoldersRef.current.has(fn) && !dismissedFoldersRef.current.has(fn.toLowerCase());
       });
       if (statusRes.quota) {
@@ -1558,7 +1607,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         const serviceApps = apps.filter(a => isAppMatchingService(a, sType));
         const serviceComps = comps.filter(c => isAppMatchingService(c, sType));
 
-        const matchesThisTracker = (item: { folder_name?: string; original_folder?: string; applicant_name?: string; arn?: string }, allowNameFallback = false) => {
+        const matchesThisTracker = (item: { folder_name?: string; original_folder?: string; applicant_name?: string; arn?: string; alias_folders?: string[] }, allowNameFallback = false) => {
           if (!currentTracker) return false;
           const tf = (currentTracker.folderName || '').trim().toLowerCase();
           const of = (currentTracker.originalFolder || '').trim().toLowerCase();
@@ -1566,13 +1615,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           const itemFolder = (item.folder_name || '').trim().toLowerCase();
           const itemOrig = ((item as any).original_folder || '').trim().toLowerCase();
           const itemArn = ((item as any).arn || '').trim().toLowerCase();
+          const itemAliases: string[] = Array.isArray((item as any).alias_folders)
+            ? (item as any).alias_folders.map((x: any) => String(x).trim().toLowerCase())
+            : [];
           if (ta && itemArn && ta === itemArn) return true;
-          if (tf && (itemFolder === tf || itemOrig === tf)) return true;
-          if (of && (itemFolder === of || itemOrig === of)) return true;
+          if (tf && (itemFolder === tf || itemOrig === tf || itemAliases.includes(tf))) return true;
+          if (of && (itemFolder === of || itemOrig === of || itemAliases.includes(of))) return true;
           if (allowNameFallback && currentTracker.applicantName) {
             const tn = currentTracker.applicantName.trim().toLowerCase();
             const iname = (item.applicant_name || '').trim().toLowerCase();
-            if (tn && iname && tn === iname) return true;
+            if (tn && iname && (tn === iname || iname.includes(tn) || tn.includes(iname))) return true;
           }
           return false;
         };
@@ -3315,6 +3367,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       education_proof: slotFiles.education_proof || undefined,
     };
     const infoPayload = Object.keys(inAppInfoData).length > 0 ? JSON.stringify(inAppInfoData) : undefined;
+    let candidateApplicantName: string | undefined = undefined;
+    if (inAppInfoData && (inAppInfoData.given_name || inAppInfoData.surname)) {
+      const gn = String(inAppInfoData.given_name || '').trim();
+      const sn = String(inAppInfoData.surname || '').trim();
+      const full = (sn && !['NONE', 'BLANK', 'NULL'].includes(sn.toUpperCase())) ? `${gn} ${sn}`.trim() : gn;
+      if (full) candidateApplicantName = full;
+    }
 
     // Immediately clear slots so uploaded documents fade away from UI without double process
     clearDocumentSlots(true);
@@ -3363,7 +3422,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             stageText: `Uploading documents to server (${uploadPct}%)...`,
             startedAt: prev?.startedAt || Date.now(),
           }));
-        }
+        },
+        candidateApplicantName
       );
 
       const uploadedFolder = uploadRes?.folder_name;
@@ -3373,6 +3433,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         ready: false,
         folderName: uploadedFolder,
         originalFolder: uploadedFolder,
+        applicantName: candidateApplicantName || uploadedFolder,
         percent: 20,
         targetPercent: 48,
         stageText: 'Extracting details from uploaded documents...',
