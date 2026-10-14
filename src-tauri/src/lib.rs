@@ -290,13 +290,14 @@ fn apply_update_and_restart(app_handle: tauri::AppHandle, installer_path: String
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
         let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
-        let default_exe = format!(r"{}\Foreigners Studio\foreigners_studio.exe", local_app_data);
+        let install_dir = format!(r"{}\Foreigners Studio", local_app_data);
+        let default_exe = format!(r"{}\foreigners_studio.exe", install_dir);
         let target_exe = if !current_exe.is_empty() { current_exe } else { default_exe.clone() };
 
         let bat_path = std::env::temp_dir().join("foreigners_studio_updater.bat");
         let bat_content = format!(
-            "@echo off\r\nsetlocal enabledelayedexpansion\r\ntimeout /t 1 /nobreak >nul\r\ntaskkill /F /IM foreigners_studio.exe >nul 2>&1\r\ntaskkill /F /IM msedgewebview2.exe >nul 2>&1\r\ntimeout /t 2 /nobreak >nul\r\nif exist \"{}\" (\r\n    start /wait \"\" \"{}\" /S\r\n    timeout /t 2 /nobreak >nul\r\n)\r\nif exist \"{}\" (\r\n    start \"\" explorer.exe \"{}\"\r\n) else (\r\n    start \"\" explorer.exe \"{}\"\r\n)\r\ntimeout /t 2 /nobreak >nul\r\n(goto) 2>nul & del \"%~f0\"\r\n",
-            installer_path, installer_path, target_exe, target_exe, default_exe
+            "@echo off\r\nsetlocal enabledelayedexpansion\r\ntimeout /t 1 /nobreak >nul\r\ntaskkill /F /T /IM foreigners_studio.exe >nul 2>&1\r\ntaskkill /F /T /IM msedgewebview2.exe >nul 2>&1\r\ntimeout /t 2 /nobreak >nul\r\nif exist \"{}\" (\r\n    start /wait \"\" \"{}\" /S /D={}\r\n    timeout /t 2 /nobreak >nul\r\n)\r\nif exist \"{}\" (\r\n    start \"\" \"{}\"\r\n) else if exist \"{}\" (\r\n    start \"\" \"{}\"\r\n)\r\ntimeout /t 2 /nobreak >nul\r\n(goto) 2>nul & del \"%~f0\"\r\n",
+            installer_path, installer_path, install_dir, default_exe, default_exe, target_exe, target_exe
         );
 
         if let Err(e) = std::fs::write(&bat_path, bat_content) {
