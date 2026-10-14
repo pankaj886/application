@@ -282,6 +282,14 @@ class UpdateService {
     this.status = 'restarting';
     this.notify();
 
+    if (!this.installerPath && this.fallbackDownloadUrl) {
+      try {
+        this.installerPath = await invoke<string>('download_installer', { url: this.fallbackDownloadUrl });
+      } catch (err) {
+        console.warn('[Auto-Updater] Installer late-fetch warning:', err);
+      }
+    }
+
     if (this.installerPath) {
       try {
         await invoke('apply_update_and_restart', { installerPath: this.installerPath });
