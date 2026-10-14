@@ -110,7 +110,24 @@ def update_main_manifest():
     except Exception as e:
         print(f"Note updating main branch manifest: {e}", flush=True)
 
+def verify_binary_version():
+    exe_path = os.path.join(DIST_DIR, "foreigners_studio.exe")
+    if os.path.exists(exe_path):
+        import subprocess
+        cmd = f"(Get-Item -LiteralPath '{exe_path}').VersionInfo.ProductVersion"
+        try:
+            res = subprocess.run(["powershell.exe", "-NoProfile", "-Command", cmd], capture_output=True, text=True, check=True)
+            prod_ver = res.stdout.strip()
+            if prod_ver and prod_ver != VERSION:
+                raise ValueError(f"FATAL: foreigners_studio.exe version '{prod_ver}' does not match target release version '{VERSION}'! Halting upload to prevent infinite restart loop.")
+            print(f"[VERIFIED] foreigners_studio.exe product version matches target release: {prod_ver}", flush=True)
+        except Exception as e:
+            if "FATAL" in str(e):
+                raise
+            print(f"Warning: Could not verify exe version ({e}), proceeding with caution.", flush=True)
+
 def main():
+    verify_binary_version()
     rel = get_or_create_release()
     upload_url = rel["upload_url"]
     existing_assets = {a["name"]: a["id"] for a in rel.get("assets", [])}
