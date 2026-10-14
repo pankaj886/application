@@ -44,7 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   previewCount = 0,
   completedCount = 0,
 }) => {
-  const [appVersion, setAppVersion] = useState<string>('1.0.90');
+  const [appVersion, setAppVersion] = useState<string>('1.0.91');
 
   useEffect(() => {
     invoke<string>('get_app_version')
@@ -144,7 +144,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="subnav-label-group">
                   <span className="subnav-label">Drafts</span>
                   {draftCount > 0 && (
-                    <span className="subnav-badge subnav-badge-amber">{draftCount}</span>
+                    <span className="subnav-badge subnav-badge-amber" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <span className="subnav-dot-badge subnav-dot-badge-amber" style={{ width: '6px', height: '6px', margin: 0 }} />
+                      <span>{draftCount}</span>
+                    </span>
                   )}
                 </div>
               )}
@@ -166,7 +169,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="subnav-label-group">
                   <span className="subnav-label">Preview</span>
                   {previewCount > 0 && (
-                    <span className="subnav-badge">{previewCount}</span>
+                    <span className="subnav-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <span className="subnav-dot-badge" style={{ width: '6px', height: '6px', margin: 0 }} />
+                      <span>{previewCount}</span>
+                    </span>
                   )}
                 </div>
               )}

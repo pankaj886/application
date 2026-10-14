@@ -115,8 +115,21 @@ export function App() {
         } catch (_) {}
 
         const isMatch = (item: any) => isAppMatchingService(item, passportServiceType);
-        const drafts = (statusRes?.applications || []).filter((a: any) => {
-          if (!isMatch(a)) return false;
+
+        const allValidPrevs = (prevs || []).filter((p: any) => {
+          const fn = (p.folder_name || '').trim().toLowerCase();
+          const orig = ((p as any).original_folder || '').trim().toLowerCase();
+          const arn = (p.arn || '').trim().toLowerCase();
+          if (arn && compArnSet.has(arn)) return false;
+          if (fn && compFolderSet.has(fn)) return false;
+          if (orig && compFolderSet.has(orig)) return false;
+          if (dismissedSet.has(fn) || (orig && dismissedSet.has(orig)) || (arn && dismissedSet.has(arn))) return false;
+          return true;
+        });
+        const servicePrevs = allValidPrevs.filter(isMatch);
+        const effectivePreviewCount = servicePrevs.length > 0 ? servicePrevs.length : allValidPrevs.length;
+
+        const allDrafts = (statusRes?.applications || []).filter((a: any) => {
           const fn = (a.folder_name || '').trim().toLowerCase();
           const orig = ((a as any).original_folder || '').trim().toLowerCase();
           const arn = (a.arn || '').trim().toLowerCase();
@@ -156,20 +169,15 @@ export function App() {
             (Array.isArray(a.missing_fields) && a.missing_fields.length > 0)
           );
         });
-        const validPrevs = (prevs || []).filter((p: any) => {
-          if (!isMatch(p)) return false;
-          const fn = (p.folder_name || '').trim().toLowerCase();
-          const orig = ((p as any).original_folder || '').trim().toLowerCase();
-          const arn = (p.arn || '').trim().toLowerCase();
-          if (arn && compArnSet.has(arn)) return false;
-          if (fn && compFolderSet.has(fn)) return false;
-          if (orig && compFolderSet.has(orig)) return false;
-          if (dismissedSet.has(fn) || (orig && dismissedSet.has(orig)) || (arn && dismissedSet.has(arn))) return false;
-          return true;
-        });
-        setDraftCount(drafts.length);
-        setPreviewCount(validPrevs.length);
-        setCompletedCount((comps || []).filter(isMatch).length);
+        const serviceDrafts = allDrafts.filter(isMatch);
+        const effectiveDraftCount = serviceDrafts.length > 0 ? serviceDrafts.length : allDrafts.length;
+
+        const serviceComps = (comps || []).filter(isMatch);
+        const effectiveCompletedCount = serviceComps.length > 0 ? serviceComps.length : (comps || []).length;
+
+        setDraftCount(effectiveDraftCount);
+        setPreviewCount(effectivePreviewCount);
+        setCompletedCount(effectiveCompletedCount);
       } catch (_) {}
     };
 
