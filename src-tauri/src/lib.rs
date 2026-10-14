@@ -295,7 +295,7 @@ fn apply_update_and_restart(app_handle: tauri::AppHandle, installer_path: String
 
         let bat_path = std::env::temp_dir().join("foreigners_studio_updater.bat");
         let bat_content = format!(
-            "@echo off\r\nsetlocal enabledelayedexpansion\r\ntimeout /t 1 /nobreak >nul\r\ntaskkill /F /IM foreigners_studio.exe >nul 2>&1\r\ntaskkill /F /IM msedgewebview2.exe >nul 2>&1\r\ntimeout /t 1 /nobreak >nul\r\nif exist \"{}\" (\r\n    start /wait \"\" \"{}\" /S\r\n    timeout /t 1 /nobreak >nul\r\n)\r\nif exist \"{}\" (\r\n    start \"\" explorer.exe \"{}\"\r\n) else (\r\n    start \"\" explorer.exe \"{}\"\r\n)\r\ntimeout /t 2 /nobreak >nul\r\n(goto) 2>nul & del \"%~f0\"\r\n",
+            "@echo off\r\nsetlocal enabledelayedexpansion\r\ntimeout /t 1 /nobreak >nul\r\ntaskkill /F /IM foreigners_studio.exe >nul 2>&1\r\ntaskkill /F /IM msedgewebview2.exe >nul 2>&1\r\ntimeout /t 2 /nobreak >nul\r\nif exist \"{}\" (\r\n    start /wait \"\" \"{}\" /S\r\n    timeout /t 2 /nobreak >nul\r\n)\r\nif exist \"{}\" (\r\n    start \"\" explorer.exe \"{}\"\r\n) else (\r\n    start \"\" explorer.exe \"{}\"\r\n)\r\ntimeout /t 2 /nobreak >nul\r\n(goto) 2>nul & del \"%~f0\"\r\n",
             installer_path, installer_path, target_exe, target_exe, default_exe
         );
 
