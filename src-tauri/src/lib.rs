@@ -127,7 +127,23 @@ fn app_is_maximized(window: tauri::Window) -> bool {
 
 #[tauri::command]
 fn app_restart(app_handle: tauri::AppHandle) {
-    app_handle.restart();
+    #[cfg(target_os = "windows")]
+    {
+        let current_exe = std::env::current_exe()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| {
+                let local = std::env::var("LOCALAPPDATA").unwrap_or_default();
+                format!(r"{}\Foreigners Studio\foreigners_studio.exe", local)
+            });
+        let _ = create_silent_command("cmd.exe")
+            .args(["/c", "start", "", "explorer.exe", &current_exe])
+            .spawn();
+        app_handle.exit(0);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        app_handle.restart();
+    }
 }
 
 #[tauri::command]
@@ -270,16 +286,26 @@ async fn download_installer(url: String) -> Result<String, String> {
 fn apply_update_and_restart(app_handle: tauri::AppHandle, installer_path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
+        let current_exe = std::env::current_exe()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
         let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
-        let app_exe = format!(r"{}\Foreigners Studio\foreigners_studio.exe", local_app_data);
+        let default_exe = format!(r"{}\Foreigners Studio\foreigners_studio.exe", local_app_data);
+        let target_exe = if !current_exe.is_empty() { current_exe } else { default_exe.clone() };
 
-        let ps_cmd = format!(
-            "Start-Sleep -Milliseconds 800; Get-Process -Name 'foreigners_studio' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500; $p = Start-Process -FilePath '{}' -ArgumentList '/S' -PassThru; $p.WaitForExit(60000); Start-Sleep -Milliseconds 1200; Start-Process -FilePath '{}'",
-            installer_path, app_exe
+        let bat_path = std::env::temp_dir().join("foreigners_studio_updater.bat");
+        let bat_content = format!(
+            "@echo off\r\nsetlocal enabledelayedexpansion\r\ntimeout /t 1 /nobreak >nul\r\ntaskkill /F /IM foreigners_studio.exe >nul 2>&1\r\ntaskkill /F /IM msedgewebview2.exe >nul 2>&1\r\ntimeout /t 1 /nobreak >nul\r\nif exist \"{}\" (\r\n    start /wait \"\" \"{}\" /S\r\n    timeout /t 1 /nobreak >nul\r\n)\r\nif exist \"{}\" (\r\n    start \"\" explorer.exe \"{}\"\r\n) else (\r\n    start \"\" explorer.exe \"{}\"\r\n)\r\ntimeout /t 2 /nobreak >nul\r\n(goto) 2>nul & del \"%~f0\"\r\n",
+            installer_path, installer_path, target_exe, target_exe, default_exe
         );
 
-        let _ = create_silent_command("powershell.exe")
-            .args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", &ps_cmd])
+        if let Err(e) = std::fs::write(&bat_path, bat_content) {
+            return Err(format!("Failed to write updater script: {}", e));
+        }
+
+        let bat_str = bat_path.to_string_lossy().to_string();
+        let _ = create_silent_command("cmd.exe")
+            .args(["/c", "start", "", &bat_str])
             .spawn()
             .map_err(|e| format!("Failed to spawn update process: {}", e))?;
 
