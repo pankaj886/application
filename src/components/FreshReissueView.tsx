@@ -347,7 +347,7 @@ export const APPLYING_SCENARIOS: ApplyingScenario[] = [
     label: 'Fresh Passport',
     serviceType: 'fresh',
     icon: 'baby',
-    slots: ['photo', 'sign', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'info'],
+    slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'sign', 'info'],
     description: 'Fresh passport application for applicant born abroad / in Italy',
   },
   {
@@ -355,7 +355,7 @@ export const APPLYING_SCENARIOS: ApplyingScenario[] = [
     label: 'Fresh Passport',
     serviceType: 'fresh',
     icon: 'award',
-    slots: ['photo', 'sign', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'info'],
+    slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'sign', 'info'],
     description: 'Fresh passport application for applicant born abroad / in Italy',
   },
 ];
@@ -3058,19 +3058,35 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       return;
     }
 
-    if (!photoFile || photoValidation.status !== 'valid' || !signFile) {
-      const missing = [];
-      if (!photoFile || photoValidation.status !== 'valid') missing.push('a Portal-Verified Photograph');
-      if (!signFile) missing.push('Signature');
-      const msg = `Please upload ${missing.join(' and ')} in the designated box(es).`;
-      setUploadMessage({
-        text: msg,
-        type: 'error',
-      });
-      return;
-    }
-
-    if (activeServiceType === 'reissue') {
+    if (activeServiceType === 'fresh') {
+      // In Fresh Passport: ONLY Photograph and Birth Certificate are mandatory!
+      if (!photoFile || photoValidation.status !== 'valid') {
+        setUploadMessage({
+          text: 'Please upload a Portal-Verified Photograph in the designated box.',
+          type: 'error',
+        });
+        return;
+      }
+      if (!slotFiles.birth_cert) {
+        setUploadMessage({
+          text: 'Birth Certificate (Estratto di Nascita) is mandatory for Fresh passport application.',
+          type: 'error',
+        });
+        return;
+      }
+    } else {
+      // Reissue application
+      if (!photoFile || photoValidation.status !== 'valid' || !signFile) {
+        const missing = [];
+        if (!photoFile || photoValidation.status !== 'valid') missing.push('a Portal-Verified Photograph');
+        if (!signFile) missing.push('Signature');
+        const msg = `Please upload ${missing.join(' and ')} in the designated box(es).`;
+        setUploadMessage({
+          text: msg,
+          type: 'error',
+        });
+        return;
+      }
       if (selectedScenario === 'reissue_lost' && !slotFiles.police_report) {
         setUploadMessage({
           text: 'Police Report / Denuncia is mandatory for Lost Passport reissue.',
@@ -3096,22 +3112,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         const msg = 'Please upload the applicant’s current Passport copy for Reissue application.';
         setUploadMessage({
           text: msg,
-          type: 'error',
-        });
-        return;
-      }
-    } else {
-      // Fresh application
-      if (!slotFiles.birth_cert) {
-        setUploadMessage({
-          text: 'Birth Certificate (Estratto di Nascita) is mandatory for Fresh passport application.',
-          type: 'error',
-        });
-        return;
-      }
-      if (!slotFiles.father_passport || !slotFiles.mother_passport) {
-        setUploadMessage({
-          text: "Father and Mother documents (Passport/PDS/CIE/Ospiti) are required for Fresh passport application.",
           type: 'error',
         });
         return;
@@ -4457,7 +4457,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 <div className="compact-docs-section">
                   <div className="compact-docs-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                     <span className="compact-docs-title">Document Uploads</span>
-                    <span className="compact-docs-hint">Select or drop documents into boxes</span>
+                    <span className="compact-docs-hint">
+                      {activeServiceType === 'fresh'
+                        ? 'Only Photograph & Birth Certificate are mandatory (up to 10 files, max 20 MB each)'
+                        : 'Select or drop documents into boxes (up to 10 files, max 20 MB each)'}
+                    </span>
                   </div>
 
                   <div
@@ -4602,6 +4606,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             <span className="doc-box-title">
                               {slotKey === 'passport' && activeServiceType === 'fresh'
                                 ? 'Previous PPT (Optional)'
+                                : (activeServiceType === 'fresh' && slotKey !== 'photo' && slotKey !== 'birth_cert')
+                                ? slotDef.title.replace(/\s*\*$/, '')
                                 : slotDef.title}
                             </span>
                           </div>
@@ -4692,6 +4698,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                                     ? 'Filled In-App ✓'
                                     : slotKey === 'passport' && activeServiceType === 'fresh'
                                     ? 'Optional (If Any)'
+                                    : slotKey === 'birth_cert' && activeServiceType === 'fresh'
+                                    ? 'Estratto di nascita • max 20 MB'
+                                    : activeServiceType === 'fresh' && slotKey !== 'photo' && slotKey !== 'birth_cert'
+                                    ? (slotDef.badge.includes('Optional') ? slotDef.badge : `${slotDef.badge.replace(/\s*\*$/, '')} (Optional)`)
                                     : slotDef.badge}
                                 </span>
                                 <div className="doc-box-action-hint">
