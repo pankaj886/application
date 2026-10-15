@@ -1,9 +1,9 @@
 import React from 'react';
-import { ArrowLeft, ArrowRight, BookOpen, Sparkles, FileCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, Sparkles, FileCheck, ShieldCheck } from 'lucide-react';
 
 interface PassportViewProps {
   onBack: () => void;
-  onSelectFreshReissue: (service?: 'fresh' | 'reissue' | 'surrender') => void;
+  onSelectFreshReissue: (service?: 'fresh' | 'reissue' | 'surrender' | 'pcc') => void;
 }
 
 export const PassportView: React.FC<PassportViewProps> = ({ onBack, onSelectFreshReissue }) => {
@@ -107,6 +107,36 @@ export const PassportView: React.FC<PassportViewProps> = ({ onBack, onSelectFres
               <h2 className="service-card-title">Surrender Certificate</h2>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
                 Renunciation of Indian citizenship &amp; surrender of passport upon foreign nationality acquisition
+              </p>
+            </div>
+          </div>
+          <ArrowRight className="arrow-icon" />
+        </div>
+
+        <div 
+          className="service-card"
+          role="button"
+          tabIndex={0}
+          aria-label="Police Clearance Certificate (PCC)"
+          onClick={(e) => {
+            e.preventDefault();
+            onSelectFreshReissue('pcc');
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelectFreshReissue('pcc');
+            }
+          }}
+        >
+          <div className="service-card-left">
+            <div className="passport-emblem-seal" style={{ background: '#f0fdf4', borderColor: '#86efac' }}>
+              <ShieldCheck className="passport-emblem-icon" style={{ color: '#16a34a' }} />
+            </div>
+            <div>
+              <h2 className="service-card-title">Police Clearance Certificate (PCC)</h2>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
+                PCC for citizenship, nationality, immigration, employment, or long-term residence
               </p>
             </div>
           </div>

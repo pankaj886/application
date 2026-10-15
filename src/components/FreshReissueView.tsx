@@ -73,7 +73,8 @@ export const isUserUploadedDocument = (fileName: string): boolean => {
     clean === 'submission_receipt.pdf' ||
     clean === 'application_form.pdf' ||
     clean === 'printapplicationreceipt_opp.pdf' ||
-    clean === 'printapplicationreceipt_sc.pdf'
+    clean === 'printapplicationreceipt_sc.pdf' ||
+    clean === 'printapplicationreceipt_pcc.pdf'
   ) {
     return false;
   }
@@ -81,7 +82,7 @@ export const isUserUploadedDocument = (fileName: string): boolean => {
 };
 
 
-export const isAppMatchingService = (app: any, targetService: 'reissue' | 'fresh' | 'surrender'): boolean => {
+export const isAppMatchingService = (app: any, targetService: 'reissue' | 'fresh' | 'surrender' | 'pcc'): boolean => {
   if (!app) return false;
   const st = String(
     app.service_type ||
@@ -98,12 +99,14 @@ export const isAppMatchingService = (app: any, targetService: 'reissue' | 'fresh
   ).trim().toLowerCase();
   const folder = String(app.folder_name || app.folderName || '').trim().toLowerCase();
 
-  if (targetService === 'surrender') {
-    return st === 'surrender' || af.includes('surrender') || folder.includes('surrender');
+  if (targetService === 'pcc') {
+    return st === 'pcc' || af.includes('pcc') || folder.includes('pcc');
+  } else if (targetService === 'surrender') {
+    return (st === 'surrender' || af.includes('surrender') || folder.includes('surrender')) && st !== 'pcc' && !folder.includes('pcc');
   } else if (targetService === 'fresh') {
-    return (st === 'fresh' || af === '6' || folder.includes('fresh')) && st !== 'surrender' && !af.includes('surrender');
+    return (st === 'fresh' || af === '6' || folder.includes('fresh')) && st !== 'surrender' && st !== 'pcc' && !af.includes('surrender') && !folder.includes('pcc');
   } else {
-    return (st === 'reissue' || af === '7' || (!st && !af)) && st !== 'surrender' && st !== 'fresh' && !af.includes('surrender') && af !== '6' && !folder.includes('surrender');
+    return (st === 'reissue' || af === '7' || (!st && !af)) && st !== 'surrender' && st !== 'fresh' && st !== 'pcc' && !af.includes('surrender') && af !== '6' && !folder.includes('surrender') && !folder.includes('pcc');
   }
 };
 
@@ -321,12 +324,13 @@ export type ApplyingScenarioId =
   | 'reissue_name_change'
   | 'fresh_minor'
   | 'fresh_adult'
-  | 'surrender_standard';
+  | 'surrender_standard'
+  | 'pcc_standard';
 
 export interface ApplyingScenario {
   id: ApplyingScenarioId;
   label: string;
-  serviceType: 'reissue' | 'fresh' | 'surrender';
+  serviceType: 'reissue' | 'fresh' | 'surrender' | 'pcc';
   icon: string;
   slots: DocSlotKey[];
   description: string;
@@ -404,6 +408,14 @@ export const APPLYING_SCENARIOS: ApplyingScenario[] = [
     icon: 'award',
     slots: ['photo', 'sign', 'passport', 'citizenship_cert', 'residence', 'info'],
     description: 'Surrender of Indian passport upon acquisition of foreign / Italian nationality',
+  },
+  {
+    id: 'pcc_standard',
+    label: 'Police Clearance Certificate (PCC)',
+    serviceType: 'pcc',
+    icon: 'shield',
+    slots: ['photo', 'sign', 'passport', 'identity', 'residence', 'info'],
+    description: 'Police Clearance Certificate for Italian citizenship, residence permit or employment',
   },
 ];
 
@@ -1044,8 +1056,8 @@ interface FreshReissueViewProps {
   onSectionChange: (sec: FreshReissueSection) => void;
   onBackToPassport?: () => void;
   onBackToServices?: () => void;
-  serviceType?: 'reissue' | 'fresh' | 'surrender';
-  onServiceTypeChange?: (service: 'reissue' | 'fresh' | 'surrender') => void;
+  serviceType?: 'reissue' | 'fresh' | 'surrender' | 'pcc';
+  onServiceTypeChange?: (service: 'reissue' | 'fresh' | 'surrender' | 'pcc') => void;
 }
 
 export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
@@ -1057,7 +1069,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   serviceType,
   onServiceTypeChange,
 }) => {
-  const [activeServiceType, setActiveServiceType] = useState<'reissue' | 'fresh' | 'surrender'>(serviceType || 'reissue');
+  const [activeServiceType, setActiveServiceType] = useState<'reissue' | 'fresh' | 'surrender' | 'pcc'>(serviceType || 'reissue');
 
   useEffect(() => {
     if (serviceType && serviceType !== activeServiceType) {
@@ -1065,7 +1077,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   }, [serviceType]);
 
-  const switchActiveServiceType = (newType: 'reissue' | 'fresh' | 'surrender') => {
+  const switchActiveServiceType = (newType: 'reissue' | 'fresh' | 'surrender' | 'pcc') => {
     setActiveServiceType(newType);
     if (onServiceTypeChange) {
       onServiceTypeChange(newType);
@@ -1133,7 +1145,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   // Dynamic Application Scenario and Dynamic Document Requirement Slots
   const [selectedScenario, setSelectedScenario] = useState<ApplyingScenarioId>(
-    activeServiceType === 'fresh' ? 'fresh_minor' : activeServiceType === 'surrender' ? 'surrender_standard' : 'reissue_standard'
+    activeServiceType === 'fresh' ? 'fresh_minor' : activeServiceType === 'surrender' ? 'surrender_standard' : activeServiceType === 'pcc' ? 'pcc_standard' : 'reissue_standard'
   );
   const [dynamicallyActivatedSlots, setDynamicallyActivatedSlots] = useState<DocSlotKey[]>([]);
   const [slotFiles, setSlotFiles] = useState<Record<DocSlotKey, File | null>>({
@@ -1166,6 +1178,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setSelectedScenario('fresh_minor');
     } else if (activeServiceType === 'surrender') {
       setSelectedScenario('surrender_standard');
+    } else if (activeServiceType === 'pcc') {
+      setSelectedScenario('pcc_standard');
     } else {
       setSelectedScenario('reissue_standard');
     }
@@ -1191,6 +1205,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setSelectedScenario('fresh_minor');
     } else if (activeServiceType === 'surrender') {
       setSelectedScenario('surrender_standard');
+    } else if (activeServiceType === 'pcc') {
+      setSelectedScenario('pcc_standard');
     }
   }, [inAppInfoData, activeServiceType]);
 
@@ -1266,7 +1282,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   type SubmissionTrackerState = {
     active: boolean;
     ready: boolean;
-    serviceType?: 'reissue' | 'fresh' | 'surrender';
+    serviceType?: 'reissue' | 'fresh' | 'surrender' | 'pcc';
     folderName?: string;
     originalFolder?: string;
     arn?: string;
@@ -1283,31 +1299,35 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     reissue: SubmissionTrackerState;
     fresh: SubmissionTrackerState;
     surrender: SubmissionTrackerState;
+    pcc: SubmissionTrackerState;
   }>({
     reissue: null,
     fresh: null,
     surrender: null,
+    pcc: null,
   });
   const trackersRef = useRef<{
     reissue: SubmissionTrackerState;
     fresh: SubmissionTrackerState;
     surrender: SubmissionTrackerState;
+    pcc: SubmissionTrackerState;
   }>({
     reissue: null,
     fresh: null,
     surrender: null,
+    pcc: null,
   });
   trackersRef.current = trackers;
 
-  const [draftFilter, setDraftFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender'>('all');
-  const [previewFilter, setPreviewFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender'>('all');
+  const [draftFilter, setDraftFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender' | 'pcc'>('all');
+  const [previewFilter, setPreviewFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender' | 'pcc'>('all');
 
-  const submissionTracker = trackers[activeServiceType] || (trackers.surrender?.active ? trackers.surrender : (trackers.fresh?.active ? trackers.fresh : (trackers.reissue?.active ? trackers.reissue : null)));
+  const submissionTracker = trackers[activeServiceType] || (trackers.pcc?.active ? trackers.pcc : (trackers.surrender?.active ? trackers.surrender : (trackers.fresh?.active ? trackers.fresh : (trackers.reissue?.active ? trackers.reissue : null))));
   const submissionTrackerRef = useRef<SubmissionTrackerState>(null);
   submissionTrackerRef.current = submissionTracker;
 
   const setSubmissionTrackerFor = (
-    sType: 'reissue' | 'fresh' | 'surrender',
+    sType: 'reissue' | 'fresh' | 'surrender' | 'pcc',
     updater: SubmissionTrackerState | ((prev: SubmissionTrackerState) => SubmissionTrackerState)
   ) => {
     _setTrackers(prev => {
@@ -1336,7 +1356,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       _setTrackers(prev => {
         let changed = false;
         const nextTrackers = { ...prev };
-        for (const sType of ['reissue', 'fresh', 'surrender'] as const) {
+        for (const sType of ['reissue', 'fresh', 'surrender', 'pcc'] as const) {
           const t = prev[sType];
           if (!t || !t.active || t.ready || t.isError || t.isMissingInfo) continue;
           const current = t.percent;
@@ -5026,6 +5046,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         ? 'Only Photograph & Birth Certificate are mandatory (up to 10 files, max 20 MB each)'
                         : activeServiceType === 'surrender'
                         ? 'Photograph, Signature & Citizenship Proof are mandatory (up to 10 files, max 20 MB each)'
+                        : activeServiceType === 'pcc'
+                        ? 'Photograph, Signature & Indian Passport are mandatory (up to 10 files, max 20 MB each)'
                         : 'Select or drop documents into boxes (up to 10 files, max 20 MB each)'}
                     </span>
                   </div>
@@ -5041,16 +5063,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       margin: '10px 0 16px 0',
                       padding: '12px 16px',
                       borderRadius: '12px',
-                      background: activeServiceType === 'fresh' ? '#f0fdf4' : activeServiceType === 'surrender' ? '#fffbeb' : '#f8fafc',
-                      border: activeServiceType === 'fresh' ? '1px solid #bbf7d0' : activeServiceType === 'surrender' ? '1px solid #fde68a' : '1px solid #e2e8f0',
+                      background: activeServiceType === 'pcc' ? '#f0fdf4' : activeServiceType === 'fresh' ? '#f0fdf4' : activeServiceType === 'surrender' ? '#fffbeb' : '#f8fafc',
+                      border: activeServiceType === 'pcc' ? '1px solid #bbf7d0' : activeServiceType === 'fresh' ? '1px solid #bbf7d0' : activeServiceType === 'surrender' ? '1px solid #fde68a' : '1px solid #e2e8f0',
                       boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <FileText style={{ width: '18px', height: '18px', color: activeServiceType === 'fresh' ? '#059669' : activeServiceType === 'surrender' ? '#d97706' : '#2563eb' }} />
+                      <FileText style={{ width: '18px', height: '18px', color: activeServiceType === 'pcc' ? '#16a34a' : activeServiceType === 'fresh' ? '#059669' : activeServiceType === 'surrender' ? '#d97706' : '#2563eb' }} />
                       <div>
                         <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1e293b' }}>
-                          Application Reason &amp; Mandatory Details ({activeServiceType === 'fresh' ? 'Fresh Passport' : activeServiceType === 'surrender' ? 'Surrender Certificate' : 'Passport Reissue'})
+                          Application Reason &amp; Mandatory Details ({activeServiceType === 'pcc' ? 'Police Clearance Certificate (PCC)' : activeServiceType === 'fresh' ? 'Fresh Passport' : activeServiceType === 'surrender' ? 'Surrender Certificate' : 'Passport Reissue'})
                         </div>
                         <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
                           Selected Reason: <strong style={{ color: '#0f172a' }}>{APPLYING_SCENARIOS.find(s => s.id === selectedScenario)?.label || 'Standard'}</strong>
@@ -7571,12 +7593,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                     borderRadius: '20px',
                     fontSize: '12px',
                     fontWeight: 600,
-                    backgroundColor: activeServiceType === 'fresh' ? '#ecfdf5' : '#eff6ff',
-                    color: activeServiceType === 'fresh' ? '#059669' : '#2563eb',
-                    border: `1px solid ${activeServiceType === 'fresh' ? '#a7f3d0' : '#bfdbfe'}`,
+                    backgroundColor: activeServiceType === 'fresh' ? '#ecfdf5' : activeServiceType === 'pcc' ? '#ecfdf5' : activeServiceType === 'surrender' ? '#fffbeb' : '#eff6ff',
+                    color: activeServiceType === 'fresh' ? '#059669' : activeServiceType === 'pcc' ? '#16a34a' : activeServiceType === 'surrender' ? '#d97706' : '#2563eb',
+                    border: `1px solid ${activeServiceType === 'fresh' ? '#a7f3d0' : activeServiceType === 'pcc' ? '#86efac' : activeServiceType === 'surrender' ? '#fde68a' : '#bfdbfe'}`,
                   }}
                 >
-                  {activeServiceType === 'fresh' ? 'Fresh Passport' : 'Reissue Passport'} ({displayedCompleted.length})
+                  {activeServiceType === 'fresh' ? 'Fresh Passport' : activeServiceType === 'surrender' ? 'Surrender Certificate' : activeServiceType === 'pcc' ? 'Police Clearance Certificate' : 'Reissue Passport'} ({displayedCompleted.length})
                 </span>
               </div>
             </div>
@@ -7587,7 +7609,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   <CheckCircle2 className="empty-icon" />
                 </div>
                 <h3 className="empty-title">
-                  No Completed {activeServiceType === 'fresh' ? 'Fresh Passport' : 'Passport Reissue'} Applications
+                  No Completed {activeServiceType === 'fresh' ? 'Fresh Passport' : activeServiceType === 'surrender' ? 'Surrender Certificate' : activeServiceType === 'pcc' ? 'Police Clearance Certificate' : 'Passport Reissue'} Applications
                 </h3>
                 <p className="empty-desc">
                   Once an application is verified and submitted from the Preview section, it will appear here with its official ARN and printable Application Form PDF.

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, FileText, RotateCcw, FileCheck } from 'lucide-react';
+import { X, Save, FileText, RotateCcw, FileCheck, ShieldCheck } from 'lucide-react';
 
 interface InAppInfoModalProps {
   isOpen: boolean;
-  serviceType: 'reissue' | 'fresh' | 'surrender';
+  serviceType: 'reissue' | 'fresh' | 'surrender' | 'pcc';
   initialData: Record<string, any>;
   onSave: (data: Record<string, any>) => void;
   onClear?: () => void;
@@ -51,6 +51,13 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
         if (!data.surrender_reason && !data['Surrender reason']) {
           data.surrender_reason = 'ACQUIRING FOREIGN NATIONALITY/RENUNCIATION OF INDIAN CITIZENSHIP';
         }
+      } else if (serviceType === 'pcc') {
+        if (!data.pcc_purpose && !data['Purpose of PCC'] && !data.pccPurpose) {
+          data.pcc_purpose = 'CITIZENSHIP/NATIONALITY APPLICATION';
+        }
+        if (!data.pcc_country && !data['Country for which PCC is required'] && !data.pccApplicantcountry) {
+          data.pcc_country = 'Italy';
+        }
       }
       setFormData(data);
     }
@@ -80,6 +87,7 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
 
   const isSurrender = serviceType === 'surrender';
   const isFresh = serviceType === 'fresh';
+  const isPcc = serviceType === 'pcc';
   const isChangeInParticulars =
     formData.is_change_in_particulars === 'Y' ||
     (formData.change_type && formData.change_type !== 'NOT APPLICABLE' && formData.change_type !== '');
@@ -167,11 +175,13 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: isSurrender
-              ? 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)'
-              : isFresh
-                ? 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)'
-                : 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)',
+            background: isPcc
+              ? 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)'
+              : isSurrender
+                ? 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)'
+                : isFresh
+                  ? 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)'
+                  : 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -180,14 +190,16 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
                 width: '38px',
                 height: '38px',
                 borderRadius: '10px',
-                background: isSurrender ? '#fef3c7' : isFresh ? '#dcfce7' : '#dbeafe',
+                background: isPcc ? '#dcfce7' : isSurrender ? '#fef3c7' : isFresh ? '#dcfce7' : '#dbeafe',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: isSurrender ? '#b45309' : isFresh ? '#15803d' : '#1d4ed8',
+                color: isPcc ? '#16a34a' : isSurrender ? '#b45309' : isFresh ? '#15803d' : '#1d4ed8',
               }}
             >
-              {isSurrender ? (
+              {isPcc ? (
+                <ShieldCheck style={{ width: '20px', height: '20px' }} />
+              ) : isSurrender ? (
                 <FileCheck style={{ width: '20px', height: '20px' }} />
               ) : (
                 <FileText style={{ width: '20px', height: '20px' }} />
@@ -195,16 +207,20 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#0f172a' }}>
-                {isSurrender
-                  ? 'Surrender Certificate Mandatory Info'
-                  : isFresh
-                    ? 'Fresh Passport Mandatory Info'
-                    : 'Reissue Passport Mandatory Info'}
+                {isPcc
+                  ? 'Police Clearance Certificate (PCC) Mandatory Info'
+                  : isSurrender
+                    ? 'Surrender Certificate Mandatory Info'
+                    : isFresh
+                      ? 'Fresh Passport Mandatory Info'
+                      : 'Reissue Passport Mandatory Info'}
               </h3>
               <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b' }}>
-                {isSurrender
-                  ? 'Enter mandatory details not found on uploaded documents. All details auto-merge into the application.'
-                  : 'Only enter mandatory details not present on uploaded documents. All fields auto-merge into application.'}
+                {isPcc
+                  ? 'Enter mandatory details not found on uploaded documents. All details auto-merge into the PCC application.'
+                  : isSurrender
+                    ? 'Enter mandatory details not found on uploaded documents. All details auto-merge into the application.'
+                    : 'Only enter mandatory details not present on uploaded documents. All fields auto-merge into application.'}
               </p>
             </div>
           </div>
@@ -228,7 +244,432 @@ export const InAppInfoModal: React.FC<InAppInfoModalProps> = ({
 
         {/* Scrollable Form Body */}
         <form onSubmit={handleSubmit} style={{ overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {isSurrender ? (
+          {isPcc ? (
+            <>
+              {/* PCC: Purpose & Country */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  1. PCC Purpose &amp; Destination Country
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Country for which PCC is required *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Italy"
+                      value={formData.pcc_country || formData['Country for which PCC is required'] || formData.pccApplicantcountry || 'Italy'}
+                      onChange={(e) => handleChange('pcc_country', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Purpose for which PCC is required *
+                    </label>
+                    <select
+                      value={formData.pcc_purpose || formData['Purpose of PCC'] || formData.pccPurpose || 'CITIZENSHIP/NATIONALITY APPLICATION'}
+                      onChange={(e) => handleChange('pcc_purpose', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    >
+                      <option value="CITIZENSHIP/NATIONALITY APPLICATION">Citizenship / Nationality Application</option>
+                      <option value="EMPLOYMENT/WORK VISA">Employment / Work Visa</option>
+                      <option value="IMMIGRATION/RESIDENCE PERMIT">Immigration / Residence Permit</option>
+                      <option value="EDUCATION/STUDENT VISA">Education / Student Visa</option>
+                      <option value="OTHERS">Others</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* PCC: Indian Passport Details */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  2. Indian Passport Details
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Passport Number *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Z1234567"
+                      value={formData.passport_number || formData['Passport Number'] || formData['Current passport number'] || ''}
+                      onChange={(e) => handleChange('passport_number', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Date of Issue *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="DD/MM/YYYY"
+                      value={formData.issue_date || formData['Date of issue'] || ''}
+                      onChange={(e) => handleChange('issue_date', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Date of Expiry *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="DD/MM/YYYY"
+                      value={formData.expiry_date || formData['Date of expiry'] || ''}
+                      onChange={(e) => handleChange('expiry_date', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Place of Issue *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. ROME / JAIPUR"
+                      value={formData.issue_place || formData['Place of issue'] || ''}
+                      onChange={(e) => handleChange('issue_place', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      File Number *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. IT107..."
+                      value={formData.file_number || formData['File number'] || formData['File Number'] || ''}
+                      onChange={(e) => handleChange('file_number', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* PCC: Personal & Family Details */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  3. Personal &amp; Family Particulars
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Given Name *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="First and Middle Name"
+                      value={formData.given_name || formData['Given NAME'] || ''}
+                      onChange={(e) => handleChange('given_name', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Surname
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Last Name"
+                      value={formData.surname || formData['SURNAME'] || ''}
+                      onChange={(e) => handleChange('surname', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Gender *
+                    </label>
+                    <select
+                      value={formData.gender || formData['GENDER'] || 'MALE'}
+                      onChange={(e) => handleChange('gender', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    >
+                      <option value="MALE">MALE</option>
+                      <option value="FEMALE">FEMALE</option>
+                      <option value="TRANSGENDER">TRANSGENDER</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Date of Birth *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="DD/MM/YYYY"
+                      value={formData.dob || formData['Date of birth'] || formData['DOB'] || ''}
+                      onChange={(e) => handleChange('dob', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Place of Birth *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. JAIPUR"
+                      value={formData.place_of_birth || formData['Place of birth'] || ''}
+                      onChange={(e) => handleChange('place_of_birth', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Marital Status *
+                    </label>
+                    <select
+                      value={formData.marital_status || formData['Marital status'] || 'MARRIED'}
+                      onChange={(e) => handleChange('marital_status', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    >
+                      <option value="MARRIED">MARRIED</option>
+                      <option value="SINGLE">SINGLE</option>
+                      <option value="DIVORCED">DIVORCED</option>
+                      <option value="WIDOW / WIDOWER">WIDOW / WIDOWER</option>
+                      <option value="SEPARATED">SEPARATED</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Father's Name *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Father's full name"
+                      value={formData.father_name || formData["Father's name"] || ''}
+                      onChange={(e) => handleChange('father_name', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Mother's Name *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Mother's full name"
+                      value={formData.mother_name || formData["Mother's name"] || ''}
+                      onChange={(e) => handleChange('mother_name', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Spouse Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Spouse's full name"
+                      value={formData.spouse_name || formData['Spouse name'] || ''}
+                      onChange={(e) => handleChange('spouse_name', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Employment Type
+                    </label>
+                    <select
+                      value={formData.employment_type || formData['Employment type'] || 'PRIVATE'}
+                      onChange={(e) => handleChange('employment_type', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    >
+                      <option value="PRIVATE">PRIVATE</option>
+                      <option value="GOVERNMENT">GOVERNMENT</option>
+                      <option value="HOMEMAKER">HOMEMAKER</option>
+                      <option value="STUDENT">STUDENT</option>
+                      <option value="SELF EMPLOYED">SELF EMPLOYED</option>
+                      <option value="OTHERS">OTHERS</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Educational Qualification
+                    </label>
+                    <select
+                      value={formData.educational_qualification || formData['Educational qualification'] || '10TH PASS AND ABOVE'}
+                      onChange={(e) => handleChange('educational_qualification', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                    >
+                      <option value="10TH PASS AND ABOVE">10TH PASS AND ABOVE</option>
+                      <option value="GRADUATE AND ABOVE">GRADUATE AND ABOVE</option>
+                      <option value="9TH PASS OR LESS">9TH PASS OR LESS</option>
+                      <option value="ILLITERATE">ILLITERATE</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* PCC: Indian Present Address */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  4. Indian Address (For Police Verification)
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      House No. and Street Name *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. VPO BHAWANPURA"
+                      value={formData.house_street || formData['House No. and Street Name'] || ''}
+                      onChange={(e) => handleChange('house_street', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Village / Town / City *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. BHAWANPURA"
+                      value={formData.village_city || formData['Village or Town or City'] || ''}
+                      onChange={(e) => handleChange('village_city', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      State *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. RAJASTHAN"
+                      value={formData.state || formData['State'] || ''}
+                      onChange={(e) => handleChange('state', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      District *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. JAIPUR"
+                      value={formData.district || formData['District'] || ''}
+                      onChange={(e) => handleChange('district', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Police Station *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. PHULERA"
+                      value={formData.police_station || formData['Police Station'] || ''}
+                      onChange={(e) => handleChange('police_station', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      PIN Code *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 303338"
+                      value={formData.pincode || formData['PIN Code'] || formData['PIN'] || ''}
+                      onChange={(e) => handleChange('pincode', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Indian Mobile Number *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 9876543210"
+                      value={formData.indian_mobile_number || formData['Indian mobile number'] || ''}
+                      onChange={(e) => handleChange('indian_mobile_number', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Email ID
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="client@email.com"
+                      value={formData.email_id || formData['Email id'] || formData['Email ID'] || ''}
+                      onChange={(e) => handleChange('email_id', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* PCC: Italian Permanent Address */}
+              <div>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  5. Italian Address
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Italian Address Line 1 (Street &amp; No.) *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. VIA APPIA 45"
+                      value={formData.italian_street || formData['Italian address line 1'] || ''}
+                      onChange={(e) => handleChange('italian_street', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Italian Address Line 2 (City / Commune) *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. FONDI"
+                      value={formData.italian_city || formData['Italian address line 2'] || ''}
+                      onChange={(e) => handleChange('italian_city', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Italian Address Line 3 / CAP *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 04022 LT"
+                      value={formData.italian_postal_code || formData['Italian address line 3'] || formData['CAP'] || ''}
+                      onChange={(e) => handleChange('italian_postal_code', e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                      Italian Mobile Number *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 3331234567"
+                      value={formData.italian_mobile_number || formData['Italian mobile number'] || ''}
+                      onChange={(e) => handleChange('italian_mobile_number', e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : isSurrender ? (
             <>
               {/* SURRENDER: Foreign Nationality & Acquisition */}
               <div>

@@ -24,7 +24,7 @@ interface SidebarProps {
   onLogout?: () => void;
   freshReissueSection?: FreshReissueSection;
   onFreshReissueSectionChange?: (sec: FreshReissueSection) => void;
-  passportServiceType?: 'reissue' | 'fresh' | 'surrender';
+  passportServiceType?: 'reissue' | 'fresh' | 'surrender' | 'pcc';
   draftCount?: number;
   previewCount?: number;
   completedCount?: number;
@@ -44,7 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   previewCount = 0,
   completedCount = 0,
 }) => {
-  const [appVersion, setAppVersion] = useState<string>('1.0.97');
+  const [appVersion, setAppVersion] = useState<string>('1.0.98');
 
   useEffect(() => {
     invoke<string>('get_app_version')
@@ -112,7 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="subnav-header">
                 <BookOpen className="subnav-header-icon" />
                 <span className="subnav-header-title">
-                  {passportServiceType === 'fresh' ? 'Fresh Passport' : passportServiceType === 'surrender' ? 'Surrender Certificate' : 'Reissue Passport'}
+                  {passportServiceType === 'fresh' ? 'Fresh Passport' : passportServiceType === 'surrender' ? 'Surrender Certificate' : passportServiceType === 'pcc' ? 'Police Clearance Certificate' : 'Reissue Passport'}
                 </span>
               </div>
             )}
