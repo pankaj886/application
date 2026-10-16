@@ -390,7 +390,7 @@ export const APPLYING_SCENARIOS: ApplyingScenario[] = [
     label: 'Fresh Passport (Minor)',
     serviceType: 'fresh',
     icon: 'baby',
-    slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'annexure_d', 'sign', 'info'],
+    slots: ['photo', 'birth_cert', 'father_passport', 'mother_passport', 'marriage_cert', 'sign', 'info'],
     description: 'Fresh passport application for minor (born abroad / in Italy) — requires parental consent (Annexure D)',
   },
   {
@@ -1322,7 +1322,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [draftFilter, setDraftFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender' | 'pcc'>('all');
   const [previewFilter, setPreviewFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender' | 'pcc'>('all');
 
-  const submissionTracker = trackers[activeServiceType] || (trackers.pcc?.active ? trackers.pcc : (trackers.surrender?.active ? trackers.surrender : (trackers.fresh?.active ? trackers.fresh : (trackers.reissue?.active ? trackers.reissue : null))));
+  const rawTracker = trackers[activeServiceType];
+  const submissionTracker = (rawTracker && (!rawTracker.serviceType || rawTracker.serviceType === activeServiceType)) ? rawTracker : null;
   const submissionTrackerRef = useRef<SubmissionTrackerState>(null);
   submissionTrackerRef.current = submissionTracker;
 
@@ -1575,9 +1576,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     });
   }, [previews, completed, submittingFolder, submittingArn, dismissedCorrectionFolder, trackers]);
 
-  const activeServicePreviews = useMemo(() => {
-    return allValidPreviews.filter(p => isAppMatchingService(p, activeServiceType));
-  }, [allValidPreviews, activeServiceType]);
 
   const [viewerModal, setViewerModal] = useState<{
     isOpen: boolean;
@@ -1739,33 +1737,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             setSubmissionTrackerFor(sType, adopted);
             currentTracker = adopted;
           } else {
-            // Also auto-adopt if there is a preview ready waiting for verification!
-            const readyPreviewApp = prevs.find(p =>
-              isAppMatchingService(p, sType) &&
-              !(p.arn && (dismissedFoldersRef.current.has(p.arn) || storedDismissed.has(p.arn.toLowerCase()))) &&
-              !(dismissedCorrectionFolder && p.folder_name === dismissedCorrectionFolder)
-            );
-            if (readyPreviewApp) {
-              const adoptedReady: SubmissionTrackerState = {
-                active: true,
-                ready: true,
-                serviceType: sType,
-                isMissingInfo: false,
-                isError: false,
-                folderName: readyPreviewApp.folder_name,
-                originalFolder: (readyPreviewApp as any).original_folder || readyPreviewApp.folder_name,
-                arn: readyPreviewApp.arn,
-                percent: 100,
-                targetPercent: 100,
-                stageText: 'Preview Ready!',
-                applicantName: readyPreviewApp.applicant_name || readyPreviewApp.folder_name,
-                startedAt: Date.now() - 30000,
-              };
-              setSubmissionTrackerFor(sType, adoptedReady);
-              currentTracker = adoptedReady;
-            } else {
-              continue;
-            }
+            continue;
           }
         }
 
@@ -1828,9 +1800,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               startedAt: prev?.startedAt || Date.now(),
             };
           };
-          setSubmissionTrackerFor(sType, correctionTrackerUpdate);
+          setSubmissionTrackerFor(actualService, correctionTrackerUpdate);
           if (actualService !== sType) {
-            setSubmissionTrackerFor(actualService, correctionTrackerUpdate);
+            setSubmissionTrackerFor(sType, null);
           }
           continue;
         } else if (matchingPreview || readyApp) {
@@ -1854,9 +1826,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               startedAt: prev?.startedAt || Date.now(),
             };
           };
-          setSubmissionTrackerFor(sType, previewTrackerUpdate);
+          setSubmissionTrackerFor(actualService, previewTrackerUpdate);
           if (actualService !== sType) {
-            setSubmissionTrackerFor(actualService, previewTrackerUpdate);
+            setSubmissionTrackerFor(sType, null);
           }
           continue;
         } else if (activeProcessingApp) {
@@ -3709,6 +3681,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     submissionTrackerRef.current = null;
     setSubmissionTrackerFor('reissue', null);
     setSubmissionTrackerFor('fresh', null);
+    setSubmissionTrackerFor('surrender', null);
+    setSubmissionTrackerFor('pcc', null);
     setUploadMessage(null);
     setSelectedDraftFolder(null);
 
@@ -4483,7 +4457,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       {currentSection === 'form' && (
         <div className="fresh-reissue-content">
 
-          {submissionTracker?.active && (
+          {submissionTracker?.active && submissionTracker.serviceType === activeServiceType && (
             <div
               className="voice-progress-container"
               style={{
@@ -4617,6 +4591,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         onClick={() => {
                           setSubmissionTracker(null);
                           setUploadMessage(null);
+                          clearDocumentSlots(false);
                         }}
                         style={{
                           display: 'inline-flex',
@@ -4754,159 +4729,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
             <div className="fresh-form-card">
 
-              {/* SINGLE NOTIFICATION RULE: Show at most ONE top notification banner.
-                  If submissionTracker is active, the progress tracker card above ALREADY serves as the banner.
-                  If submissionTracker is NOT active, show Draft warning (priority 1) OR Preview Ready (priority 2), never both! */}
-              {!submissionTracker?.active && allDraftApplications.length > 0 && (() => {
-                const cApp = draftApplications[0] || allDraftApplications[0];
-                const cService = (cApp.service_type || '').toLowerCase() === 'fresh' ? 'fresh' : 'reissue';
-                return (
-                  <div
-                    className="status-banner-card warning"
-                    style={{
-                      marginBottom: '16px',
-                      padding: '14px 18px',
-                      borderRadius: '12px',
-                      border: '1px solid #fde68a',
-                      background: '#fffbeb',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '12px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <AlertTriangle style={{ width: '20px', height: '20px', color: '#d97706', flexShrink: 0 }} />
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>Action Required: Application in Draft ({cApp.applicant_name || `Folder ${cApp.folder_name}`})</span>
-                          <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', background: cService === 'fresh' ? '#d1fae5' : '#dbeafe', color: cService === 'fresh' ? '#065f46' : '#1e40af' }}>
-                            {cService === 'fresh' ? 'Fresh Passport' : 'Reissue Passport'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#b45309', marginTop: '2px' }}>
-                          {cApp.missing_fields && cApp.missing_fields.length > 0
-                            ? `Missing details: ${cApp.missing_fields.join(', ')}. Complete these fields to continue submission.`
-                            : cApp.error_message || 'Required applicant details are missing. Complete these fields in Draft to resume.'}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          switchActiveServiceType(cService);
-                          setSelectedDraftFolder(cApp.folder_name);
-                          setDraftFilter('all');
-                          onSectionChange('drafts');
-                        }}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '8px 16px',
-                          fontSize: '13px',
-                          fontWeight: 700,
-                          color: '#ffffff',
-                          background: '#d97706',
-                          border: 'none',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        <FileText style={{ width: '15px', height: '15px' }} />
-                        <span>Open in Drafts</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteDraftTarget({ folderName: cApp.folder_name, applicantName: cApp.applicant_name || cApp.folder_name })}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '8px 12px',
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          color: '#dc2626',
-                          background: '#fef2f2',
-                          border: '1px solid #fecaca',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap',
-                        }}
-                        title="Dismiss Draft"
-                      >
-                        <Trash2 style={{ width: '14px', height: '14px' }} />
-                        <span>Dismiss</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {!submissionTracker?.active && allDraftApplications.length === 0 && allValidPreviews.length > 0 && (() => {
-                const pApp = activeServicePreviews[0] || allValidPreviews[0];
-                const pService = (pApp.service_type || '').toLowerCase() === 'fresh' ? 'fresh' : 'reissue';
-                return (
-                  <div
-                    className="status-banner-card success"
-                    style={{
-                      marginBottom: '16px',
-                      padding: '14px 18px',
-                      borderRadius: '12px',
-                      border: '1px solid #a7f3d0',
-                      background: '#ecfdf5',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '12px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <CheckCircle2 style={{ width: '20px', height: '20px', color: '#10b981', flexShrink: 0 }} />
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#065f46', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>Preview Ready ({pApp.applicant_name})</span>
-                          <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', background: pService === 'fresh' ? '#d1fae5' : '#dbeafe', color: pService === 'fresh' ? '#065f46' : '#1e40af' }}>
-                            {pService === 'fresh' ? 'Fresh Passport' : 'Reissue Passport'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#047857', marginTop: '2px' }}>
-                          Application generated (ARN: {pApp.arn}). Review draft forms and submit.
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        switchActiveServiceType(pService);
-                        setPreviewFilter('all');
-                        onSectionChange('preview');
-                      }}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '8px 16px',
-                        fontSize: '13px',
-                        fontWeight: 700,
-                        color: '#ffffff',
-                        background: '#10b981',
-                        border: 'none',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      <Eye style={{ width: '15px', height: '15px' }} />
-                      <span>Open Preview</span>
-                    </button>
-                  </div>
-                );
-              })()}
-
-              {uploadMessage && !portalErrorApp && !submissionTracker?.active && allDraftApplications.length === 0 && allValidPreviews.length === 0 && currentSection === 'form' && !uploadMessage.text.toLowerCase().includes('waiting for preview') && !uploadMessage.text.toLowerCase().includes('file submitted') && (
+              {uploadMessage && !portalErrorApp && !submissionTracker?.active && currentSection === 'form' && !uploadMessage.text.toLowerCase().includes('waiting for preview') && !uploadMessage.text.toLowerCase().includes('file submitted') && (
                 <div className={`form-alert ${uploadMessage.type === 'success' ? 'alert-success' : 'alert-error'}`}>
                   {uploadMessage.type === 'success' ? (
                     <Clock className="alert-icon animate-pulse" />
@@ -6496,7 +6319,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   ) : (
                     <button
                       type="button"
-                      onClick={() => onSectionChange('form')}
+                      onClick={() => {
+                        setSubmissionTracker(null);
+                        setUploadMessage(null);
+                        clearDocumentSlots(false);
+                        onSectionChange('form');
+                      }}
                       className="submit-btn"
                       style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', margin: '0 auto' }}
                     >
@@ -6963,6 +6791,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    setSubmissionTracker(null);
+                    setUploadMessage(null);
+                    clearDocumentSlots(false);
                     onSectionChange('form');
                   }}
                   className="empty-action-btn"

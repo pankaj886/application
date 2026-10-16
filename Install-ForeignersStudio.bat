@@ -1,38 +1,15 @@
 @echo off
-setlocal enabledelayedexpansion
-title Foreigners Studio - Installer
-
-echo.
-echo ===========================================================
-echo    Foreigners Studio - Windows Installer
-echo ===========================================================
-echo.
-
+setlocal
 cd /d "%~dp0"
 
-echo Removing Windows web quarantine flags...
-for /R "%~dp0" %%f in (*.exe *.msi *.dll *.zip *.ps1 *.bat *.cer) do (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Unblock-File -LiteralPath '%%f' -ErrorAction SilentlyContinue" 2>nul
-)
+:: If --verbose or -v is passed, run with visible output
+if "%~1"=="--verbose" goto :VERBOSE
+if "%~1"=="-v" goto :VERBOSE
 
-echo Running Foreigners Studio installer...
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-windows.ps1" %*
-set "EXIT_CODE=%ERRORLEVEL%"
-
-if %EXIT_CODE% neq 0 (
-    echo.
-    echo [INFO] Setup completed with code %EXIT_CODE%.
-    echo.
-    echo If Windows shows a SmartScreen warning when running the app:
-    echo   1. Click "More info"
-    echo   2. Click "Run anyway"
-    echo   The warning stops after the first successful launch.
-    echo.
-    if "%~1"=="" pause
-    exit /b 0
-)
-
-echo.
-echo Installation complete!
+:: Launch PowerShell completely hidden and exit immediately so no command prompt lingers
+start "" /b powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "%~dp0install-windows.ps1" %*
 exit /b 0
+
+:VERBOSE
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-windows.ps1" %*
+exit /b %ERRORLEVEL%

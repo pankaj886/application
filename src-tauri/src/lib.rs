@@ -135,9 +135,9 @@ fn app_restart(app_handle: tauri::AppHandle) {
                 let local = std::env::var("LOCALAPPDATA").unwrap_or_default();
                 format!(r"{}\Foreigners Studio\foreigners_studio.exe", local)
             });
-        let _ = create_silent_command("cmd.exe")
-            .args(["/c", "start", "", "explorer.exe", &current_exe])
-            .spawn();
+        if create_silent_command(&current_exe).spawn().is_err() {
+            let _ = create_silent_command("explorer.exe").arg(&current_exe).spawn();
+        }
         app_handle.exit(0);
     }
     #[cfg(not(target_os = "windows"))]
@@ -296,7 +296,7 @@ fn apply_update_and_restart(app_handle: tauri::AppHandle, installer_path: String
 
         let bat_path = std::env::temp_dir().join("foreigners_studio_updater.bat");
         let bat_content = format!(
-            "@echo off\r\nsetlocal enabledelayedexpansion\r\ntimeout /t 1 /nobreak >nul\r\ntaskkill /F /T /IM foreigners_studio.exe >nul 2>&1\r\ntaskkill /F /T /IM msedgewebview2.exe >nul 2>&1\r\ntimeout /t 2 /nobreak >nul\r\nif exist \"{}\" (\r\n    start /wait \"\" \"{}\" /S /D={}\r\n    timeout /t 2 /nobreak >nul\r\n)\r\nif exist \"{}\" (\r\n    start \"\" \"{}\"\r\n) else if exist \"{}\" (\r\n    start \"\" \"{}\"\r\n)\r\ntimeout /t 2 /nobreak >nul\r\n(goto) 2>nul & del \"%~f0\"\r\n",
+            "@echo off\r\nsetlocal enabledelayedexpansion\r\ntimeout /t 1 /nobreak >nul\r\ntaskkill /F /T /IM foreigners_studio.exe >nul 2>&1\r\ntaskkill /F /T /IM msedgewebview2.exe >nul 2>&1\r\ntimeout /t 2 /nobreak >nul\r\nif exist \"{}\" (\r\n    \"{}\" /S /D={}\r\n    timeout /t 2 /nobreak >nul\r\n)\r\nif exist \"{}\" (\r\n    start \"\" /b \"{}\"\r\n) else if exist \"{}\" (\r\n    start \"\" /b \"{}\"\r\n)\r\ntimeout /t 2 /nobreak >nul\r\n(goto) 2>nul & del \"%~f0\"\r\n",
             installer_path, installer_path, install_dir, default_exe, default_exe, target_exe, target_exe
         );
 
@@ -306,7 +306,7 @@ fn apply_update_and_restart(app_handle: tauri::AppHandle, installer_path: String
 
         let bat_str = bat_path.to_string_lossy().to_string();
         let _ = create_silent_command("cmd.exe")
-            .args(["/c", "start", "", &bat_str])
+            .args(["/c", &bat_str])
             .spawn()
             .map_err(|e| format!("Failed to spawn update process: {}", e))?;
 

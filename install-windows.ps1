@@ -1,9 +1,26 @@
 [CmdletBinding()]
 param(
-    [switch]$NoLaunch
+    [switch]$NoLaunch,
+    [switch]$VerboseOutput
 )
 
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "SilentlyContinue"
+
+# Suppress console window so no black CMD/PowerShell window lingers on desktop
+if (-not $VerboseOutput -and -not $PSBoundParameters.ContainsKey('Verbose')) {
+    try {
+        Add-Type -Name Win32Window -Namespace Win32Util -MemberDefinition @"
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        public static extern System.IntPtr GetConsoleWindow();
+"@ -ErrorAction SilentlyContinue
+        $hwnd = [Win32Util.Win32Window]::GetConsoleWindow()
+        if ($hwnd -ne [System.IntPtr]::Zero) {
+            [Win32Util.Win32Window]::ShowWindow($hwnd, 0) | Out-Null
+        }
+    } catch {}
+}
 
 Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Cyan
