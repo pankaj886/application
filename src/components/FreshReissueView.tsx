@@ -1323,7 +1323,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [previewFilter, setPreviewFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender' | 'pcc'>('all');
 
   const rawTracker = trackers[activeServiceType];
-  const submissionTracker = (rawTracker && (!rawTracker.serviceType || rawTracker.serviceType === activeServiceType)) ? rawTracker : null;
+  const submissionTracker = (rawTracker && (!rawTracker.serviceType || rawTracker.serviceType === activeServiceType))
+    ? (rawTracker.serviceType ? rawTracker : { ...rawTracker, serviceType: activeServiceType })
+    : null;
   const submissionTrackerRef = useRef<SubmissionTrackerState>(null);
   submissionTrackerRef.current = submissionTracker;
 
@@ -1410,6 +1412,49 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const [correctionFormData, setCorrectionFormData] = useState<Record<string, string>>({});
   const [dismissedCorrectionFolder, setDismissedCorrectionFolder] = useState<string | null>(null);
   const dismissedFoldersRef = useRef<Set<string>>(new Set());
+  const dismissedBannerFoldersRef = useRef<Set<string>>(new Set());
+
+  const getStoredDismissedBannerKeys = (): Set<string> => {
+    try {
+      const arr = JSON.parse(sessionStorage.getItem('fs_dismissed_banners') || '[]');
+      return new Set((arr || []).map((s: string) => String(s).trim().toLowerCase()).filter(Boolean));
+    } catch (_) {
+      return new Set();
+    }
+  };
+
+  const markBannerDismissed = (folderName?: string, originalFolder?: string, arn?: string) => {
+    const keysToAdd: string[] = [];
+    if (folderName && folderName.trim()) {
+      keysToAdd.push(folderName.trim().toLowerCase());
+    }
+    if (originalFolder && originalFolder.trim()) {
+      keysToAdd.push(originalFolder.trim().toLowerCase());
+    }
+    if (arn && arn.trim()) {
+      keysToAdd.push(arn.trim().toLowerCase());
+    }
+    keysToAdd.forEach(k => dismissedBannerFoldersRef.current.add(k));
+    try {
+      const stored = JSON.parse(sessionStorage.getItem('fs_dismissed_banners') || '[]');
+      const combined = Array.from(new Set([...stored, ...keysToAdd]));
+      sessionStorage.setItem('fs_dismissed_banners', JSON.stringify(combined));
+    } catch (_) {}
+  };
+
+  const isBannerDismissed = (item: any): boolean => {
+    if (!item) return false;
+    const fn = String(item.folderName || item.folder_name || '').trim().toLowerCase();
+    const ofn = String(item.originalFolder || item.original_folder || '').trim().toLowerCase();
+    const ar = String(item.arn || '').trim().toLowerCase();
+    const stored = getStoredDismissedBannerKeys();
+    const mem = dismissedBannerFoldersRef.current;
+    return Boolean(
+      (fn && (mem.has(fn) || stored.has(fn))) ||
+      (ofn && (mem.has(ofn) || stored.has(ofn))) ||
+      (ar && (mem.has(ar) || stored.has(ar)))
+    );
+  };
 
   const [applications, setApplications] = useState<ApplicationItem[]>([]);
   const [previews, setPreviews] = useState<PreviewItem[]>([]);
@@ -1711,10 +1756,30 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
         const storedDismissed = getStoredDismissedKeys();
 
+        // 1. If current tracker is banner-dismissed or folder-dismissed, clear it immediately
+        if (currentTracker) {
+          const tf = (currentTracker.folderName || '').trim().toLowerCase();
+          const tof = (currentTracker.originalFolder || '').trim().toLowerCase();
+          const tarn = (currentTracker.arn || '').trim().toLowerCase();
+          if (
+            isBannerDismissed(currentTracker) ||
+            (tarn && (dismissedFoldersRef.current.has(tarn) || storedDismissed.has(tarn))) ||
+            (tf && (dismissedFoldersRef.current.has(tf) || storedDismissed.has(tf))) ||
+            (tof && (dismissedFoldersRef.current.has(tof) || storedDismissed.has(tof))) ||
+            (dismissedCorrectionFolder && (tf === dismissedCorrectionFolder.toLowerCase() || tof === dismissedCorrectionFolder.toLowerCase()))
+          ) {
+            setSubmissionTrackerFor(sType, null);
+            currentTracker = null;
+            if (sType === activeServiceType) setUploadMessage(null);
+          }
+        }
+
         // If not active, auto-adopt in-flight OR recently generated preview/draft
         if (!currentTracker || !currentTracker.active) {
           const inFlightApp = serviceApps.find(a =>
             ['UPLOADED', 'QUEUED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL', 'SUBMITTING_PORTAL', 'PROCESSING', 'UPLOADING'].includes(a.status) &&
+            !isBannerDismissed(a) &&
+            !(a.folder_name && (dismissedFoldersRef.current.has(a.folder_name) || storedDismissed.has(String(a.folder_name).trim().toLowerCase()))) &&
             !(a.arn && (dismissedFoldersRef.current.has(a.arn) || storedDismissed.has(String(a.arn).trim().toLowerCase()))) &&
             !(dismissedCorrectionFolder && a.folder_name === dismissedCorrectionFolder)
           );
@@ -1752,12 +1817,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           continue;
         }
 
-        // Check if dismissed: ONLY by unique ARN or active in-memory dismissed correction folder
+        // Check if dismissed:
         const tf = (currentTracker.folderName || '').trim().toLowerCase();
+        const tof = (currentTracker.originalFolder || '').trim().toLowerCase();
         const tarn = (currentTracker.arn || '').trim().toLowerCase();
         if (
+          isBannerDismissed(currentTracker) ||
           (tarn && (dismissedFoldersRef.current.has(tarn) || storedDismissed.has(tarn))) ||
-          (dismissedCorrectionFolder && tf === dismissedCorrectionFolder.toLowerCase())
+          (tf && (dismissedFoldersRef.current.has(tf) || storedDismissed.has(tf))) ||
+          (tof && (dismissedFoldersRef.current.has(tof) || storedDismissed.has(tof))) ||
+          (dismissedCorrectionFolder && (tf === dismissedCorrectionFolder.toLowerCase() || tof === dismissedCorrectionFolder.toLowerCase()))
         ) {
           setSubmissionTrackerFor(sType, null);
           if (sType === activeServiceType) setUploadMessage(null);
@@ -1780,6 +1849,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         const matchingErrorApp = apps.find(a => a.status === 'ERROR' && matchesThisTracker(a, true));
 
         if (matchingCorrectionApp) {
+          if (isBannerDismissed(matchingCorrectionApp)) {
+            setSubmissionTrackerFor(sType, null);
+            continue;
+          }
           // File has reached Draft/Correction status! Show Information Required with Open in Drafts button
           const actualService: 'reissue' | 'fresh' = (matchingCorrectionApp.service_type || '').toLowerCase() === 'fresh' ? 'fresh' : (matchingCorrectionApp.service_type || '').toLowerCase() === 'reissue' ? 'reissue' : sType;
           const correctionTrackerUpdate = (prev: SubmissionTrackerState): SubmissionTrackerState => {
@@ -1808,6 +1881,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         } else if (matchingPreview || readyApp) {
           // File has reached Preview status! Show Preview Ready with Open Preview button
           const previewItem = (matchingPreview || readyApp)!;
+          if (isBannerDismissed(previewItem)) {
+            setSubmissionTrackerFor(sType, null);
+            continue;
+          }
           const actualService: 'reissue' | 'fresh' = (previewItem.service_type || '').toLowerCase() === 'fresh' ? 'fresh' : (previewItem.service_type || '').toLowerCase() === 'reissue' ? 'reissue' : sType;
           const previewTrackerUpdate = (prev: SubmissionTrackerState): SubmissionTrackerState => {
             return {
@@ -3660,24 +3737,59 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   };
 
   const markFolderDismissed = (folderName?: string, _originalFolder?: string, arn?: string) => {
-    if (folderName) {
-      dismissedFoldersRef.current.add(folderName.trim());
-      dismissedFoldersRef.current.add(folderName.trim().toLowerCase());
+    const keysToAdd: string[] = [];
+    if (folderName && folderName.trim()) {
+      keysToAdd.push(folderName.trim());
+      keysToAdd.push(folderName.trim().toLowerCase());
     }
-    if (arn) {
-      const cleanArn = arn.trim().toLowerCase();
-      dismissedFoldersRef.current.add(cleanArn);
-      try {
-        const stored = JSON.parse(sessionStorage.getItem('fs_dismissed_folders') || '[]');
-        const combined = Array.from(new Set([...stored, cleanArn]));
-        sessionStorage.setItem('fs_dismissed_folders', JSON.stringify(combined));
-      } catch (_) {}
+    if (_originalFolder && _originalFolder.trim()) {
+      keysToAdd.push(_originalFolder.trim());
+      keysToAdd.push(_originalFolder.trim().toLowerCase());
     }
+    if (arn && arn.trim()) {
+      keysToAdd.push(arn.trim().toLowerCase());
+    }
+    keysToAdd.forEach(k => dismissedFoldersRef.current.add(k));
+    try {
+      const stored = JSON.parse(sessionStorage.getItem('fs_dismissed_folders') || '[]');
+      const combined = Array.from(new Set([...stored, ...keysToAdd.map(k => k.toLowerCase())]));
+      sessionStorage.setItem('fs_dismissed_folders', JSON.stringify(combined));
+    } catch (_) {}
+  };
+
+  const handleStartNewApplication = (folderName?: string, originalFolder?: string, arn?: string) => {
+    const tf = folderName || submissionTrackerRef.current?.folderName || submissionTracker?.folderName;
+    const of = originalFolder || submissionTrackerRef.current?.originalFolder || (submissionTracker as any)?.originalFolder;
+    const ar = arn || submissionTrackerRef.current?.arn || submissionTracker?.arn;
+
+    // Permanently dismiss banner notification for this application on main upload screen
+    markBannerDismissed(tf, of, ar);
+
+    // Clear submission tracker synchronously across all services
+    submissionTrackerRef.current = null;
+    setSubmissionTrackerFor('reissue', null);
+    setSubmissionTrackerFor('fresh', null);
+    setSubmissionTrackerFor('surrender', null);
+    setSubmissionTrackerFor('pcc', null);
+
+    // Clear upload message and draft selection
+    setUploadMessage(null);
+    setSelectedDraftFolder(null);
+
+    // Clear document slots cleanly for brand new upload
+    clearDocumentSlots(false);
+
+    // Ensure we are in form section
+    onSectionChange('form');
   };
 
   const handleDismissCorrection = (folderName?: string) => {
     const targetFolder = folderName || submissionTrackerRef.current?.folderName || submissionTracker?.folderName || correctionApp?.folder_name;
-    // 1. Immediately abort active tracker, upload message and draft selection so UI updates synchronously in this exact single click
+    const originalFolder = (submissionTrackerRef.current as any)?.originalFolder || (submissionTracker as any)?.originalFolder;
+    const targetArn = submissionTrackerRef.current?.arn || submissionTracker?.arn;
+
+    // 1. Immediately dismiss banner and abort active tracker synchronously
+    markBannerDismissed(targetFolder, originalFolder, targetArn);
     submissionTrackerRef.current = null;
     setSubmissionTrackerFor('reissue', null);
     setSubmissionTrackerFor('fresh', null);
@@ -4135,6 +4247,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   useEffect(() => {
     setUploadMessage(null);
+    if (currentSection === 'form') {
+      const activeTracker = submissionTrackerRef.current || submissionTracker;
+      if (activeTracker && isBannerDismissed(activeTracker)) {
+        submissionTrackerRef.current = null;
+        setSubmissionTrackerFor('reissue', null);
+        setSubmissionTrackerFor('fresh', null);
+        setSubmissionTrackerFor('surrender', null);
+        setSubmissionTrackerFor('pcc', null);
+      }
+    }
   }, [currentSection]);
 
   useEffect(() => {
@@ -4589,9 +4711,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          setSubmissionTracker(null);
-                          setUploadMessage(null);
-                          clearDocumentSlots(false);
+                          handleStartNewApplication(submissionTracker?.folderName, (submissionTracker as any)?.originalFolder, submissionTracker?.arn);
                         }}
                         style={{
                           display: 'inline-flex',
@@ -4648,7 +4768,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          handleDismissCorrection(submissionTracker.folderName);
+                          handleStartNewApplication(submissionTracker.folderName, (submissionTracker as any)?.originalFolder, submissionTracker.arn);
                         }}
                         style={{
                           display: 'inline-flex',
@@ -4664,8 +4784,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           cursor: 'pointer',
                         }}
                       >
-                        <X style={{ width: '14px', height: '14px' }} />
-                        <span>Dismiss &amp; New Upload</span>
+                        <Plus style={{ width: '14px', height: '14px' }} />
+                        <span>Start New Application</span>
                       </button>
                     </>
                   )}
@@ -4675,7 +4795,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        handleDismissCorrection(submissionTracker.folderName);
+                        handleStartNewApplication(submissionTracker.folderName, (submissionTracker as any)?.originalFolder, submissionTracker.arn);
                       }}
                       style={{
                         display: 'inline-flex',
@@ -4691,8 +4811,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         cursor: 'pointer',
                       }}
                     >
-                      <X style={{ width: '14px', height: '14px' }} />
-                      <span>Dismiss &amp; New Upload</span>
+                      <Plus style={{ width: '14px', height: '14px' }} />
+                      <span>Start New Application</span>
                     </button>
                   )}
                 </div>
@@ -5347,7 +5467,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 <AlertCircle className="missing-alert-icon" />
                 <div className="missing-content">
                   <span className="missing-title">
-                    {correctionApp.error_type === 'PORTAL_FORM_ERROR' || correctionApp.error_type === 'STAGE1_7_FAILED'
+                    {correctionApp.error_type === 'DISTRICT_SELECTION_REQUIRED'
+                      ? 'District Selection Required — Select Portal Option'
+                      : correctionApp.error_type === 'PORTAL_FORM_ERROR' || correctionApp.error_type === 'STAGE1_7_FAILED'
                       ? 'Portal Submission Error — Action Required'
                       : 'Missing Mandatory Details — Please Review & Complete'}
                   </span>
@@ -5854,15 +5976,40 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           <label htmlFor="corrDistrict" className="input-label">
                             District <span className="required-star">*</span>
                           </label>
-                          <input
-                            id="corrDistrict"
-                            type="text"
-                            className="form-input"
-                            placeholder="e.g. SIKAR"
-                            value={correctionFormData["District"] || ""}
-                            onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "District": e.target.value.toUpperCase() }))}
-                            required
-                          />
+                          {correctionApp?.portal_districts && correctionApp.portal_districts.length > 0 ? (
+                            <div>
+                              <select
+                                id="corrDistrict"
+                                className="form-input"
+                                value={correctionFormData["District"] || ""}
+                                onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "District": e.target.value.toUpperCase() }))}
+                                required
+                              >
+                                <option value="">-- Select Portal District --</option>
+                                {correctionApp.portal_districts.map((d: any, idx: number) => {
+                                  const dName = typeof d === 'string' ? d : (d.DISTRICT_NAME || d.name || d.value || '');
+                                  return (
+                                    <option key={idx} value={dName}>
+                                      {dName}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                              <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                                Official district options loaded from the Passport Seva Portal
+                              </span>
+                            </div>
+                          ) : (
+                            <input
+                              id="corrDistrict"
+                              type="text"
+                              className="form-input"
+                              placeholder="e.g. SIKAR"
+                              value={correctionFormData["District"] || ""}
+                              onChange={(e) => setCorrectionFormData(prev => ({ ...prev, "District": e.target.value.toUpperCase() }))}
+                              required
+                            />
+                          )}
                         </div>
                       )}
 
@@ -6086,19 +6233,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       {isFieldMissing(["Place of issue", "issue_place", "place_of_issue"]) && (
                         <div className="input-group">
                           <label htmlFor="corrPlaceOfIssue" className="input-label">
-                            Place of Issue <span className="required-star">*</span>
+                            Place of Issue <span className="text-gray-400 font-normal text-xs">(Optional - Embassy auto-fills)</span>
                           </label>
                           <input
                             id="corrPlaceOfIssue"
                             type="text"
                             className="form-input"
-                            placeholder="e.g. JAIPUR or ROME"
+                            placeholder="e.g. JAIPUR or ROME (or leave blank)"
                             value={correctionFormData["Place of issue"] || correctionFormData["issue_place"] || ""}
                             onChange={(e) => {
                               const val = e.target.value.toUpperCase();
                               setCorrectionFormData(prev => ({ ...prev, "Place of issue": val, "issue_place": val }));
                             }}
-                            required
                           />
                         </div>
                       )}
@@ -6320,9 +6466,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        setSubmissionTracker(null);
-                        setUploadMessage(null);
-                        clearDocumentSlots(false);
+                        handleStartNewApplication();
                         onSectionChange('form');
                       }}
                       className="submit-btn"

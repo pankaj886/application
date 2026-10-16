@@ -159,10 +159,12 @@ Write-Host "[4/4] Launching Foreigners Studio..." -ForegroundColor Yellow
 
 $exeCandidates = @(
     (Join-Path $scriptDir "dist-release\foreigners_studio.exe"),
-    (Join-Path $scriptDir "foreigners_studio.exe"),
-    (Join-Path $scriptDir "dist-release\Foreigners_Studio_1.0.0_x64-setup.exe"),
-    (Join-Path $scriptDir "Foreigners_Studio_1.0.0_x64-setup.exe")
+    (Join-Path $scriptDir "foreigners_studio.exe")
 )
+$setupExes = @(Get-ChildItem -Path $scriptDir -Filter "Foreigners_Studio_*_x64-setup.exe" -ErrorAction SilentlyContinue | Sort-Object Name -Descending)
+foreach ($s in $setupExes) { $exeCandidates += $s.FullName }
+$setupExesRel = @(Get-ChildItem -Path (Join-Path $scriptDir "dist-release") -Filter "Foreigners_Studio_*_x64-setup.exe" -ErrorAction SilentlyContinue | Sort-Object Name -Descending)
+foreach ($s in $setupExesRel) { $exeCandidates += $s.FullName }
 
 $targetExe = $null
 foreach ($cand in $exeCandidates) {
@@ -175,7 +177,7 @@ foreach ($cand in $exeCandidates) {
 if (-not $targetExe) {
     Write-Warning "No executable found to launch. Trust configuration was completed."
     Write-Host ""
-    Write-Host "      Please manually launch: Foreigners_Studio_1.0.0_x64-setup.exe" -ForegroundColor Yellow
+    Write-Host "      Please manually launch the Foreigners Studio installer setup executable." -ForegroundColor Yellow
     Write-Host "      If Windows still shows a SmartScreen warning, click:" -ForegroundColor Yellow
     Write-Host "        'More info'  →  'Run anyway'" -ForegroundColor Yellow
 } else {

@@ -32,6 +32,7 @@ export interface ApplicationItem {
   failed_upload_file?: string;
   portal_server_error?: string;
   missing_fields?: string[];
+  portal_districts?: string[] | any[];
   missing_details?: Array<{
     field: string;
     label: string;
@@ -207,7 +208,6 @@ class AutomationApiService {
         const ghRes = await fetch(`${GITHUB_API_GATEWAY_URL}?_t=${Date.now()}`, {
           headers: {
             'Accept': 'application/vnd.github.v3+json',
-            'Authorization': 'token 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',
           },
           cache: 'no-store',
         });
