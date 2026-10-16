@@ -1320,7 +1320,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   trackersRef.current = trackers;
 
   const [draftFilter, setDraftFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender' | 'pcc'>('all');
-  const [previewFilter, setPreviewFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender' | 'pcc'>('all');
 
   const rawTracker = trackers[activeServiceType];
   const submissionTracker = (rawTracker && (!rawTracker.serviceType || rawTracker.serviceType === activeServiceType))
@@ -4709,7 +4708,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           if (submissionTracker?.serviceType) {
                             switchActiveServiceType(submissionTracker.serviceType);
                           }
-                          setPreviewFilter('all');
                           onSectionChange('preview');
                         }}
                         style={{
@@ -6758,16 +6756,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       )}
 
       {currentSection === 'preview' && (() => {
-        let displayedPreviews = previewFilter === 'all'
-          ? allValidPreviews
-          : allValidPreviews.filter(p => isAppMatchingService(p, previewFilter));
-
-        const freshPreviewsCount = allValidPreviews.filter(p => isAppMatchingService(p, 'fresh')).length;
-        const reissuePreviewsCount = allValidPreviews.filter(p => isAppMatchingService(p, 'reissue')).length;
+        let displayedPreviews = allValidPreviews.filter(p => isAppMatchingService(p, activeServiceType));
 
         // Ensure currently submitting card stays firmly pinned during the submission process until complete
         const isCurrentlySubmitting = Boolean(submittingFolder || submittingArn);
-        if (isCurrentlySubmitting && submittingPreviewRef.current && (previewFilter === 'all' || isAppMatchingService(submittingPreviewRef.current, previewFilter))) {
+        if (isCurrentlySubmitting && submittingPreviewRef.current && isAppMatchingService(submittingPreviewRef.current, activeServiceType)) {
           const itemArn = submittingPreviewRef.current.arn;
           const itemFname = submittingPreviewRef.current.folder_name || submittingFolder;
           const liveApp = applications.find(a => (itemFname && a.folder_name === itemFname) || (itemArn && a.arn === itemArn));
@@ -6785,11 +6778,18 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           }
         }
 
+        const serviceTitle =
+          activeServiceType === 'fresh' ? 'Fresh Passport Previews' :
+          activeServiceType === 'reissue' ? 'Passport Reissue Previews' :
+          activeServiceType === 'surrender' ? 'Surrender Certificate Previews' :
+          activeServiceType === 'pcc' ? 'Police Clearance Certificate Previews' :
+          'Application Previews';
+
         return (
         <div className="fresh-reissue-content">
           <div className="view-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             <div>
-              <h2 className="view-main-title">Application Previews</h2>
+              <h2 className="view-main-title">{serviceTitle}</h2>
               <p className="card-subtitle">
                 Review both generated preview documents carefully before submitting to the portal.
               </p>
@@ -6812,60 +6812,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   {quota.used}/{quota.total}
                 </span>
               )}
-
-              <div style={{ display: 'flex', background: '#f1f5f9', padding: '3px', borderRadius: '10px' }}>
-                <button
-                  type="button"
-                  onClick={() => setPreviewFilter('all')}
-                  style={{
-                    border: 'none',
-                    background: previewFilter === 'all' ? '#ffffff' : 'transparent',
-                    color: previewFilter === 'all' ? '#0f172a' : '#64748b',
-                    fontWeight: previewFilter === 'all' ? 700 : 500,
-                    fontSize: '12px',
-                    padding: '5px 12px',
-                    borderRadius: '7px',
-                    cursor: 'pointer',
-                    boxShadow: previewFilter === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  }}
-                >
-                  All ({allValidPreviews.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewFilter('fresh')}
-                  style={{
-                    border: 'none',
-                    background: previewFilter === 'fresh' ? '#ffffff' : 'transparent',
-                    color: previewFilter === 'fresh' ? '#059669' : '#64748b',
-                    fontWeight: previewFilter === 'fresh' ? 700 : 500,
-                    fontSize: '12px',
-                    padding: '5px 12px',
-                    borderRadius: '7px',
-                    cursor: 'pointer',
-                    boxShadow: previewFilter === 'fresh' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  }}
-                >
-                  Fresh ({freshPreviewsCount})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewFilter('reissue')}
-                  style={{
-                    border: 'none',
-                    background: previewFilter === 'reissue' ? '#ffffff' : 'transparent',
-                    color: previewFilter === 'reissue' ? '#2563eb' : '#64748b',
-                    fontWeight: previewFilter === 'reissue' ? 700 : 500,
-                    fontSize: '12px',
-                    padding: '5px 12px',
-                    borderRadius: '7px',
-                    cursor: 'pointer',
-                    boxShadow: previewFilter === 'reissue' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  }}
-                >
-                  Reissue ({reissuePreviewsCount})
-                </button>
-              </div>
             </div>
           </div>
 
@@ -6935,37 +6881,30 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 <FileCheck className="empty-icon" />
               </div>
               <h3 className="empty-title">
-                {previewFilter === 'all'
-                  ? 'No Pending Application Previews'
-                  : `No Pending ${previewFilter === 'fresh' ? 'Fresh Passport' : 'Passport Reissue'} Previews`}
+                {activeServiceType === 'fresh'
+                  ? 'No Pending Fresh Passport Previews'
+                  : activeServiceType === 'reissue'
+                  ? 'No Pending Passport Reissue Previews'
+                  : activeServiceType === 'surrender'
+                  ? 'No Pending Surrender Certificate Previews'
+                  : activeServiceType === 'pcc'
+                  ? 'No Pending Police Clearance Certificate Previews'
+                  : 'No Pending Application Previews'}
               </h3>
               <p className="empty-desc">
-                {previewFilter !== 'all' && allValidPreviews.length > 0
-                  ? `You have ${allValidPreviews.length} pending preview(s) in other categories.`
-                  : 'When you submit a new application, documents are extracted and preview drafts will appear here for verification.'}
+                When you submit a new application, documents are extracted and preview drafts will appear here for verification.
               </p>
-              {previewFilter !== 'all' && allValidPreviews.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => setPreviewFilter('all')}
-                  className="empty-action-btn"
-                >
-                  View All Previews ({allValidPreviews.length})
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSubmissionTracker(null);
-                    setUploadMessage(null);
-                    clearDocumentSlots(false);
-                    onSectionChange('form');
-                  }}
-                  className="empty-action-btn"
-                >
-                  Create New Application
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmissionTracker(null);
+                  setUploadMessage(null);
+                  handleStartNewApplication();
+                }}
+                className="empty-action-btn"
+              >
+                Create New Application
+              </button>
             </div>
           ) : (
             <div className="previews-grid">
