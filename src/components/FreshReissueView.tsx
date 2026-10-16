@@ -4206,10 +4206,26 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     }
   };
 
+  const getEffectiveMediaUrl = (relativeUrl?: string): string => {
+    if (!relativeUrl) return '';
+    const baseUrl = automationApi.getBaseUrl();
+    const cleanRel = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
+    let full = relativeUrl.startsWith('http') ? relativeUrl : `${baseUrl}${cleanRel}`;
+    if (googleUserEmail && !full.includes('user_email=')) {
+      const sep = full.includes('?') ? '&' : '?';
+      full = `${full}${sep}user_email=${encodeURIComponent(googleUserEmail)}`;
+    }
+    return full;
+  };
+
   const openPdfViewer = async (title: string, relativeUrl: string) => {
     const baseUrl = await automationApi.resolveGateway().catch(() => automationApi.getBaseUrl());
     const cleanRel = relativeUrl.startsWith('/') ? relativeUrl : `/${relativeUrl}`;
-    const fullUrl = relativeUrl.startsWith('http') ? relativeUrl : `${baseUrl}${cleanRel}`;
+    let fullUrl = relativeUrl.startsWith('http') ? relativeUrl : `${baseUrl}${cleanRel}`;
+    if (googleUserEmail && !fullUrl.includes('user_email=')) {
+      const sep = fullUrl.includes('?') ? '&' : '?';
+      fullUrl = `${fullUrl}${sep}user_email=${encodeURIComponent(googleUserEmail)}`;
+    }
     setViewerModal({
       isOpen: true,
       title,
@@ -4218,10 +4234,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   };
 
   const openImageViewer = (title: string, fullUrl: string) => {
+    let url = fullUrl;
+    if (googleUserEmail && !url.includes('user_email=')) {
+      const sep = url.includes('?') ? '&' : '?';
+      url = `${url}${sep}user_email=${encodeURIComponent(googleUserEmail)}`;
+    }
     setImageViewerModal({
       isOpen: true,
       title,
-      imageUrl: fullUrl,
+      imageUrl: url,
     });
   };
 
@@ -7138,13 +7159,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                               className="media-card-preview-area"
                               onClick={() => {
                                 if (item.photo_preview_url) {
-                                  openImageViewer('Applicant Photograph (630×810)', `${automationApi.getBaseUrl()}${item.photo_preview_url}`);
+                                  openImageViewer('Applicant Photograph (630×810)', getEffectiveMediaUrl(item.photo_preview_url));
                                 }
                               }}
                             >
                               {item.photo_preview_url ? (
                                 <img
-                                  src={`${automationApi.getBaseUrl()}${item.photo_preview_url}`}
+                                  src={getEffectiveMediaUrl(item.photo_preview_url)}
                                   alt="Photograph"
                                   className="media-card-img photo-frame"
                                   title="Click to zoom &amp; inspect face framing"
@@ -7169,13 +7190,13 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                               className="media-card-preview-area"
                               onClick={() => {
                                 if (item.signature_preview_url) {
-                                  openImageViewer('Applicant Signature', `${automationApi.getBaseUrl()}${item.signature_preview_url}`);
+                                  openImageViewer('Applicant Signature', getEffectiveMediaUrl(item.signature_preview_url));
                                 }
                               }}
                             >
                               {item.signature_preview_url ? (
                                 <img
-                                  src={`${automationApi.getBaseUrl()}${item.signature_preview_url}`}
+                                  src={getEffectiveMediaUrl(item.signature_preview_url)}
                                   alt="Signature"
                                   className="media-card-img sign-frame"
                                   title="Click to zoom &amp; inspect signature crop"

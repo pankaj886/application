@@ -49,8 +49,8 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
       })
       .catch(err => {
         if (!active) return;
-        console.warn('Blob conversion fallback to direct url:', err);
-        setBlobUrl(pdfUrl);
+        console.warn('PDF fetch error:', err);
+        setError('Could not load document preview.');
         setLoading(false);
       });
 
