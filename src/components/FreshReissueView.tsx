@@ -1321,10 +1321,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const [draftFilter, setDraftFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender' | 'pcc'>('all');
 
-  const rawTracker = trackers[activeServiceType];
-  const submissionTracker = (rawTracker && (!rawTracker.serviceType || rawTracker.serviceType === activeServiceType))
-    ? (rawTracker.serviceType ? rawTracker : { ...rawTracker, serviceType: activeServiceType })
-    : null;
+  const primaryTracker = trackers[activeServiceType];
+  const anyActiveTracker = Object.values(trackers).find(t => t && t.active);
+  const rawTracker = (primaryTracker && primaryTracker.active) ? primaryTracker : (anyActiveTracker || primaryTracker);
+  const submissionTracker = rawTracker ? (rawTracker.serviceType ? rawTracker : { ...rawTracker, serviceType: activeServiceType }) : null;
   const submissionTrackerRef = useRef<SubmissionTrackerState>(null);
   submissionTrackerRef.current = submissionTracker;
 
@@ -1413,10 +1413,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const dismissedFoldersRef = useRef<Set<string>>(new Set());
   const dismissedBannerFoldersRef = useRef<Set<string>>(new Set());
 
+  const isGenericFolderNumber = (s?: string) => Boolean(s && /^\d+$/.test(String(s).trim()));
+
   const getStoredDismissedBannerKeys = (): Set<string> => {
     try {
       const arr = JSON.parse(sessionStorage.getItem('fs_dismissed_banners') || '[]');
-      return new Set((arr || []).map((s: string) => String(s).trim().toLowerCase()).filter(Boolean));
+      return new Set((arr || []).map((s: string) => String(s).trim().toLowerCase()).filter((s: string) => Boolean(s) && !isGenericFolderNumber(s)));
     } catch (_) {
       return new Set();
     }
@@ -1424,10 +1426,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const markBannerDismissed = (folderName?: string, originalFolder?: string, arn?: string) => {
     const keysToAdd: string[] = [];
-    if (folderName && folderName.trim()) {
+    if (folderName && folderName.trim() && !isGenericFolderNumber(folderName)) {
       keysToAdd.push(folderName.trim().toLowerCase());
     }
-    if (originalFolder && originalFolder.trim()) {
+    if (originalFolder && originalFolder.trim() && !isGenericFolderNumber(originalFolder)) {
       keysToAdd.push(originalFolder.trim().toLowerCase());
     }
     if (arn && arn.trim()) {
@@ -1436,7 +1438,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     keysToAdd.forEach(k => dismissedBannerFoldersRef.current.add(k));
     try {
       const stored = JSON.parse(sessionStorage.getItem('fs_dismissed_banners') || '[]');
-      const combined = Array.from(new Set([...stored, ...keysToAdd]));
+      const combined = Array.from(new Set([...stored.filter((s: string) => !isGenericFolderNumber(s)), ...keysToAdd]));
       sessionStorage.setItem('fs_dismissed_banners', JSON.stringify(combined));
     } catch (_) {}
   };
@@ -1449,8 +1451,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     const stored = getStoredDismissedBannerKeys();
     const mem = dismissedBannerFoldersRef.current;
     return Boolean(
-      (fn && (mem.has(fn) || stored.has(fn))) ||
-      (ofn && (mem.has(ofn) || stored.has(ofn))) ||
+      (fn && !isGenericFolderNumber(fn) && (mem.has(fn) || stored.has(fn))) ||
+      (ofn && !isGenericFolderNumber(ofn) && (mem.has(ofn) || stored.has(ofn))) ||
       (ar && (mem.has(ar) || stored.has(ar)))
     );
   };
@@ -1477,8 +1479,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       return new Set();
     }
   };
-
-  const isGenericFolderNumber = (s?: string) => Boolean(s && /^\d+$/.test(String(s).trim()));
 
   const allDraftApplications = useMemo<ApplicationItem[]>(() => {
     // Collect all folder names and ARNs of applications that are already in preview or submitted
@@ -1756,15 +1756,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         const storedDismissed = getStoredDismissedKeys();
 
         // 1. If current tracker is banner-dismissed or folder-dismissed, clear it immediately
-        if (currentTracker) {
+        // ONLY dismiss completed, errored, or missing info banners - NEVER dismiss an actively in-flight processing tracker!
+        if (currentTracker && (currentTracker.ready || currentTracker.isError || currentTracker.isMissingInfo)) {
           const tf = (currentTracker.folderName || '').trim().toLowerCase();
           const tof = (currentTracker.originalFolder || '').trim().toLowerCase();
           const tarn = (currentTracker.arn || '').trim().toLowerCase();
           if (
             isBannerDismissed(currentTracker) ||
             (tarn && (dismissedFoldersRef.current.has(tarn) || storedDismissed.has(tarn))) ||
-            (tf && (dismissedFoldersRef.current.has(tf) || storedDismissed.has(tf))) ||
-            (tof && (dismissedFoldersRef.current.has(tof) || storedDismissed.has(tof))) ||
+            (tf && !isGenericFolderNumber(tf) && (dismissedFoldersRef.current.has(tf) || storedDismissed.has(tf))) ||
+            (tof && !isGenericFolderNumber(tof) && (dismissedFoldersRef.current.has(tof) || storedDismissed.has(tof))) ||
             (dismissedCorrectionFolder && (tf === dismissedCorrectionFolder.toLowerCase() || tof === dismissedCorrectionFolder.toLowerCase()))
           ) {
             setSubmissionTrackerFor(sType, null);
@@ -1778,7 +1779,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           const inFlightApp = serviceApps.find(a =>
             ['UPLOADED', 'QUEUED', 'EXTRACTING', 'EXTRACTED', 'FILLING_PORTAL', 'SUBMITTING_PORTAL', 'PROCESSING', 'UPLOADING'].includes(a.status) &&
             !isBannerDismissed(a) &&
-            !(a.folder_name && (dismissedFoldersRef.current.has(a.folder_name) || storedDismissed.has(String(a.folder_name).trim().toLowerCase()))) &&
+            !(a.folder_name && !isGenericFolderNumber(a.folder_name) && (dismissedFoldersRef.current.has(a.folder_name) || storedDismissed.has(String(a.folder_name).trim().toLowerCase()))) &&
             !(a.arn && (dismissedFoldersRef.current.has(a.arn) || storedDismissed.has(String(a.arn).trim().toLowerCase()))) &&
             !(dismissedCorrectionFolder && a.folder_name === dismissedCorrectionFolder)
           );
@@ -1816,20 +1817,22 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           continue;
         }
 
-        // Check if dismissed:
-        const tf = (currentTracker.folderName || '').trim().toLowerCase();
-        const tof = (currentTracker.originalFolder || '').trim().toLowerCase();
-        const tarn = (currentTracker.arn || '').trim().toLowerCase();
-        if (
-          isBannerDismissed(currentTracker) ||
-          (tarn && (dismissedFoldersRef.current.has(tarn) || storedDismissed.has(tarn))) ||
-          (tf && (dismissedFoldersRef.current.has(tf) || storedDismissed.has(tf))) ||
-          (tof && (dismissedFoldersRef.current.has(tof) || storedDismissed.has(tof))) ||
-          (dismissedCorrectionFolder && (tf === dismissedCorrectionFolder.toLowerCase() || tof === dismissedCorrectionFolder.toLowerCase()))
-        ) {
-          setSubmissionTrackerFor(sType, null);
-          if (sType === activeServiceType) setUploadMessage(null);
-          continue;
+        // Check if dismissed: ONLY dismiss if tracker is completed, errored, or missing info - NEVER in-flight!
+        if (currentTracker && (currentTracker.ready || currentTracker.isError || currentTracker.isMissingInfo)) {
+          const tf = (currentTracker.folderName || '').trim().toLowerCase();
+          const tof = (currentTracker.originalFolder || '').trim().toLowerCase();
+          const tarn = (currentTracker.arn || '').trim().toLowerCase();
+          if (
+            isBannerDismissed(currentTracker) ||
+            (tarn && (dismissedFoldersRef.current.has(tarn) || storedDismissed.has(tarn))) ||
+            (tf && !isGenericFolderNumber(tf) && (dismissedFoldersRef.current.has(tf) || storedDismissed.has(tf))) ||
+            (tof && !isGenericFolderNumber(tof) && (dismissedFoldersRef.current.has(tof) || storedDismissed.has(tof))) ||
+            (dismissedCorrectionFolder && (tf === dismissedCorrectionFolder.toLowerCase() || tof === dismissedCorrectionFolder.toLowerCase()))
+          ) {
+            setSubmissionTrackerFor(sType, null);
+            if (sType === activeServiceType) setUploadMessage(null);
+            continue;
+          }
         }
 
         const activeProcessingApp = apps.find(a =>
@@ -1914,12 +1917,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             activeProcessingApp.status === 'EXTRACTED' ? 52 :
             (typeof activeProcessingApp.progress === 'number' && activeProcessingApp.progress > 0) ? activeProcessingApp.progress : 75;
 
-          setSubmissionTrackerFor(sType, prev => {
+          const actualService: 'reissue' | 'fresh' = (activeProcessingApp.service_type || '').toLowerCase() === 'fresh' ? 'fresh' : (activeProcessingApp.service_type || '').toLowerCase() === 'reissue' ? 'reissue' : sType;
+
+          setSubmissionTrackerFor(actualService, prev => {
             const currentPct = prev?.percent || 20;
             return {
               active: true,
               ready: false,
-              serviceType: sType,
+              serviceType: actualService,
               isMissingInfo: false,
               folderName: activeProcessingApp.folder_name || prev?.folderName,
               originalFolder: (activeProcessingApp as any).original_folder || prev?.originalFolder || prev?.folderName,
@@ -1937,6 +1942,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               startedAt: prev?.startedAt || Date.now(),
             };
           });
+          if (actualService !== sType) {
+            setSubmissionTrackerFor(sType, null);
+          }
         } else if (matchingErrorApp) {
           if (sType === activeServiceType) setUploadMessage(null);
           // PERMANENT PROGRESS BAR FIX: Never show a stuck or broken red "Error" progress bar!
@@ -1964,9 +1972,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         } else {
           setSubmissionTrackerFor(sType, prev => {
             if (isUploadingRef.current && sType === activeServiceType) return prev;
-            // Never vanish a completed or information-required tracker until user acts on it
+            // Never vanish a running, completed, or information-required tracker during transient polling delays
             if (prev?.ready || prev?.isMissingInfo) {
               return prev;
+            }
+            // Keep in-flight tracker visible during backend rename / portal submission (up to 5 minutes)
+            if (prev?.active && !prev?.isError) {
+              if (Date.now() - prev.startedAt < 300000) {
+                return prev;
+              }
             }
             if (prev && Date.now() - prev.startedAt > 60000 && !prev.folderName) {
               return null;
@@ -3362,6 +3376,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     if (isUploading || isUploadingRef.current) return;
     setUploadMessage(null);
     dismissedFoldersRef.current.clear();
+    dismissedBannerFoldersRef.current.clear();
+    try {
+      sessionStorage.removeItem('fs_dismissed_banners');
+    } catch (_) {}
     setDismissedCorrectionFolder(null);
 
     const targetClientEmail = portalEmail.trim().toUpperCase();
@@ -3510,9 +3528,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     clearDocumentSlots(true);
     isUploadingRef.current = true;
     dismissedFoldersRef.current.clear();
+    dismissedBannerFoldersRef.current.clear();
     setDismissedCorrectionFolder(null);
     try {
       sessionStorage.removeItem('fs_dismissed_folders');
+      sessionStorage.removeItem('fs_dismissed_banners');
     } catch (_) {}
 
     try {
@@ -3737,11 +3757,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
 
   const markFolderDismissed = (folderName?: string, _originalFolder?: string, arn?: string) => {
     const keysToAdd: string[] = [];
-    if (folderName && folderName.trim()) {
+    if (folderName && folderName.trim() && !isGenericFolderNumber(folderName)) {
       keysToAdd.push(folderName.trim());
       keysToAdd.push(folderName.trim().toLowerCase());
     }
-    if (_originalFolder && _originalFolder.trim()) {
+    if (_originalFolder && _originalFolder.trim() && !isGenericFolderNumber(_originalFolder)) {
       keysToAdd.push(_originalFolder.trim());
       keysToAdd.push(_originalFolder.trim().toLowerCase());
     }
@@ -3751,7 +3771,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     keysToAdd.forEach(k => dismissedFoldersRef.current.add(k));
     try {
       const stored = JSON.parse(sessionStorage.getItem('fs_dismissed_folders') || '[]');
-      const combined = Array.from(new Set([...stored, ...keysToAdd.map(k => k.toLowerCase())]));
+      const combined = Array.from(new Set([...stored.filter((s: string) => !isGenericFolderNumber(s)), ...keysToAdd.map(k => k.toLowerCase())]));
       sessionStorage.setItem('fs_dismissed_folders', JSON.stringify(combined));
     } catch (_) {}
   };
@@ -4269,7 +4289,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     setUploadMessage(null);
     if (currentSection === 'form') {
       const activeTracker = submissionTrackerRef.current || submissionTracker;
-      if (activeTracker && isBannerDismissed(activeTracker)) {
+      if (activeTracker && (activeTracker.ready || activeTracker.isError || activeTracker.isMissingInfo) && isBannerDismissed(activeTracker)) {
         submissionTrackerRef.current = null;
         setSubmissionTrackerFor('reissue', null);
         setSubmissionTrackerFor('fresh', null);
@@ -4599,7 +4619,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       {currentSection === 'form' && (
         <div className="fresh-reissue-content">
 
-          {submissionTracker?.active && submissionTracker.serviceType === activeServiceType && (
+          {submissionTracker?.active && (
             <div
               className="voice-progress-container"
               style={{
