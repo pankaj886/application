@@ -21,7 +21,7 @@ export function App() {
   const [previewCount, setPreviewCount] = useState<number>(0);
   const [completedCount, setCompletedCount] = useState<number>(0);
   const [passportServiceType, setPassportServiceType] = useState<'reissue' | 'fresh' | 'surrender' | 'pcc'>('reissue');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 960);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(window.innerWidth < 1024);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const updateInFlight = useRef(false);
 
@@ -242,9 +242,9 @@ export function App() {
       document.documentElement.style.setProperty('--window-w', `${width}px`);
       document.documentElement.style.setProperty('--window-h', `${height}px`);
 
-      if (prevWidth >= 960 && width < 960) {
+      if (prevWidth >= 1024 && width < 1024) {
         setSidebarCollapsed(true);
-      } else if (prevWidth < 960 && width >= 960) {
+      } else if (prevWidth < 1024 && width >= 1024) {
         setSidebarCollapsed(false);
       }
       prevWidth = width;

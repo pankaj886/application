@@ -4651,6 +4651,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                             : `Processing Application${submissionTracker.applicantName ? ` (${submissionTracker.applicantName})` : ''}...`)}
                     </div>
                     {!submissionTracker.ready &&
+                      (submissionTracker.isError || submissionTracker.isMissingInfo) &&
                       submissionTracker.stageText &&
                       !submissionTracker.stageText.toLowerCase().includes('waiting for preview') &&
                       submissionTracker.stageText !== 'Extracting details from uploaded documents...' &&
@@ -5295,7 +5296,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </span>
                         </div>
                         <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>
-                          Will be processed &amp; consolidated by AI
+                          Will be processed &amp; consolidated automatically
                         </span>
                       </div>
                       <div className="attached-files-list" style={{ marginTop: '0px' }}>
