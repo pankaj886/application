@@ -1367,21 +1367,14 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           const current = t.percent;
           const target = t.targetPercent || Math.max(current, 20);
 
+          // REAL progress only: the bar glides to the value the backend (or the upload itself) actually reported.
+          // It never invents movement while waiting; a shimmer on the bar shows that work is still in flight.
           if (current < target) {
             const diff = target - current;
             const step = diff > 25 ? 3 : diff > 12 ? 2 : 1;
             const next = Math.min(target, current + step);
             nextTrackers[sType] = { ...t, percent: next };
             changed = true;
-          } else if (current < 95 && target < 95) {
-            const now = Date.now();
-            const lastTick = (t as any)._lastTick || 0;
-            const tickInterval = current < 45 ? 1200 : current < 75 ? 850 : 1500;
-            if (now - lastTick >= tickInterval) {
-              const next = Math.min(95, current + 1);
-              nextTrackers[sType] = { ...t, percent: next, _lastTick: now } as any;
-              changed = true;
-            }
           }
         }
         if (changed) {
@@ -1797,7 +1790,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             !(dismissedCorrectionFolder && a.folder_name === dismissedCorrectionFolder)
           );
           if (inFlightApp) {
-            const initPct = inFlightApp.status === 'FILLING_PORTAL' ? 70 : inFlightApp.status === 'EXTRACTED' ? 48 : 20;
+            // the backend's real progress for this application (no invented starting points)
+            const initPct = typeof inFlightApp.progress === 'number' ? inFlightApp.progress : 0;
             const adopted: SubmissionTrackerState = {
               active: true,
               ready: false,
@@ -1807,7 +1801,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               originalFolder: (inFlightApp as any).original_folder || inFlightApp.folder_name,
               arn: inFlightApp.arn,
               percent: initPct,
-              targetPercent: inFlightApp.status === 'FILLING_PORTAL' ? 85 : 48,
+              targetPercent: initPct,
               stageText: inFlightApp.stage || 'Processing application...',
               applicantName: inFlightApp.applicant_name || inFlightApp.folder_name,
               startedAt: Date.now() - 10000,
@@ -1926,16 +1920,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           }
           continue;
         } else if (activeProcessingApp) {
-          const stageTarget =
-            activeProcessingApp.status === 'UPLOADED' ? 25 :
-            activeProcessingApp.status === 'EXTRACTING' ? 48 :
-            activeProcessingApp.status === 'EXTRACTED' ? 52 :
-            (typeof activeProcessingApp.progress === 'number' && activeProcessingApp.progress > 0) ? activeProcessingApp.progress : 75;
+          // Only what the backend actually reports (it writes a progress value at every real step)
+          const stageTarget = (typeof activeProcessingApp.progress === 'number' && activeProcessingApp.progress > 0)
+            ? activeProcessingApp.progress
+            : 0;
 
           const actualService: 'reissue' | 'fresh' = (activeProcessingApp.service_type || '').toLowerCase() === 'fresh' ? 'fresh' : (activeProcessingApp.service_type || '').toLowerCase() === 'reissue' ? 'reissue' : sType;
 
           setSubmissionTrackerFor(actualService, prev => {
-            const currentPct = prev?.percent || 20;
+            const currentPct = prev?.percent ?? stageTarget;
             return {
               active: true,
               ready: false,
@@ -1946,7 +1939,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               arn: activeProcessingApp.arn || prev?.arn,
               isError: false,
               percent: currentPct,
-              targetPercent: Math.max(currentPct, stageTarget),
+              targetPercent: Math.max(prev?.targetPercent ?? currentPct, stageTarget),
               stageText: activeProcessingApp.stage || (
                 activeProcessingApp.status === 'UPLOADED' ? 'Extracting details from uploaded documents...' :
                 activeProcessingApp.status === 'EXTRACTING' ? 'Analyzing & extracting applicant documents...' :
@@ -2275,7 +2268,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       setVoiceProgress((prev) => ({
         ...prev,
         [folderName]: {
-          percent: 15,
+          percent: 3,
           stage: audioBlob
             ? 'Sending voice instruction to backend...'
             : 'Sending edit instruction to backend...',
@@ -3568,7 +3561,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         active: true,
         ready: false,
         percent: 2,
-        targetPercent: 5,
+        targetPercent: 2,
         stageText: 'Preparing documents for upload...',
         startedAt: Date.now(),
       });
@@ -3612,7 +3605,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         originalFolder: uploadedFolder,
         applicantName: candidateApplicantName || uploadedFolder,
         percent: 20,
-        targetPercent: 48,
+        targetPercent: 20,
         stageText: 'Extracting details from uploaded documents...',
         startedAt: Date.now(),
       });
@@ -3762,8 +3755,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         ready: false,
         folderName: correctionApp.folder_name,
         originalFolder: (correctionApp as any).original_folder || correctionApp.folder_name,
-        percent: 50,
-        targetPercent: 85,
+        percent: 25,
+        targetPercent: 25,
         stageText: 'Details saved! Resuming portal form filling...',
         applicantName: correctionApp.applicant_name || correctionApp.folder_name,
         startedAt: Date.now(),
@@ -4071,10 +4064,10 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       );
       const serverTarget = (match && typeof match.progress === 'number' && match.progress > 0)
         ? match.progress
-        : (submittingPreviewRef.current?.progress || 70);
+        : (submittingPreviewRef.current?.progress || 3);
 
       setFinalSubmitProgress(prev => {
-        if (prev === 0) return Math.min(serverTarget, 70);
+        if (prev === 0) return serverTarget;
         if (prev < serverTarget) {
           const diff = serverTarget - prev;
           const step = diff > 15 ? 3 : diff > 6 ? 2 : 1;
@@ -4097,9 +4090,9 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       }
       setSubmittingFolder(folderName);
       setSubmittingArn(arn);
-      setFinalSubmitProgress(70);
+      setFinalSubmitProgress(3);
       if (submittingPreviewRef.current) {
-        submittingPreviewRef.current.progress = 70;
+        submittingPreviewRef.current.progress = 3;
         submittingPreviewRef.current.stage = 'Connecting to Passport Seva Portal...';
       }
 
@@ -4465,11 +4458,20 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   );
 
   const isFieldMissing = (fieldKeys: string[]): boolean => {
+    const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // Email is mandatory for submission: if the saved data has no valid email the box must always be offered,
+    // even when the backend only reported another problem (e.g. a missing signature) first.
+    if (fieldKeys.some(k => FIELD_ALIAS_MAP.email.includes(clean(k)))) {
+      const ed: Record<string, any> = (correctionApp?.extracted_data as Record<string, any>) || {};
+      const savedEmail = String(ed['Email id'] || ed['presentAddressEmail'] || ed['Email'] || '').trim();
+      if (!/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(savedEmail)) {
+        return true;
+      }
+    }
     const missingList = correctionApp?.missing_fields;
     if (!missingList || missingList.length === 0) {
       return false;
     }
-    const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanTargets = new Set(fieldKeys.map(clean));
 
     for (const [_, aliases] of Object.entries(FIELD_ALIAS_MAP)) {
@@ -4523,63 +4525,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     const cleanMf = mf.toLowerCase().replace(/[^a-z0-9]/g, '');
     return !allKnownCleanAliases.has(cleanMf);
   });
-
-  const handleClearMissingFields = () => {
-    setCorrectionFormData(prev => {
-      const updated = { ...prev };
-      if (isFieldMissing(["PIN Code", "pin", "pincode"])) updated["PIN Code"] = "";
-      if (isFieldMissing(["Educational qualification", "education", "qualification"])) updated["Educational qualification"] = "";
-      if (isFieldMissing(["Employment type", "employment"])) updated["Employment type"] = "";
-      if (isFieldMissing(["Marital status", "marital"])) {
-        updated["Marital status"] = "SINGLE";
-        updated["Spouse name"] = "";
-      }
-      if (isFieldMissing(["Spouse name", "spouse"])) updated["Spouse name"] = "";
-      if (isFieldMissing(["House No. and Street Name", "house", "houseno"])) updated["House No. and Street Name"] = "";
-      if (isFieldMissing(["Village or Town or City", "village", "city"])) updated["Village or Town or City"] = "";
-      if (isFieldMissing(["State", "state/ut"])) updated["State"] = "";
-      if (isFieldMissing(["District"])) updated["District"] = "";
-      if (isFieldMissing(["Indian mobile number", "mobile"])) updated["Indian mobile number"] = "";
-      if (isFieldMissing(["Email id", "email", "presentaddressemail", "mail"])) {
-        updated["Email id"] = "";
-      }
-      if (isFieldMissing(["Italian address line 1", "addr_l1", "italian address"])) updated["Italian address line 1"] = "";
-      if (isFieldMissing(["Italian address line 2", "addr_l2"])) updated["Italian address line 2"] = "";
-      if (isFieldMissing(["Italian mobile number", "em_mobile", "italian mobile"])) updated["Italian mobile number"] = "";
-      if (isFieldMissing(["Current passport number", "Passport number", "passport_number", "passportno", "old_passport_number", "applicantPreviousPassportNo"])) {
-        updated["Current passport number"] = "";
-        updated["Passport number"] = "";
-        updated["passport_number"] = "";
-      }
-      if (isFieldMissing(["File number", "file_number", "fileno", "applicantPreviousPassportFileNumber"])) {
-        updated["File number"] = "";
-        updated["file_number"] = "";
-      }
-      if (isFieldMissing(["Date of issue", "issue_date", "date_of_issue"])) {
-        updated["Date of issue"] = "";
-        updated["issue_date"] = "";
-      }
-      if (isFieldMissing(["Date of expiry", "expiry_date", "date_of_expiry"])) {
-        updated["Date of expiry"] = "";
-        updated["expiry_date"] = "";
-      }
-      if (isFieldMissing(["Place of issue", "issue_place", "place_of_issue"])) {
-        updated["Place of issue"] = "";
-        updated["issue_place"] = "";
-      }
-      if (isFieldMissing(["Given NAME", "given_name", "first name"])) updated["Given NAME"] = "";
-      if (isFieldMissing(["SURNAME", "surname", "last name"])) updated["SURNAME"] = "";
-      if (isFieldMissing(["Date of birth", "dob", "birth date"])) updated["Date of birth"] = "";
-      if (isFieldMissing(["Place of birth", "pob"])) updated["Place of birth"] = "";
-      if (isFieldMissing(["Father's name", "father"])) updated["Father's name"] = "";
-      if (isFieldMissing(["Mother's name", "mother"])) updated["Mother's name"] = "";
-      if (isFieldMissing(["Police Station", "police"])) updated["Police Station"] = "";
-      otherMissingFields.forEach(f => {
-        updated[f] = "";
-      });
-      return updated;
-    });
-  };
 
   const attachedDraftFiles = useMemo(() => {
     return (correctionApp?.files || []).filter(isUserUploadedDocument);
@@ -4895,7 +4840,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 }}
               >
                 <div
-                  className="voice-progress-fill"
+                  className={`voice-progress-fill${(submissionTracker.ready || submissionTracker.isError || submissionTracker.isMissingInfo) ? '' : ' working'}`}
                   style={{
                     width: `${submissionTracker.ready || submissionTracker.isError ? 100 : submissionTracker.percent}%`,
                     height: '100%',
@@ -5471,7 +5416,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         <div className="fresh-reissue-content drafts-view-container">
           {selectedDraftFolder && correctionApp ? (
             <div className="draft-detail-wrapper">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0' }}>
+              <div className="draft-detail-topbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0' }}>
                 <button
                   type="button"
                   onClick={() => setSelectedDraftFolder(null)}
@@ -6354,21 +6299,27 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 <div className="correction-actions-row">
                   <button
                     type="button"
-                    onClick={() => {
-                      handleDismissCorrection(correctionApp.folder_name);
-                      setSelectedDraftFolder(null);
-                    }}
-                    className="dismiss-btn"
+                    onClick={() => setSelectedDraftFolder(null)}
+                    className="dismiss-btn draft-actions-back"
+                    style={{ background: '#f8fafc', color: '#475569', borderColor: '#cbd5e1', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
-                    Dismiss Draft
+                    <ArrowLeft style={{ width: '15px', height: '15px' }} />
+                    <span>Back to All Drafts</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedDraftFolder(null)}
-                    className="dismiss-btn"
-                    style={{ background: '#f8fafc', color: '#475569', borderColor: '#cbd5e1' }}
+                    onClick={() => {
+                      // Always ask first: dismissing permanently deletes the draft and its documents
+                      setDeleteDraftTarget({
+                        folderName: correctionApp.folder_name,
+                        applicantName: correctionApp.applicant_name || correctionApp.folder_name,
+                      });
+                    }}
+                    className="dismiss-btn draft-actions-dismiss"
+                    style={{ color: '#dc2626', background: '#fef2f2', borderColor: '#fecaca', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
-                    Back to All Drafts
+                    <Trash2 style={{ width: '14px', height: '14px' }} />
+                    <span>Dismiss Draft</span>
                   </button>
                   {isDraftAlreadyInPreview && (
                     <button
@@ -6381,13 +6332,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                       <span>View in Preview</span>
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={handleClearMissingFields}
-                    className="dismiss-btn clear-fields-btn"
-                  >
-                    Clear Fields
-                  </button>
                   <button
                     type="submit"
                     disabled={isSubmittingCorrection}
@@ -6912,7 +6856,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDismissCorrection(portalErrorApp.folder_name)}
+                    onClick={() => setDeleteDraftTarget({ folderName: portalErrorApp.folder_name, applicantName: portalErrorApp.applicant_name || portalErrorApp.folder_name })}
                     className="dismiss-banner-btn"
                     title="Dismiss this notice"
                   >
@@ -6965,7 +6909,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 const isSubmittingThis = (submittingArn && submittingArn === item.arn) || (submittingFolder && submittingFolder === folderKey) || (item as any).status === 'SUBMITTING_PORTAL' || reuploadingFolder === folderKey;
                 const appMatch = applications.find(a => a.folder_name === item.folder_name || (item.arn && a.arn === item.arn) || (submittingFolder && a.folder_name === submittingFolder));
                 const candidateProgress = isSubmittingThis
-                  ? (finalSubmitProgress || appMatch?.progress || item.progress || 70)
+                  ? (finalSubmitProgress || appMatch?.progress || item.progress || 3)
                   : (item.progress || 100);
                 const liveSubmitPct = Math.min(100, Math.max(1, candidateProgress));
                 const liveStage = (appMatch?.stage && appMatch.stage !== 'Previews Ready for Confirmation' && !appMatch.stage.toLowerCase().includes('previews ready'))
@@ -7091,7 +7035,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           </div>
                           <div className="voice-progress-track">
                             <div
-                              className="voice-progress-fill"
+                              className="voice-progress-fill working"
                               style={{ width: `${voiceProgress[folderKey]?.percent ?? 20}%` }}
                             />
                           </div>
@@ -7310,7 +7254,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           }}
                         >
                           <div
-                            className="voice-progress-fill"
+                            className="voice-progress-fill working"
                             style={{
                               width: `${liveSubmitPct}%`,
                               height: '100%',
