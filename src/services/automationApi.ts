@@ -802,6 +802,10 @@ class AutomationApiService {
     });
 
     if (!res.ok) {
+      // A server outage is not a verdict on the photograph: let the caller fall back instead of rejecting it
+      if (res.status >= 500) {
+        throw new Error('Photo validation service is temporarily unavailable');
+      }
       const errJson = await res.json().catch(() => null);
       return {
         valid: false,

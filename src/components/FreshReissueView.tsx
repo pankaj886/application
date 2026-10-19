@@ -1318,12 +1318,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     pcc: null,
   });
   trackersRef.current = trackers;
+  // Folder names that already existed when each service's tracker started. Folder numbers (e.g. "1") are
+  // reused by the backend for every new upload, so weak matches must never bind to these older applications.
+  const knownFoldersRef = useRef<Set<string>>(new Set());
+  const preexistingFoldersRef = useRef<Partial<Record<'reissue' | 'fresh' | 'surrender' | 'pcc', Set<string>>>>({});
 
   const [draftFilter, setDraftFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender' | 'pcc'>('all');
 
-  const primaryTracker = trackers[activeServiceType];
-  const anyActiveTracker = Object.values(trackers).find(t => t && t.active);
-  const rawTracker = (primaryTracker && primaryTracker.active) ? primaryTracker : (anyActiveTracker || primaryTracker);
+  // Strict service isolation: a progress bar / banner belongs only to the service that started it
+  const rawTracker = trackers[activeServiceType];
   const submissionTracker = rawTracker ? (rawTracker.serviceType ? rawTracker : { ...rawTracker, serviceType: activeServiceType }) : null;
   const submissionTrackerRef = useRef<SubmissionTrackerState>(null);
   submissionTrackerRef.current = submissionTracker;
@@ -1680,6 +1683,11 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         automationApi.getPendingPreviews(targetEmail, googleUserEmail).catch(() => []),
         automationApi.getCompletedApplications(targetEmail, googleUserEmail).catch(() => []),
       ]);
+      knownFoldersRef.current = new Set(
+        [...(statusRes.applications || []), ...prevs, ...comps]
+          .map(a => (a.folder_name || '').trim().toLowerCase())
+          .filter(Boolean)
+      );
       const apps = (statusRes.applications || []).filter(a => {
         const fn = (a.folder_name || '').trim();
         const ofn = ((a as any).original_folder || '').trim();
@@ -1742,10 +1750,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
           const itemAliases: string[] = Array.isArray((item as any).alias_folders)
             ? (item as any).alias_folders.map((x: any) => String(x).trim().toLowerCase())
             : [];
+          // An application that existed before this tracker started can only be matched by ARN or unique folder name
+          const isPreexisting = Boolean(itemFolder && preexistingFoldersRef.current[sType]?.has(itemFolder));
+          const folderKeyMatches = (key: string) =>
+            Boolean(key) && !(isPreexisting && isGenericFolderNumber(key)) &&
+            (itemFolder === key || itemOrig === key || itemAliases.includes(key));
           if (ta && itemArn && ta === itemArn) return true;
-          if (tf && (itemFolder === tf || itemOrig === tf || itemAliases.includes(tf))) return true;
-          if (of && (itemFolder === of || itemOrig === of || itemAliases.includes(of))) return true;
-          if (allowNameFallback && currentTracker.applicantName) {
+          if (folderKeyMatches(tf)) return true;
+          if (folderKeyMatches(of)) return true;
+          if (allowNameFallback && currentTracker.applicantName && !isPreexisting) {
             const tn = currentTracker.applicantName.trim().toLowerCase();
             const iname = (item.applicant_name || '').trim().toLowerCase();
             if (tn && iname && (tn === iname || iname.includes(tn) || tn.includes(iname))) return true;
@@ -1799,6 +1812,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
               applicantName: inFlightApp.applicant_name || inFlightApp.folder_name,
               startedAt: Date.now() - 10000,
             };
+            const adoptedKey = (inFlightApp.folder_name || '').trim().toLowerCase();
+            preexistingFoldersRef.current[sType] = new Set([...knownFoldersRef.current].filter(f => f !== adoptedKey));
             setSubmissionTrackerFor(sType, adopted);
             currentTracker = adopted;
           } else {
@@ -2663,6 +2678,16 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         });
         return;
       }
+      // Definitive ICAO rejection (no face, several faces, blurred, too dark, non-white background...).
+      // Never fall back to a plain client-side resize: the applicant must upload a compliant photograph.
+      filesStateRef.current.photo = null;
+      setPhotoFile(null);
+      setSlotFiles(prev => ({ ...prev, photo: null }));
+      if (photoInputRef.current) photoInputRef.current.value = '';
+      const rejectText = res.message || 'Photograph rejected: it could not be made ICAO compliant. Please upload a clear, front-facing photograph.';
+      setPhotoValidation({ status: 'invalid', message: rejectText });
+      setUploadMessage({ text: rejectText, type: 'error' });
+      return;
     } catch (err: any) {
       console.warn('[PHOTO VALIDATION NOTICE]', err);
     }
@@ -3538,6 +3563,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
     try {
       setIsUploading(true);
       setUploadMessage(null);
+      preexistingFoldersRef.current[activeServiceType] = new Set(knownFoldersRef.current);
       setSubmissionTracker({
         active: true,
         ready: false,
@@ -3729,6 +3755,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
         googleUserEmail
       );
 
+      const correctionKey = (correctionApp.folder_name || '').trim().toLowerCase();
+      preexistingFoldersRef.current[activeServiceType] = new Set([...knownFoldersRef.current].filter(f => f !== correctionKey));
       setSubmissionTracker({
         active: true,
         ready: false,
@@ -4619,7 +4647,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
       {currentSection === 'form' && (
         <div className="fresh-reissue-content">
 
-          {submissionTracker?.active && (
+          {submissionTracker?.active && submissionTracker.serviceType === activeServiceType && (
             <div
               className="voice-progress-container"
               style={{
