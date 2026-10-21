@@ -174,14 +174,7 @@ class AutomationApiService {
     }
 
     this.isResolving = (async () => {
-      // 1. If local server is running on this machine, use it for lowest latency
-      if (await this.pingHealth(LOCAL_FALLBACK_URL, 1200)) {
-        this.activeBaseUrl = LOCAL_FALLBACK_URL;
-        localStorage.setItem('fs_automation_api_url', LOCAL_FALLBACK_URL);
-        return LOCAL_FALLBACK_URL;
-      }
-
-      // 2. If we already have a working cached remote tunnel URL, keep using it
+      // 1. If we already have a working cached remote tunnel URL, keep using it
       if (this.activeBaseUrl && !forceRefresh && this.activeBaseUrl !== LOCAL_FALLBACK_URL) {
         if (await this.pingHealth(this.activeBaseUrl, 3000)) {
           return this.activeBaseUrl;
@@ -284,33 +277,16 @@ class AutomationApiService {
 
     try {
       const res = await makeFetch(baseUrl);
-      if (res.status >= 502 && res.status <= 504 && baseUrl !== LOCAL_FALLBACK_URL) {
+      if (res.status >= 502 && res.status <= 504) {
         throw new Error('Cloudflare gateway error');
       }
       return res;
     } catch (_) {
-      // First try local server directly if we weren't already using it
-      if (baseUrl !== LOCAL_FALLBACK_URL) {
-        try {
-          const localRes = await makeFetch(LOCAL_FALLBACK_URL);
-          this.activeBaseUrl = LOCAL_FALLBACK_URL;
-          return localRes;
-        } catch (_) {}
-      }
-
-      // Then try resolving gateway afresh
+      // Resolve gateway afresh and retry once
       try {
         baseUrl = await this.resolveGateway(true);
-        const retryRes = await makeFetch(baseUrl);
-        return retryRes;
+        return await makeFetch(baseUrl);
       } catch (_) {
-        if (baseUrl !== LOCAL_FALLBACK_URL) {
-          try {
-            const localRes = await makeFetch(LOCAL_FALLBACK_URL);
-            this.activeBaseUrl = LOCAL_FALLBACK_URL;
-            return localRes;
-          } catch (_) {}
-        }
         throw new Error('Error Connecting to Server');
       }
     }
@@ -409,19 +385,18 @@ class AutomationApiService {
     // 1. Try active base URL
     try {
       result = await tryUploadXhr(baseUrl);
-      if (result.status >= 502 && result.status <= 504 && baseUrl !== LOCAL_FALLBACK_URL) {
-        result = null; // Cloudflare bad gateway -> fallback to local
+      if (result.status >= 502 && result.status <= 504) {
+        result = null; // Cloudflare bad gateway -> retry with fresh resolve
       }
     } catch (_) {
       result = null;
     }
 
-    // 2. If network failed or Cloudflare dropped, try local fallback
-    if (!result && baseUrl !== LOCAL_FALLBACK_URL) {
+    // 2. If Cloudflare dropped, resolve gateway afresh and retry once
+    if (!result) {
       try {
-        const localResult = await tryUploadXhr(LOCAL_FALLBACK_URL);
-        this.activeBaseUrl = LOCAL_FALLBACK_URL;
-        result = localResult;
+        const freshUrl = await this.resolveGateway(true);
+        result = await tryUploadXhr(freshUrl);
       } catch (_) {}
     }
 
