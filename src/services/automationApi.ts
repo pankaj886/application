@@ -238,8 +238,13 @@ class AutomationApiService {
         } catch (_) {}
       }
 
-      // 6. Verify health of candidate Cloudflare tunnel
-      if (candidatePublicUrl && (await this.pingHealth(candidatePublicUrl, 5000))) {
+      // 6. Verify health of candidate Cloudflare tunnel.
+      // Cloudflare may block plain fetch() health pings (browser integrity check) while
+      // actual API requests go through fine. So we use the GitHub-sourced URL regardless
+      // of the ping result — the actual API calls in fetchWithAutoRetry will handle retries.
+      if (candidatePublicUrl) {
+        // Try ping but don't gate on it — Cloudflare challenges block automated health checks
+        await this.pingHealth(candidatePublicUrl, 3000).catch(() => {});
         this.activeBaseUrl = candidatePublicUrl;
         localStorage.setItem('fs_automation_api_url', candidatePublicUrl);
         return candidatePublicUrl;

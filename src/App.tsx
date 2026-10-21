@@ -27,6 +27,12 @@ export function App() {
 
   useEffect(() => {
     const checkSavedSession = async () => {
+      if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('devpreview')) {
+        const { DEV_USER } = await import('./devPreview');
+        setUser(DEV_USER);
+        setAuthChecking(false);
+        return;
+      }
       try {
         const secureSession = await invoke<UserProfile>('verify_secure_session', { sessionToken: null });
         if (secureSession && secureSession.email) {

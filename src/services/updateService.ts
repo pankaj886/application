@@ -63,14 +63,14 @@ class UpdateService {
   }
 
   private async checkRemoteRelease(): Promise<UpdateInfo | null> {
-    let currentVersion = '1.1.6';
+    let currentVersion = '1.1.7';
     try {
       currentVersion = await invoke<string>('get_app_version');
     } catch {
       try {
         currentVersion = await getVersion();
       } catch {
-        currentVersion = '1.1.6';
+        currentVersion = '1.1.7';
       }
     }
 

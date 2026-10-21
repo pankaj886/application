@@ -1323,7 +1323,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   const knownFoldersRef = useRef<Set<string>>(new Set());
   const preexistingFoldersRef = useRef<Partial<Record<'reissue' | 'fresh' | 'surrender' | 'pcc', Set<string>>>>({});
 
-  const [draftFilter, setDraftFilter] = useState<'all' | 'fresh' | 'reissue' | 'surrender' | 'pcc'>('all');
 
   // Strict service isolation: a progress bar / banner belongs only to the service that started it
   const rawTracker = trackers[activeServiceType];
@@ -1557,9 +1556,8 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
   }, [applications, previews, completed, dismissedCorrectionFolder, submittingFolder, submittingArn]);
 
   const draftApplications = useMemo<ApplicationItem[]>(() => {
-    if (draftFilter === 'all') return allDraftApplications;
-    return allDraftApplications.filter(app => isAppMatchingService(app, draftFilter));
-  }, [allDraftApplications, draftFilter]);
+    return allDraftApplications.filter(app => isAppMatchingService(app, activeServiceType));
+  }, [allDraftApplications, activeServiceType]);
 
   const allValidPreviews = useMemo(() => {
     const completedArnSet = new Set((completed || []).map(c => (c.arn || '').trim().toLowerCase()).filter(Boolean));
@@ -4753,7 +4751,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           if (submissionTracker.serviceType) {
                             switchActiveServiceType(submissionTracker.serviceType);
                           }
-                          setDraftFilter('all');
                           if (submissionTracker.folderName) {
                             setSelectedDraftFolder(submissionTracker.folderName);
                           }
@@ -5569,7 +5566,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                     No uploaded document files currently in this draft folder.
                   </p>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))', gap: '10px' }}>
                     {attachedDraftFiles.map((fileName: string) => {
                       const isImg = /\.(jpg|jpeg|png|webp)$/i.test(fileName);
                       const isPdf = /\.pdf$/i.test(fileName);
@@ -6364,9 +6361,6 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
             </div>
             </div>
           ) : (() => {
-            const freshDraftsCount = allDraftApplications.filter(a => isAppMatchingService(a, 'fresh')).length;
-            const reissueDraftsCount = allDraftApplications.filter(a => isAppMatchingService(a, 'reissue')).length;
-
             return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div className="drafts-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
@@ -6377,59 +6371,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   </p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', background: '#f1f5f9', padding: '3px', borderRadius: '10px' }}>
-                    <button
-                      type="button"
-                      onClick={() => setDraftFilter('all')}
-                      style={{
-                        border: 'none',
-                        background: draftFilter === 'all' ? '#ffffff' : 'transparent',
-                        color: draftFilter === 'all' ? '#0f172a' : '#64748b',
-                        fontWeight: draftFilter === 'all' ? 700 : 500,
-                        fontSize: '12px',
-                        padding: '5px 12px',
-                        borderRadius: '7px',
-                        cursor: 'pointer',
-                        boxShadow: draftFilter === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                      }}
-                    >
-                      All ({allDraftApplications.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDraftFilter('fresh')}
-                      style={{
-                        border: 'none',
-                        background: draftFilter === 'fresh' ? '#ffffff' : 'transparent',
-                        color: draftFilter === 'fresh' ? '#059669' : '#64748b',
-                        fontWeight: draftFilter === 'fresh' ? 700 : 500,
-                        fontSize: '12px',
-                        padding: '5px 12px',
-                        borderRadius: '7px',
-                        cursor: 'pointer',
-                        boxShadow: draftFilter === 'fresh' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                      }}
-                    >
-                      Fresh ({freshDraftsCount})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDraftFilter('reissue')}
-                      style={{
-                        border: 'none',
-                        background: draftFilter === 'reissue' ? '#ffffff' : 'transparent',
-                        color: draftFilter === 'reissue' ? '#2563eb' : '#64748b',
-                        fontWeight: draftFilter === 'reissue' ? 700 : 500,
-                        fontSize: '12px',
-                        padding: '5px 12px',
-                        borderRadius: '7px',
-                        cursor: 'pointer',
-                        boxShadow: draftFilter === 'reissue' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                      }}
-                    >
-                      Reissue ({reissueDraftsCount})
-                    </button>
-                  </div>
+                  
 
                   <button
                     type="button"
@@ -6456,25 +6398,12 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                 >
                   <FileText style={{ width: '48px', height: '48px', color: '#94a3b8', margin: '0 auto 16px', strokeWidth: 1.5 }} />
                   <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
-                    {draftFilter === 'all'
-                      ? 'No Draft Applications'
-                      : `No ${draftFilter === 'fresh' ? 'Fresh Passport' : 'Passport Reissue'} Drafts`}
+                    No {activeServiceType === 'fresh' ? 'Fresh Passport' : activeServiceType === 'surrender' ? 'Surrender Certificate' : activeServiceType === 'pcc' ? 'Police Clearance Certificate' : 'Passport Reissue'} Drafts
                   </h3>
                   <p style={{ fontSize: '14px', color: '#64748b', maxWidth: '440px', margin: '0 auto 20px', lineHeight: 1.5 }}>
-                    {draftFilter !== 'all' && allDraftApplications.length > 0
-                      ? `You have ${allDraftApplications.length} draft application(s) in other categories.`
-                      : 'All applications have either been submitted or are ready in the Preview section. Any applications requiring corrections or missing details will appear here.'}
+                    All applications have either been submitted or are ready in the Preview section. Any applications requiring corrections or missing details will appear here.
                   </p>
-                  {draftFilter !== 'all' && allDraftApplications.length > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => setDraftFilter('all')}
-                      className="submit-btn"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', margin: '0 auto' }}
-                    >
-                      <span>View All Drafts ({allDraftApplications.length})</span>
-                    </button>
-                  ) : (
+                  {(
                     <button
                       type="button"
                       onClick={() => {
@@ -6490,7 +6419,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                   )}
                 </div>
               ) : (
-                <div className="drafts-list-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px' }}>
+                <div className="drafts-list-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(360px, 100%), 1fr))', gap: 'var(--gap-lg)' }}>
                   {draftApplications.map((draft: ApplicationItem) => {
                     const missingList = draft.missing_fields || [];
                     const isError = draft.status === 'PORTAL_FORM_ERROR' || draft.error_type === 'PORTAL_FORM_ERROR' || draft.error_type === 'STAGE1_7_FAILED';
@@ -7556,14 +7485,15 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                           <CheckCircle2 className="completed-icon" />
                         </div>
                         <div className="completed-details">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div className="completed-title-row">
                             <h3 className="completed-client-name">{item.applicant_name}</h3>
                             <span
                               style={{
-                                fontSize: '11px',
+                                fontSize: 'var(--font-xs)',
                                 fontWeight: 700,
                                 padding: '2px 8px',
                                 borderRadius: '999px',
+                                whiteSpace: 'nowrap',
                                 background: (item.service_type || '').toLowerCase() === 'fresh' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(37, 99, 235, 0.12)',
                                 color: (item.service_type || '').toLowerCase() === 'fresh' ? '#059669' : '#2563eb',
                                 border: `1px solid ${(item.service_type || '').toLowerCase() === 'fresh' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(37, 99, 235, 0.25)'}`,
@@ -7584,7 +7514,7 @@ export const FreshReissueView: React.FC<FreshReissueViewProps> = ({
                         </div>
                       </div>
 
-                      <div className="completed-card-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div className="completed-card-right">
                         {pdfRelUrl && (
                           <>
                             <button
